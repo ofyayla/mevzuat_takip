@@ -1,0 +1,301 @@
+# Mevzuat Takip — izlenen kaynaklar (Kapsam Formu v3: 9 kaynak; KEP ayrı adaptörle ele alınır)
+#
+# Her kaynak bir veya daha fazla "kanal"dan oluşur. Kanal = bir liste/besleme + onu okuyan strateji:
+#   feed          : RSS/Atom beslemesi
+#   wordpress_api : WordPress REST API (HTML kazıma gerektirmez)
+#   css_list      : CSS seçicili liste sayfası
+#   link_pattern  : href deseni ile bağlantı toplama (şablon değişikliklerine dayanıklı)
+#   resmi_gazete  : Resmî Gazete fihristi (asıl + mükerrer)
+#
+# client: httpx | impersonate (tarayıcı TLS parmak izi) | browser (Playwright, son çare)
+# verified: kanal yapısının canlı sitede en son doğrulandığı tarih. Boşsa kurum ağından
+#           `mevzuat-collect probe <KOD> --record tests/fixtures/<kod>` ile doğrulanmalıdır.
+# schedule: cron (Europe/Istanbul). Tarama pencereleri keşifteki yayın alışkanlıklarına göre belirlendi.
+
+sources:
+
+  # ---------------------------------------------------------------------------------------------
+  - code: RESMI_GAZETE
+    name: Resmî Gazete
+    base_url: https://www.resmigazete.gov.tr
+    client: impersonate          # site, tarayıcı olmayan istemcileri TLS imzasından engelliyor
+    request_delay_s: 3
+    verified: "2026-09-25"
+    schedule: ["10 0 * * *", "30 2 * * *", "30 7 * * *", "0 12 * * *", "0 17 * * *", "0 21 * * *", "45 23 * * *"]
+    expected: {silence_tolerance_hours: 30, business_days_only: false, min_items_per_run: 1}
+    notes: >
+      Mükerrer sayılar gün içinde geç saatlerde yayımlanabildiği için gece yarısına yakın pencereler var ve
+      bir önceki gün de yeniden taranıyor. İLÂN BÖLÜMÜ varsayılan olarak alınmıyor.
+    channels:
+      - name: fihrist
+        strategy: resmi_gazete
+        params: {lookback_days: 1, max_mukerrer: 4, exclude_sections: ["İLÂN BÖLÜMÜ"]}
+
+  # ---------------------------------------------------------------------------------------------
+  - code: BDDK
+    name: Bankacılık Düzenleme ve Denetleme Kurumu
+    base_url: https://www.bddk.org.tr
+    client: impersonate
+    allowed_hosts: ["www.bddk.org.tr", "bddk.org.tr"]
+    verified: null               # geliştirme ortamından erişilemedi (yurt dışı IP engeli) — kurum ağında doğrulanacak
+    schedule: ["0 8-20 * * 1-5"]
+    expected: {silence_tolerance_hours: 120, business_days_only: true}
+    notes: >
+      URL desenleri web aramasıyla doğrulandı (Duyuru/Liste/{id}, Duyuru/Detay/{id}, Duyuru/EkGetir/{id}?ekId=,
+      Mevzuat/Liste/{id}, Mevzuat/Detay/{id}). Liste kimlikleri: 39 Duyuru Listesi, 40 Mevzuat Duyuruları,
+      55 Resmi Gazetede Yayımlanan Kurul Kararları. Diğer kategoriler probe çıktısına göre eklenecek.
+      Kanallar CSS'e bağımlı olmayan link_pattern stratejisiyle tanımlandı.
+    channels:
+      - name: duyurular
+        strategy: link_pattern
+        category: Duyuru
+        attachment_pattern: "/Duyuru/EkGetir/"
+        params:
+          urls: ["https://www.bddk.org.tr/Duyuru/Liste/39"]
+          href_pattern: "/Duyuru/Detay/\\d+"
+          id_pattern: "/Duyuru/Detay/(\\d+)"
+      - name: mevzuat_duyurulari
+        strategy: link_pattern
+        category: Mevzuat Duyurusu
+        attachment_pattern: "/Duyuru/EkGetir/"
+        params:
+          urls: ["https://www.bddk.org.tr/Duyuru/Liste/40"]
+          href_pattern: "/Duyuru/Detay/\\d+"
+          id_pattern: "/Duyuru/Detay/(\\d+)"
+      - name: rg_kurul_kararlari
+        strategy: link_pattern
+        category: Kurul Kararı
+        attachment_pattern: "/Mevzuat/DokumanGetir/|\\.pdf"
+        params:
+          urls: ["https://www.bddk.org.tr/Mevzuat/Liste/55"]
+          href_pattern: "/Mevzuat/(Detay|DokumanGetir)/\\d+"
+          id_pattern: "/Mevzuat/(?:Detay|DokumanGetir)/(\\d+)"
+
+  # ---------------------------------------------------------------------------------------------
+  - code: SPK
+    name: Sermaye Piyasası Kurulu
+    base_url: https://spk.gov.tr
+    allowed_hosts: ["spk.gov.tr", "www.spk.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 9 * * 1-5", "0 14 * * 1-5", "30 19 * * *"]
+    expected: {silence_tolerance_hours: 192, business_days_only: true}
+    notes: >
+      SPK düzenlemeleri haftalık/olağanüstü SPK Bültenlerinde (PDF) yayımlanır. mevzuat.spk.gov.tr alt alanı
+      geliştirme ortamının izin listesinde değildi; gerekirse eklenebilir.
+    channels:
+      - name: bultenler
+        strategy: css_list
+        category: SPK Bülteni
+        params:
+          urls: ["https://spk.gov.tr/spk-bultenleri/{year}-yili-spk-bultenleri"]
+          item: ".liste a.link"
+          title: ".liste-baslik"
+          date: ".liste-icerik"
+          id_pattern: "/data/([0-9a-f]{24})/"
+          title_strip: ["^Bülten No\\s*:\\s*"]
+          title_prefix: "SPK Bülteni "
+      - name: basin_duyurulari
+        strategy: css_list
+        category: Basın Duyurusu
+        params:
+          urls: ["https://spk.gov.tr/duyurular/basin-duyurulari/{year}"]
+          item: ".liste a.link"
+          title: ".liste-baslik"
+          date: ".liste-tarih"
+          summary: ".liste-icerik"
+          id_pattern: "/basin-duyurulari/(\\d{4}/[^/?#]+)$|/data/([0-9a-f]{24})/"
+
+  # ---------------------------------------------------------------------------------------------
+  - code: TCMB
+    name: Türkiye Cumhuriyet Merkez Bankası
+    base_url: https://www.tcmb.gov.tr
+    allowed_hosts: ["www.tcmb.gov.tr", "tcmb.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 9 * * 1-5", "30 14 * * 1-5", "0 19 * * 1-5"]
+    expected: {silence_tolerance_hours: 240, business_days_only: true}
+    notes: >
+      Basın duyuruları resmi Atom beslemesinden okunur. Mevzuat sayfaları tarihsiz belge listeleridir;
+      bağlantıdaki CACHEID parametresi belge güncellendiğinde değiştiği için sürüm anahtarı olarak kullanılır.
+    channels:
+      - name: basin_duyurulari
+        strategy: feed
+        category: Basın Duyurusu
+        params:
+          urls: ["https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Bottom+Menu/Diger/RSS/Basin+Duyurulari"]
+          id_pattern: "(?i)/duyurular/basin/(\\d{4}/duy\\d{4}-\\d+)"
+      - name: mevzuat
+        strategy: link_pattern
+        category: Mevzuat
+        params:
+          urls:
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Bankacilik/"
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Kambiyo/"
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Odeme+Sistemleri/"
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Piyasalar/"
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Operasyon+Mevzuat/"
+            - "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Istatistik/"
+          href_pattern: "/wps/wcm/connect/[0-9a-f-]{36}/"
+          id_pattern: "/connect/([0-9a-f-]{36})/"
+          version_pattern: "CACHEID=([^&]+)"
+          date_regex: null
+
+  # ---------------------------------------------------------------------------------------------
+  - code: KVKK
+    name: Kişisel Verileri Koruma Kurumu
+    base_url: https://www.kvkk.gov.tr
+    allowed_hosts: ["www.kvkk.gov.tr", "kvkk.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 9 * * 1-5", "0 15 * * 1-5", "0 20 * * *"]
+    expected: {silence_tolerance_hours: 240, business_days_only: true}
+    notes: >
+      Kurul kararı ve yönetmelik bağlantıları çoğunlukla doğrudan Resmî Gazete'ye gider; izin listesi dışındaki
+      host'a giden öğeler yalnızca liste satırı olarak saklanır (içerik RG kaynağından gelir, İK-2 birleştirir).
+    channels:
+      - name: duyurular
+        strategy: css_list
+        category: Duyuru
+        attachment_pattern: "SharedFolderServer/CMSFiles/.+\\.pdf"
+        params:
+          urls: ["https://www.kvkk.gov.tr/Icerik/2015/Duyurular"]
+          item: ".news__box"
+          link: ".news__box-meta a[href]"
+          date: "p.date"
+          id_pattern: "/Icerik/(\\d+)/|CMSFiles/([\\w-]+)\\.pdf"
+      - name: kurul_kararlari
+        strategy: css_list
+        category: Kurul Kararı
+        params:
+          urls: ["https://www.kvkk.gov.tr/Icerik/5419/kurul-kararlari"]
+          item: ".members__item"
+          title: "h2"
+          link: "a.read-more"
+          fields:
+            karar_tarihi: "(\\d{2}\\.\\d{2}\\.\\d{4}) Tarihli"
+            karar_sayisi: "(\\d{4}/\\d+) Sayılı"
+      - name: mevzuat
+        strategy: css_list
+        category: Mevzuat
+        params:
+          urls:
+            - "https://www.kvkk.gov.tr/Icerik/5257/yonetmelikler"
+            - "https://www.kvkk.gov.tr/Icerik/5258/tebligler"
+            - "https://www.kvkk.gov.tr/Icerik/2030/rehberler"
+          item: ".members__item"
+          title: "h2"
+          link: "a.read-more"
+
+  # ---------------------------------------------------------------------------------------------
+  - code: MASAK
+    name: Mali Suçları Araştırma Kurulu
+    base_url: https://masak.hmb.gov.tr
+    allowed_hosts: ["masak.hmb.gov.tr", "ms.hmb.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 9 * * 1-5", "0 15 * * 1-5", "0 20 * * *"]
+    expected: {silence_tolerance_hours: 336, business_days_only: true, min_items_per_run: 0}
+    notes: >
+      Site bir React uygulaması; içerik WordPress REST API'sinden (/portal/v2/) geliyor. Artımlı tarama için
+      modified_after kullanılır; sessiz günlerde boş liste normaldir (min_items_per_run: 0).
+      API 'link' alanı iç host'u (api-masak.hmb.gov.tr) gösterdiği için herkese açık adrese çevrilir.
+    channels:
+      - name: icerik
+        strategy: wordpress_api
+        attachment_pattern: "ms\\.hmb\\.gov\\.tr/uploads/.+\\.(pdf|docx?)$"
+        params:
+          api_base: "https://masak.hmb.gov.tr/portal/v2/"
+          endpoints: [posts, pages]
+          public_link_rewrite: ["https://api-masak.hmb.gov.tr/", "https://masak.hmb.gov.tr/"]
+          per_page: 50
+          max_pages: 3
+          lookback_days: 30
+
+  # ---------------------------------------------------------------------------------------------
+  - code: TICARET
+    name: Ticaret Bakanlığı
+    base_url: https://ticaret.gov.tr
+    client: impersonate
+    allowed_hosts: ["ticaret.gov.tr", "www.ticaret.gov.tr", "*.ticaret.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 10 * * 1-5", "0 16 * * 1-5"]
+    expected: {silence_tolerance_hours: 168, business_days_only: true}
+    notes: >
+      Tüketici mevzuatı listesindeki bağlantılar mevzuat.gov.tr'ye gider; bu kanal yalnızca liste değişikliğini
+      izler (fetch_detail: false). Bakanlık tebliğleri ayrıca Resmî Gazete'den de gelir.
+    channels:
+      - name: duyurular
+        strategy: css_list
+        category: Duyuru
+        params:
+          urls: ["https://ticaret.gov.tr/duyurular"]
+          item: "ul.dizin-content li"
+          title: "h5"
+          pagination: {param: "s", start: 2, max_pages: 1}
+      - name: tuketici_mevzuati
+        strategy: link_pattern
+        category: Tüketici Mevzuatı
+        fetch_detail: false
+        params:
+          urls: ["https://ticaret.gov.tr/tuketici/mevzuat/teblig-ve-kilavuzlar"]
+          href_pattern: "mevzuat\\.gov\\.tr/mevzuat\\?|/data/[0-9a-f]{24}/"
+          date_regex: null
+
+  # ---------------------------------------------------------------------------------------------
+  - code: REKABET
+    name: Rekabet Kurumu
+    base_url: https://www.rekabet.gov.tr
+    allowed_hosts: ["www.rekabet.gov.tr", "rekabet.gov.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 10 * * 1-5", "0 17 * * 1-5"]
+    expected: {silence_tolerance_hours: 168, business_days_only: true}
+    notes: Kurul kararı hacmi yüksektir; ilgililik filtresi (İK-3) bu kaynakta daha fazla eleme yapacaktır.
+    channels:
+      - name: duyurular
+        strategy: link_pattern
+        category: Duyuru
+        params:
+          urls: ["https://www.rekabet.gov.tr/tr/Duyurular"]
+          href_pattern: "/tr/Duyurular/.+-[0-9a-f]{32}$"
+          id_pattern: "-([0-9a-f]{32})$"
+          title_selector: ".tablotitle"
+          date_selector: "td[align=right]"
+      - name: kurul_kararlari
+        strategy: css_list
+        category: Kurul Kararı
+        params:
+          urls: ["https://www.rekabet.gov.tr/tr/Kararlar"]
+          item: "#kararList table.yantablo1"
+          link: "a[href*='Karar?kararId=']"
+          id_pattern: "kararId=([0-9a-f-]{36})"
+          date_regex: "Yayımlanma Tarihi\\s*:\\s*(\\d{1,2}\\.\\d{1,2}\\.\\d{4})"
+          fields:
+            karar_sayisi: "Karar Sayısı\\s*:\\s*([\\d/-]+)"
+            karar_tarihi: "Karar Tarihi\\s*:\\s*(\\d{1,2}\\.\\d{1,2}\\.\\d{4})"
+            karar_turu: "Karar Türü\\s*:\\s*(.+?)\\s*(?:Rekabet Kurulunun|$|\\s{2})"
+
+  # ---------------------------------------------------------------------------------------------
+  - code: TKBB
+    name: Türkiye Katılım Bankaları Birliği
+    base_url: https://www.tkbb.org.tr
+    allowed_hosts: ["www.tkbb.org.tr", "tkbb.org.tr"]
+    verified: "2026-09-25"
+    schedule: ["0 10 * * 1-5", "0 17 * * 1-5"]
+    expected: {silence_tolerance_hours: 336, business_days_only: true}
+    notes: >
+      Katılım bankacılığı açısından yüksek ilgililik beklenir. Şablon Tailwind yardımcı sınıflarıyla yazıldığı
+      için kanallar link_pattern ile tanımlandı; başlık bağlantının üst elemanından alınır ("İncele"/"Git" atılır).
+    channels:
+      - name: duyurular
+        strategy: link_pattern
+        category: Duyuru
+        params:
+          urls: ["https://www.tkbb.org.tr/kurumsal/duyurular"]
+          href_pattern: "/kurumsal/duyurular/[^/?#]+$"
+      - name: birlik_duzenlemeleri
+        strategy: link_pattern
+        category: Birlik Düzenlemesi
+        attachment_pattern: "/upload/.+\\.(pdf|docx?)$"
+        params:
+          urls:
+            - "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/idari-duzenlemeler"
+            - "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/mesleki-duzenlemeler"
+          href_pattern: "birligimiz-duzenlemeleri-details/\\d+|/upload/.+\\.(pdf|docx?)$"
+          id_pattern: "details/(\\d+)|/upload/(.+)$"

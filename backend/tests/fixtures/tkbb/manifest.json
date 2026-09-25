@@ -1,0 +1,20 @@
+{
+ "https://www.tkbb.org.tr/kurumsal/duyurular": {
+  "file": "a7ac5e61591683ee.html",
+  "status": 200,
+  "final_url": "https://www.tkbb.org.tr/kurumsal/duyurular",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/idari-duzenlemeler": {
+  "file": "987fcdbd3485555b.html",
+  "status": 200,
+  "final_url": "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/idari-duzenlemeler",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/mesleki-duzenlemeler": {
+  "file": "e33ddeb710fa532a.html",
+  "status": 200,
+  "final_url": "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/mesleki-duzenlemeler",
+  "content_type": "text/html; charset=UTF-8"
+ }
+}

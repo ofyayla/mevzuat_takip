@@ -1,0 +1,26 @@
+{
+ "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-25": {
+  "file": "13203b0efcadb5ac.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-25",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-25&mukerrer=1": {
+  "file": "318dbbad379081e3.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-24": {
+  "file": "0ade8b2c86a2c936.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-24",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.resmigazete.gov.tr/fihrist?tarih=2026-09-24&mukerrer=1": {
+  "file": "3da2f1872b7abb72.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/",
+  "content_type": "text/html; charset=utf-8"
+ }
+}

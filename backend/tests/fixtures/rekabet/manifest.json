@@ -1,0 +1,14 @@
+{
+ "https://www.rekabet.gov.tr/tr/Duyurular": {
+  "file": "00d7609e134aeb59.html",
+  "status": 200,
+  "final_url": "https://www.rekabet.gov.tr/tr/Duyurular",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.rekabet.gov.tr/tr/Kararlar": {
+  "file": "a06f9f3cd804525b.html",
+  "status": 200,
+  "final_url": "https://www.rekabet.gov.tr/tr/Kararlar",
+  "content_type": "text/html; charset=utf-8"
+ }
+}

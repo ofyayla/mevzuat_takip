@@ -157,8 +157,8 @@ Akış: `collect(source)` → her yeni öğe için `extract(raw_id)` → `dedupe
 | API | `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `pydantic-settings` | Tipli şemalar, `.env` tabanlı konfigürasyon |
 | DB | `sqlalchemy>=2` (async + sync), `asyncpg`, `psycopg[binary]`, `alembic` | API async, Celery işleri sync session kullanır |
 | Kuyruk | `celery[redis]`, `redis` | Beat ile zamanlama; `redis` kilidi ile aynı kaynağa eşzamanlı tarama engellenir |
-| HTTP toplama | `httpx` (proxy, retry, timeout), `tenacity` | |
-| HTML ayrıştırma | `selectolax` (hızlı CSS seçici), `trafilatura` (ana metin çıkarma) | |
+| HTTP toplama | `httpx` (proxy, retry, timeout), `curl_cffi` (tarayıcı TLS parmak izi — RG ve Ticaret Bakanlığı için zorunlu), `tenacity`; opsiyonel `playwright` | Keşifte RG ve Ticaret Bakanlığı'nın tarayıcı olmayan istemcileri TLS imzasından engellediği görüldü |
+| HTML ayrıştırma | `selectolax` (hızlı CSS seçici), `feedparser` (RSS/Atom), `trafilatura` (ana metin çıkarma, İK-2) | |
 | PDF | `pymupdf` (metin + sayfa görüntüsü), `ocrmypdf` + `tesseract-ocr-tur` | Metin katmanı yoksa veya çok azsa OCR'a düşülür |
 | Office/UDF | `python-docx`; UYAP `.udf` ve e-Yazışma `.eyp` paketleri için özel ayrıştırıcı (KEP keşfinde netleşecek) | |
 | Benzerlik | `rapidfuzz`, PostgreSQL `pg_trgm` | Tekilleştirme ve few-shot örnek seçimi |
@@ -386,20 +386,23 @@ class SourceAdapter(Protocol):
 
 **Kibar tarama ve dayanıklılık:** kaynak başına istek aralığı (ör. 1–2 sn), `User-Agent` tanımı, `tenacity` ile üstel geri çekilmeli retry, 30 sn timeout. Bir adaptörde oluşan istisna yalnızca o kaynağın `fetch_run` kaydını `failed` yapar; diğer kaynaklar etkilenmez (her kaynak ayrı Celery görevi olarak çalışır).
 
-**Kaynak bazlı notlar (keşif aşamasında teyit edilecek):**
+**Kaynak bazlı erişim yöntemleri (canlı keşif 25.09.2026 — ayrıntılar: [`kaynak-kesif-raporu.md`](kaynak-kesif-raporu.md)):**
 
-| Kaynak | Toplanacak içerik | Yöntem / not | Varsayılan pencereler (TR saati) |
+| Kaynak | Yöntem | İstemci | Durum |
 |---|---|---|---|
-| **Resmî Gazete** | Günlük sayı + **mükerrer sayılar** | Günlük fihrist sayfası (`/eskiler/YYYY/MM/YYYYMMDD.htm`), mükerrerler için `…M1.htm`, `…M2.htm` desenleri denenir. Fihristteki her madde ayrı `ItemRef` olarak işlenir: yürütme/idare bölümü, yönetmelikler, tebliğler, kurul kararları | 00:10, 02:00, 07:30, 12:00, 17:00, 21:00, 23:45 (mükerrerler geç saatte yayımlanabildiği için) |
-| **BDDK** | Mevzuat (yönetmelik, tebliğ, genelge, rehber), kurul kararları, duyurular | HTML liste sayfaları + PDF | 08:00–20:00 arası saatlik |
-| **SPK** | Mevzuat değişiklikleri, SPK Bülteni (haftalık PDF), duyurular | Bülten PDF'leri bölümlere ayrılır | 3 pencere |
-| **TCMB** | Mevzuat, genelgeler, basın duyuruları | HTML + PDF | 3–4 pencere |
-| **KVKK** | Mevzuat, kurul kararları, duyurular, rehberler | HTML + PDF | 3 pencere |
-| **MASAK** | Mevzuat, genel tebliğler, rehberler, duyurular | HTML + PDF | 3 pencere |
-| **Ticaret Bakanlığı** | Mevzuat, tebliğler, duyurular | HTML | 2–3 pencere |
-| **Rekabet Kurumu** | Kurul kararları, mevzuat, duyurular | HTML + PDF (hacim yüksek → ilgililik filtresinin yükü artar) | 2–3 pencere |
-| **TKBB** | Faizsiz finans standartları, danışma kurulu kararları, duyurular | HTML + PDF. **Katılım bankacılığı açısından yüksek ilgililik beklenir** | 2 pencere |
-| **Banka KEP** | Mevzuat içerikli resmi yazılar | Bkz. aşağıdaki KEP bölümü | 15 dk'da bir |
+| **Resmî Gazete** | `/fihrist?tarih=…&mukerrer=N` (asıl + mükerrer, bugün + dün) | impersonate | ✅ uygulandı |
+| **BDDK** | Link deseni: `Duyuru/Liste/{39,40}`, `Mevzuat/Liste/55` → `Detay` + `EkGetir` | impersonate | ⚠️ yazıldı, kurum ağında doğrulanacak |
+| **SPK** | Bülten PDF listesi + basın duyuruları | httpx | ✅ uygulandı |
+| **TCMB** | Atom beslemesi (basın duyuruları) + 6 mevzuat belge listesi (CACHEID sürüm anahtarı) | httpx | ✅ uygulandı |
+| **KVKK** | Duyurular, kurul kararları, yönetmelik/tebliğ/rehber listeleri | httpx | ✅ uygulandı |
+| **MASAK** | WordPress REST API (`/portal/v2/posts,pages`, `modified_after`) | httpx | ✅ uygulandı |
+| **Ticaret Bakanlığı** | Duyurular + tüketici mevzuatı listesi | impersonate | ✅ uygulandı |
+| **Rekabet Kurumu** | Duyurular + kurul kararları (sayı/tarih/tür alanlarıyla) | httpx | ✅ uygulandı |
+| **TKBB** | Duyurular + birlik düzenlemeleri (idari/mesleki) | httpx | ✅ uygulandı |
+| **Banka KEP** | Bkz. aşağıdaki KEP bölümü | — | kapsam dışı (bu adım) |
+
+**İlk tarama (BASELINE):** Bir kanal ilk kez tarandığında sitede zaten duran içerik (ör. TCMB'deki ~260 mevzuat PDF'i)
+arşive alınır ama `processing_status=BASELINE` ile işaretlenir; "yeni düzenleme" sayılmaz ve YZ hattına gitmez.
 
 Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `source` tablosuna yazılır; pencereler Celery Beat'e bu dosyadan yüklenir.
 

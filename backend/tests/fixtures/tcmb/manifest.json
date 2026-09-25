@@ -1,0 +1,44 @@
+{
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Bottom+Menu/Diger/RSS/Basin+Duyurulari": {
+  "file": "abdaadb099735b27.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Bottom+Menu/Diger/RSS/Basin+Duyurulari",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Bankacilik/": {
+  "file": "50e850baa6788244.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Bankacilik/",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Kambiyo/": {
+  "file": "740491739542ec56.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Kambiyo/",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Odeme+Sistemleri/": {
+  "file": "dc4342063aa0a76d.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Odeme+Sistemleri/",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Piyasalar/": {
+  "file": "7b7035310baae6c6.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Piyasalar/",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Operasyon+Mevzuat/": {
+  "file": "596c5f0ad8fef36e.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Operasyon+Mevzuat/",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Istatistik/": {
+  "file": "5db941f919161efa.html",
+  "status": 200,
+  "final_url": "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Banka+Hakkinda/Mevzuat/Istatistik/",
+  "content_type": "text/html; charset=UTF-8"
+ }
+}

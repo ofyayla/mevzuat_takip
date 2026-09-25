@@ -1,0 +1,41 @@
+[project]
+name = "mevzuat-takip-backend"
+version = "0.1.0"
+description = "Mevzuat Takip Otomasyonu — backend (kaynak toplama altyapısı)"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "curl_cffi>=0.7",          # tarayıcı TLS parmak izi taklidi (Resmî Gazete, Ticaret Bakanlığı)
+    "selectolax>=0.3.21",
+    "feedparser>=6.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "pyyaml>=6.0",
+    "tenacity>=8.2",
+    "sqlalchemy>=2.0",
+    "celery[redis]>=5.3",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+browser = ["playwright>=1.44"]   # yalnızca 'browser' istemcisi seçilen kaynaklar için
+dev = ["pytest>=8", "respx>=0.21", "ruff>=0.4"]
+
+[project.scripts]
+mevzuat-collect = "app.collectors.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: canlı sitelere istek atan testler (varsayılan olarak çalışmaz, -m live ile açılır)"]
+addopts = "-m 'not live'"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
