@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    ::selection { background: color-mix(in oklch, oklch(0.511 0.096 186.391) 30%, transparent); }
+    .mtp-select { appearance: none; -webkit-appearance: none; background-image: none; }
+    .mtp-fade-in { animation: mtpFadeIn 0.2s cubic-bezier(0.32,0.72,0,1); }
+    @keyframes mtpFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes mtpToastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</helmet>
+
+<div style="--background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--card-foreground:oklch(0.145 0 0);--popover:oklch(1 0 0);--popover-foreground:oklch(0.145 0 0);--primary:oklch(0.511 0.096 186.391);--primary-foreground:oklch(0.985 0 0);--secondary:oklch(0.97 0 0);--secondary-foreground:oklch(0.205 0 0);--muted:oklch(0.97 0 0);--muted-foreground:oklch(0.556 0 0);--accent:oklch(0.97 0 0);--accent-foreground:oklch(0.205 0 0);--destructive:oklch(0.577 0.245 27.325);--destructive-foreground:oklch(0.985 0 0);--success:oklch(0.62 0.13 152);--success-foreground:oklch(0.985 0 0);--warning:oklch(0.78 0.14 75);--warning-foreground:oklch(0.205 0 0);--info:oklch(0.62 0.14 240);--info-foreground:oklch(0.985 0 0);--border:oklch(0.92 0 0);--input:oklch(0.92 0 0);--ring:oklch(0.511 0.096 186.391 / 0.5);--radius:1rem;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-xl:24px;--radius-pill:9999px;--shadow-xs:0 1px 2px 0 oklch(0 0 0 / 0.04);--shadow-sm:0 2px 4px -1px oklch(0 0 0 / 0.06);--shadow-md:0 4px 8px -2px oklch(0 0 0 / 0.08);--shadow-lg:0 12px 24px -6px oklch(0 0 0 / 0.10);--shadow-xl:0 24px 48px -12px oklch(0 0 0 / 0.14);--font-sans:'Inter',ui-sans-serif,system-ui,sans-serif;--font-mono:'JetBrains Mono',ui-monospace,monospace;--sidebar-bg:color-mix(in oklch, var(--primary) 38%, black); font-family:var(--font-sans); background:var(--background); color:var(--foreground); min-height:100vh; display:flex; font-size:16px; line-height:1.5;">
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <header style="flex:0 0 auto; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:14px 32px; gap:28px; position:sticky; top:0; background:color-mix(in oklch, var(--background) 88%, transparent); backdrop-filter:blur(12px); z-index:20;">
+      <div style="display:flex; align-items:center; gap:10px; flex:0 0 auto;">
+        <div style="width:32px; height:32px; border-radius:var(--radius-sm); background:var(--sidebar-bg); display:flex; align-items:center; justify-content:center; flex:0 0 32px;">
+          <i data-lucide="shield-check" style="width:17px; height:17px; color:white;"></i>
+        </div>
+        <div style="flex-shrink:0;">
+          <div style="font-weight:600; font-size:14px; line-height:1.2; color:var(--foreground); white-space:nowrap;">Mevzuat Takip Portalı</div>
+          <div style="font-size:11px; color:var(--muted-foreground); letter-spacing:0.02em; white-space:nowrap;">Mevzuat ve Uyum Başkanlığı</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isDetailView }}" hint-placeholder-val="{{ false }}">
+        <div style="height:32px; width:1px; background:var(--border); flex:0 0 auto;"></div>
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1 1 auto;">
+          <span style="font-size:13px; color:var(--muted-foreground); cursor:pointer; flex:0 0 auto; white-space:nowrap;" onClick="{{ goToList }}">Kayıtlar</span>
+          <i data-lucide="chevron-right" style="width:13px; height:13px; color:var(--muted-foreground); flex:0 0 auto;"></i>
+          <span style="font-size:13px; color:var(--foreground); font-weight:500; max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ selected.title }}</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isListView }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1 1 auto;"></div>
+      </sc-if>
+
+      <div style="position:relative; flex:0 0 auto;">
+        <div onClick="{{ toggleSourceHealth }}" style="display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:var(--radius-pill); background:{{ healthBg }}; border:{{ healthBorder }}; cursor:pointer; white-space:nowrap;">
+          <span style="width:{{ healthDotSize }}; height:{{ healthDotSize }}; border-radius:50%; background:{{ healthDotColor }}; opacity:{{ healthDotOpacity }}; flex:0 0 auto;"></span>
+          <span style="font-size:12.5px; color:{{ healthTextColor }};">{{ healthText }}</span>
+        </div>
+        <sc-if value="{{ sourceHealthOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; top:calc(100% + 8px); right:0; width:280px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); padding:14px; z-index:30;">
+            <div style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:10px;">Kaynak durumu</div>
+            <div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto;">
+              <sc-for list="{{ sourceList }}" as="src" hint-placeholder-count="8">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <span style="font-size:13px; color:var(--foreground); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ src.name }}</span>
+                  <span style="font-size:12px; color:{{ src.dotColor }}; white-space:nowrap; flex:0 0 auto;">{{ src.lastFetch }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+
+    </header>
+
+    <div style="flex:1; overflow-y:auto; padding:28px 32px 60px;">
+
+      <sc-if value="{{ isListView }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px;">
+          <div>
+            <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Tespit edilen düzenlemeler</h1>
+            <p style="font-size:14px; color:var(--muted-foreground); margin:0;">YZ tarafından tespit edilen düzenleyici içerikler — inceleyin ve birim yönlendirmesini onaylayın.</p>
+          </div>
+          <div style="position:relative; flex:0 0 280px;">
+            <i data-lucide="search" style="width:15px; height:15px; color:var(--muted-foreground); position:absolute; left:12px; top:50%; transform:translateY(-50%);"></i>
+            <input type="text" placeholder="Düzenleme adı ara…" value="{{ filters.search }}" onChange="{{ setSearch }}" style="width:100%; height:40px; padding:0 12px 0 36px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:14px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:stretch; gap:12px; margin-bottom:18px;">
+          <button onClick="{{ cardPending.onClick }}" style="flex:1; text-align:left; cursor:{{ cardPending.cursor }}; opacity:{{ cardPending.opacity }}; padding:16px 20px; border-radius:var(--radius-lg); background:{{ cardPending.bg }}; border:{{ cardPending.border }}; font-family:var(--font-sans); display:flex; flex-direction:column; gap:4px; transition:background var(--duration-base,200ms) ease;">
+            <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">Bekleyen</span>
+            <sc-if value="{{ cardPending.isZero }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:15px; font-weight:500; color:var(--muted-foreground);">{{ cardPending.zeroText }}</span>
+            </sc-if>
+            <span style="font-size:34px; font-weight:600; line-height:1; color:{{ cardPending.valueColor }}; letter-spacing:-0.02em; display:{{ cardPending.numDisplay }};">{{ cardPending.value }}</span>
+          </button>
+          <button onClick="{{ cardCritical.onClick }}" style="flex:1; text-align:left; cursor:{{ cardCritical.cursor }}; opacity:{{ cardCritical.opacity }}; padding:16px 18px; border-radius:var(--radius-lg); background:{{ cardCritical.bg }}; border:{{ cardCritical.border }}; font-family:var(--font-sans); display:flex; flex-direction:column; gap:4px; transition:background var(--duration-base,200ms) ease;">
+            <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">Kritik ve yüksek</span>
+            <sc-if value="{{ cardCritical.isZero }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:15px; font-weight:500; color:var(--muted-foreground);">{{ cardCritical.zeroText }}</span>
+            </sc-if>
+            <span style="font-size:24px; font-weight:600; line-height:1; color:{{ cardCritical.valueColor }}; letter-spacing:-0.02em; display:{{ cardCritical.numDisplay }};">{{ cardCritical.value }}</span>
+          </button>
+          <button onClick="{{ cardToday.onClick }}" style="flex:1; text-align:left; cursor:{{ cardToday.cursor }}; opacity:{{ cardToday.opacity }}; padding:16px 18px; border-radius:var(--radius-lg); background:{{ cardToday.bg }}; border:{{ cardToday.border }}; font-family:var(--font-sans); display:flex; flex-direction:column; gap:4px; transition:background var(--duration-base,200ms) ease;">
+            <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">Bugün gelen</span>
+            <sc-if value="{{ cardToday.isZero }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:15px; font-weight:500; color:var(--muted-foreground);">{{ cardToday.zeroText }}</span>
+            </sc-if>
+            <span style="font-size:24px; font-weight:600; line-height:1; color:{{ cardToday.valueColor }}; letter-spacing:-0.02em; display:{{ cardToday.numDisplay }};">{{ cardToday.value }}</span>
+          </button>
+          <button onClick="{{ cardUpcoming.onClick }}" style="flex:1; text-align:left; cursor:{{ cardUpcoming.cursor }}; opacity:{{ cardUpcoming.opacity }}; padding:16px 18px; border-radius:var(--radius-lg); background:{{ cardUpcoming.bg }}; border:{{ cardUpcoming.border }}; font-family:var(--font-sans); display:flex; flex-direction:column; gap:4px; transition:background var(--duration-base,200ms) ease;">
+            <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">Yürürlüğü yaklaşan</span>
+            <sc-if value="{{ cardUpcoming.isZero }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:15px; font-weight:500; color:var(--muted-foreground);">{{ cardUpcoming.zeroText }}</span>
+            </sc-if>
+            <span style="font-size:24px; font-weight:600; line-height:1; color:{{ cardUpcoming.valueColor }}; letter-spacing:-0.02em; display:{{ cardUpcoming.numDisplay }};">{{ cardUpcoming.value }}</span>
+          </button>
+        </div>
+
+        <sc-if value="{{ showHealthBanner }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:var(--radius-md); background:{{ healthBg }}; margin-bottom:18px; font-size:13px; color:{{ healthTextColor }};">
+            <i data-lucide="alert-triangle" style="width:14px; height:14px; flex:0 0 auto;"></i>
+            <span style="flex:1; min-width:0;">{{ bannerText }}</span>
+            <span style="text-decoration:underline; cursor:pointer; flex:0 0 auto; font-weight:500;" onClick="{{ toggleSourceHealth }}">Detay</span>
+          </div>
+        </sc-if>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px; padding:12px 14px; background:var(--muted); border-radius:var(--radius-md);">
+          <i data-lucide="sliders-horizontal" style="width:15px; height:15px; color:var(--muted-foreground); flex:0 0 auto;"></i>
+          <select class="mtp-select" value="{{ filters.source }}" onChange="{{ setFilterSource }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+            <option value="all">Tüm kaynaklar</option>
+            <option value="BDDK">BDDK</option>
+            <option value="TCMB">TCMB</option>
+            <option value="MASAK">MASAK</option>
+            <option value="SPK">SPK</option>
+            <option value="KVKK">KVKK</option>
+            <option value="Hazine ve Maliye Bakanlığı">Hazine ve Maliye Bakanlığı</option>
+            <option value="Resmi Gazete">Resmi Gazete</option>
+          </select>
+          <select class="mtp-select" value="{{ filters.severity }}" onChange="{{ setFilterSeverity }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+            <option value="all">Tüm önem dereceleri</option>
+            <option value="Kritik">Kritik</option>
+            <option value="Yüksek">Yüksek</option>
+            <option value="Orta">Orta</option>
+            <option value="Düşük">Düşük</option>
+          </select>
+          <select class="mtp-select" value="{{ filters.status }}" onChange="{{ setFilterStatus }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+            <option value="all">Tüm durumlar</option>
+            <option value="Bekliyor">Bekliyor</option>
+            <option value="Onaylandı">Onaylandı</option>
+            <option value="Reddedildi">Reddedildi</option>
+          </select>
+          <select class="mtp-select" value="{{ filters.unit }}" onChange="{{ setFilterUnit }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+            <option value="all">Tüm birimler</option>
+            <sc-for list="{{ unitOptions }}" as="u" hint-placeholder-count="8">
+              <option value="{{ u }}">{{ u }}</option>
+            </sc-for>
+          </select>
+          <select class="mtp-select" value="{{ filters.date }}" onChange="{{ setFilterDate }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+            <option value="all">Tüm tarihler</option>
+            <option value="7">Son 7 gün</option>
+            <option value="30">Son 30 gün</option>
+          </select>
+          <sc-if value="{{ hasActiveFilters }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ clearFilters }}" style="display:flex; align-items:center; gap:5px; height:36px; padding:0 10px; border-radius:var(--radius-sm); border:none; background:transparent; color:var(--primary); font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">
+              <i data-lucide="x" style="width:13px; height:13px;"></i>
+              Filtreleri temizle
+            </button>
+          </sc-if>
+          <span style="margin-left:auto; font-size:12px; color:var(--muted-foreground); white-space:nowrap;">{{ resultCountLabel }}</span>
+        </div>
+
+        <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px solid var(--border); border-radius:var(--radius-lg); overflow-x:auto; background:var(--card);">
+            <div style="min-width:1060px; display:grid; grid-template-columns:minmax(280px,1fr) 110px 80px 108px 80px 150px 90px 20px; gap:12px; padding:10px 16px; background:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted-foreground);">
+              <span>Düzenleme</span>
+              <span>Kaynak</span>
+              <span>Yayım tarihi</span>
+              <span>Yürürlük tarihi</span>
+              <span>Önem</span>
+              <span>Önerilen birim</span>
+              <span>Durum</span>
+              <span></span>
+            </div>
+            <sc-for list="{{ visibleRecords }}" as="r" hint-placeholder-count="8">
+              <div onClick="{{ r.openFn }}" style="min-width:1060px; display:grid; grid-template-columns:minmax(280px,1fr) 110px 80px 108px 80px 150px 90px 20px; gap:12px; padding:13px 16px; border-top:1px solid var(--border); cursor:pointer; align-items:center; transition:background var(--duration-base,200ms) ease;" style-hover="background:var(--muted);">
+                <span style="font-size:13.5px; font-weight:500; color:var(--foreground); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ r.title }}</span>
+                <span style="font-size:13px; color:var(--muted-foreground);">{{ r.issuer }}</span>
+                <span style="font-size:13px; color:var(--muted-foreground);">{{ r.publishDate }}</span>
+                <span style="font-size:13px; padding:2px 7px; border-radius:var(--radius-sm); background:{{ r.effBg }}; color:{{ r.effColor }}; font-weight:{{ r.effWeight }}; width:fit-content; white-space:nowrap;">{{ r.effectiveDate }}</span>
+                <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 9px; border-radius:var(--radius-pill); background:{{ r.sevBg }}; color:{{ r.sevColor }}; width:fit-content;">{{ r.severity }}</span>
+                <span style="font-size:13px; color:var(--muted-foreground); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.unitsLabel }}</span>
+                <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 9px; border-radius:var(--radius-pill); background:{{ r.statusBg }}; color:{{ r.statusColor }}; width:fit-content;">{{ r.status }}</span>
+                <i data-lucide="chevron-right" style="width:15px; height:15px; color:var(--muted-foreground);"></i>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:16px;">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <span style="font-size:13px; color:var(--muted-foreground); white-space:nowrap;">Gösteriliyor {{ resultCountLabel }}</span>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:12px; color:var(--muted-foreground); white-space:nowrap;">Sayfa başına</span>
+                <select class="mtp-select" value="{{ pageSize }}" onChange="{{ setPageSize }}" style="height:32px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
+            <sc-if value="{{ showPagination }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button onClick="{{ goPrev }}" disabled="{{ prevDisabled }}" style="display:flex; align-items:center; gap:4px; height:32px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ prevOpacity }}; font-family:var(--font-sans);">
+                  <i data-lucide="chevron-left" style="width:13px; height:13px;"></i>
+                  Önceki
+                </button>
+                <sc-for list="{{ pageNumbers }}" as="p" hint-placeholder-count="3">
+                  <button onClick="{{ p.goFn }}" style="height:32px; min-width:32px; padding:0 8px; border-radius:var(--radius-sm); border:{{ p.border }}; background:{{ p.bg }}; color:{{ p.color }}; font-size:13px; font-weight:500; cursor:{{ p.cursor }}; font-family:var(--font-sans);">{{ p.label }}</button>
+                </sc-for>
+                <button onClick="{{ goNext }}" disabled="{{ nextDisabled }}" style="display:flex; align-items:center; gap:4px; height:32px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ nextOpacity }}; font-family:var(--font-sans);">
+                  Sonraki
+                  <i data-lucide="chevron-right" style="width:13px; height:13px;"></i>
+                </button>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:80px 20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--card);">
+            <div style="width:44px; height:44px; border-radius:50%; background:var(--muted); display:flex; align-items:center; justify-content:center;">
+              <i data-lucide="inbox" style="width:20px; height:20px; color:var(--muted-foreground);"></i>
+            </div>
+            <div style="font-size:14px; font-weight:500; color:var(--foreground);">Bu filtrelerle eşleşen kayıt yok</div>
+            <div style="font-size:13px; color:var(--muted-foreground);">Farklı filtreler deneyin veya tümünü görüntülemek için temizleyin.</div>
+            <button onClick="{{ clearFilters }}" style="margin-top:4px; height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Filtreleri temizle</button>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ isDetailView }}" hint-placeholder-val="{{ false }}">
+        <div class="mtp-fade-in">
+          <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; border:none; background:transparent; color:var(--muted-foreground); font-size:13px; cursor:pointer; padding:0; margin-bottom:16px; font-family:var(--font-sans);">
+            <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+            Kayıtlara dön
+          </button>
+
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:8px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 10px; border-radius:var(--radius-pill); background:{{ selected.sevBg }}; color:{{ selected.sevColor }};">{{ selected.severity }}</span>
+                <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 10px; border-radius:var(--radius-pill); background:{{ selected.statusBg }}; color:{{ selected.statusColor }};">{{ selected.status }}</span>
+                <span style="font-size:12px; color:var(--muted-foreground);">{{ selected.type }}</span>
+              </div>
+              <h1 style="font-size:24px; font-weight:600; letter-spacing:-0.01em; margin:0; max-width:620px; color:var(--foreground);">{{ selected.title }}</h1>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 340px; gap:28px; margin-top:24px; align-items:start;">
+            <div style="min-width:0;">
+              <div style="display:inline-flex; padding:3px; background:var(--muted); border-radius:var(--radius-pill); gap:2px; margin-bottom:20px;">
+                <button onClick="{{ setTabOzet }}" style="height:34px; padding:0 16px; border-radius:var(--radius-pill); border:none; font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans); background:{{ tabOzetBg }}; color:{{ tabOzetColor }};">Özet</button>
+                <button onClick="{{ setTabAudit }}" style="height:34px; padding:0 16px; border-radius:var(--radius-pill); border:none; font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans); background:{{ tabAuditBg }}; color:{{ tabAuditColor }};">Denetim izi</button>
+              </div>
+
+              <sc-if value="{{ isTabOzet }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; flex-direction:column; gap:24px;">
+
+                  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                      <h3 style="font-size:15px; font-weight:600; margin:0; color:var(--foreground);">Kısa içerik</h3>
+                      <span style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--primary); background:color-mix(in oklch, var(--primary) 10%, white); padding:2px 8px; border-radius:var(--radius-pill); font-weight:500;">
+                        <i data-lucide="bot" style="width:11px; height:11px;"></i>
+                        YZ özeti
+                      </span>
+                    </div>
+                    <p style="font-size:14px; line-height:1.65; color:var(--foreground); margin:0;">{{ selected.summary }}</p>
+                  </div>
+
+                  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                      <h3 style="font-size:15px; font-weight:600; margin:0; color:var(--foreground);">Bankanın faaliyetleri açısından ilgili konular</h3>
+                      <span style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--primary); background:color-mix(in oklch, var(--primary) 10%, white); padding:2px 8px; border-radius:var(--radius-pill); font-weight:500;">
+                        <i data-lucide="bot" style="width:11px; height:11px;"></i>
+                        YZ tespiti
+                      </span>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                      <sc-for list="{{ selected.topics }}" as="topic" hint-placeholder-count="3">
+                        <span style="font-size:13px; padding:5px 12px; border-radius:var(--radius-pill); background:var(--muted); color:var(--foreground);">{{ topic }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+                      <h3 style="font-size:15px; font-weight:600; margin:0; color:var(--foreground);">Birim eşleştirme önerisi</h3>
+                      <span style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--primary); background:color-mix(in oklch, var(--primary) 10%, white); padding:2px 8px; border-radius:var(--radius-pill); font-weight:500;">
+                        <i data-lucide="bot" style="width:11px; height:11px;"></i>
+                        YZ önerisi
+                      </span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                      <sc-for list="{{ selected.suggestedUnits }}" as="su" hint-placeholder-count="2">
+                        <div style="display:flex; gap:12px; padding:14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--background);">
+                          <div style="width:34px; height:34px; border-radius:var(--radius-sm); background:var(--secondary); display:flex; align-items:center; justify-content:center; flex:0 0 34px;">
+                            <i data-lucide="building-2" style="width:16px; height:16px; color:var(--secondary-foreground);"></i>
+                          </div>
+                          <div>
+                            <div style="font-size:14px; font-weight:600; color:var(--foreground); margin-bottom:3px;">{{ su.unit }}</div>
+                            <div style="font-size:13px; color:var(--muted-foreground); line-height:1.5;">{{ su.reason }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isTabAudit }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:24px;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px;">
+                    <i data-lucide="history" style="width:15px; height:15px; color:var(--muted-foreground);"></i>
+                    <span style="font-size:13px; color:var(--muted-foreground);">Bu kayıt üzerindeki tüm işlemlerin geçmişi</span>
+                  </div>
+                  <div style="display:flex; flex-direction:column;">
+                    <sc-for list="{{ selected.auditTrail }}" as="ev" hint-placeholder-count="3">
+                      <div style="display:flex; gap:14px; position:relative;">
+                        <div style="display:flex; flex-direction:column; align-items:center; flex:0 0 24px;">
+                          <div style="width:24px; height:24px; border-radius:50%; background:var(--muted); display:flex; align-items:center; justify-content:center; flex:0 0 24px;">
+                            <i data-lucide="{{ ev.icon }}" style="width:12px; height:12px; color:var(--muted-foreground);"></i>
+                          </div>
+                          <sc-if value="{{ ev.hasLine }}" hint-placeholder-val="{{ true }}">
+                            <div style="width:1px; flex:1; background:var(--border); margin:4px 0;"></div>
+                          </sc-if>
+                        </div>
+                        <div style="padding-bottom:22px; min-width:0;">
+                          <div style="font-size:13.5px; font-weight:500; color:var(--foreground); margin-bottom:2px;">{{ ev.action }}</div>
+                          <div style="font-size:12.5px; color:var(--muted-foreground); margin-bottom:4px;">{{ ev.actor }} · {{ ev.timestamp }}</div>
+                          <sc-if value="{{ ev.note }}" hint-placeholder-val="{{ false }}">
+                            <div style="font-size:13px; color:var(--foreground); background:var(--muted); border-radius:var(--radius-sm); padding:8px 10px; max-width:440px;">{{ ev.note }}</div>
+                          </sc-if>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px; position:sticky; top:76px;">
+              <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; display:flex; flex-direction:column; gap:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Yayımlayan kurum</span>
+                  <i data-lucide="file-text" style="width:12px; height:12px; color:var(--muted-foreground);" title="Kaynaktan"></i>
+                </div>
+                <div style="font-size:14px; color:var(--foreground); font-weight:500; margin-top:-8px;">{{ selected.issuer }}</div>
+
+                <div style="height:1px; background:var(--border);"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Yayım tarihi</span>
+                  <i data-lucide="file-text" style="width:12px; height:12px; color:var(--muted-foreground);" title="Kaynaktan"></i>
+                </div>
+                <div style="font-size:14px; color:var(--foreground); font-weight:500; margin-top:-8px;">{{ selected.publishDate }}</div>
+
+                <div style="height:1px; background:var(--border);"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Düzenleme türü</span>
+                  <i data-lucide="file-text" style="width:12px; height:12px; color:var(--muted-foreground);" title="Kaynaktan"></i>
+                </div>
+                <div style="font-size:14px; color:var(--foreground); font-weight:500; margin-top:-8px;">{{ selected.type }}</div>
+
+                <div style="height:1px; background:var(--border);"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">YZ güven skoru</span>
+                  <i data-lucide="bot" style="width:12px; height:12px; color:var(--primary);" title="YZ tarafından"></i>
+                </div>
+                <div style="display:flex; align-items:center; gap:7px; margin-top:-8px;">
+                  <span style="font-size:13px; letter-spacing:2px; color:{{ selected.confColor }};">{{ selected.confDots }}</span>
+                  <span style="font-size:14px; color:var(--foreground); font-weight:500;">{{ selected.confidence }} güven</span>
+                </div>
+
+                <a href="{{ selected.sourceUrl }}" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:7px; height:40px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; text-decoration:none; margin-top:4px;">
+                  Orijinal belgeyi görüntüle
+                  <i data-lucide="external-link" style="width:14px; height:14px;"></i>
+                </a>
+              </div>
+
+              <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; display:flex; flex-direction:column; gap:10px;">
+                <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Aksiyonlar</span>
+
+                <sc-if value="{{ isPending }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ openApprove }}" style="height:42px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; gap:7px;">
+                    <i data-lucide="check" style="width:15px; height:15px;"></i>
+                    Onayla
+                  </button>
+                  <button onClick="{{ openReject }}" style="height:42px; border-radius:var(--radius-pill); border:1px solid var(--destructive); background:transparent; color:var(--destructive); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; gap:7px;">
+                    <i data-lucide="x" style="width:15px; height:15px;"></i>
+                    Reddet
+                  </button>
+                  <button onClick="{{ openUnitModal }}" style="height:40px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; gap:7px;">
+                    <i data-lucide="shuffle" style="width:14px; height:14px;"></i>
+                    Birim değiştir
+                  </button>
+                </sc-if>
+
+                <sc-if value="{{ isPending }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px; color:var(--muted-foreground); line-height:1.5; background:var(--muted); padding:12px; border-radius:var(--radius-md);">
+                    Bu kayıt için karar verildi: <strong style="color:var(--foreground);">{{ selected.status }}</strong><br/>{{ selected.decidedBy }}
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:oklch(0 0 0 / 0.4); display:flex; align-items:center; justify-content:center; z-index:40;" onClick="{{ closeConfirm }}">
+      <div onClick="{{ stopProp }}" style="width:420px; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); padding:24px; display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <div style="width:36px; height:36px; border-radius:50%; background:{{ confirmIconBg }}; display:flex; align-items:center; justify-content:center; flex:0 0 36px;">
+            <i data-lucide="{{ confirmIcon }}" style="width:17px; height:17px; color:{{ confirmIconColor }};"></i>
+          </div>
+          <h3 style="font-size:16px; font-weight:600; margin:0; color:var(--foreground);">{{ confirmTitle }}</h3>
+        </div>
+        <p style="font-size:13.5px; color:var(--muted-foreground); line-height:1.55; margin:0 0 8px;">{{ confirmBody }} Bu işlem geri alınamaz.</p>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+          <button onClick="{{ closeConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Vazgeç</button>
+          <button onClick="{{ doConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:{{ confirmBtnBg }}; color:white; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">{{ confirmBtnLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ unitModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:oklch(0 0 0 / 0.4); display:flex; align-items:center; justify-content:center; z-index:40;" onClick="{{ closeUnitModal }}">
+      <div onClick="{{ stopProp }}" style="width:440px; max-height:520px; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); padding:22px; display:flex; flex-direction:column; gap:14px;">
+        <div>
+          <h3 style="font-size:16px; font-weight:600; margin:0 0 3px; color:var(--foreground);">Birimi değiştir</h3>
+          <p style="font-size:13px; color:var(--muted-foreground); margin:0;">Bu kayıt için bir veya daha fazla birim seçebilirsiniz.</p>
+        </div>
+        <input type="text" placeholder="Birim ara…" value="{{ unitSearch }}" onChange="{{ setUnitSearch }}" style="height:40px; padding:0 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:14px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+        <div style="display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto;">
+          <sc-for list="{{ filteredUnitOptions }}" as="uo" hint-placeholder-count="6">
+            <button onClick="{{ uo.toggleFn }}" style="display:flex; align-items:center; gap:10px; text-align:left; padding:10px; border-radius:var(--radius-sm); border:none; background:{{ uo.bg }}; color:var(--foreground); font-size:14px; cursor:pointer; font-family:var(--font-sans);" style-hover="background:var(--muted);">
+              <span style="width:18px; height:18px; border-radius:5px; border:1.5px solid {{ uo.checkBorder }}; background:{{ uo.checkBg }}; display:flex; align-items:center; justify-content:center; flex:0 0 18px;">
+                <i data-lucide="check" style="width:12px; height:12px; color:var(--primary-foreground);"></i>
+              </span>
+              {{ uo.name }}
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px; padding-top:14px; border-top:1px solid var(--border);">
+          <button onClick="{{ closeUnitModal }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Vazgeç</button>
+          <button onClick="{{ saveUnitChange }}" disabled="{{ unitsSaveDisabled }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans); opacity:{{ saveOpacity }};">Kaydet</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; bottom:24px; right:28px; background:var(--foreground); color:var(--background); padding:12px 18px; border-radius:var(--radius-md); box-shadow:var(--shadow-lg); font-size:13.5px; display:flex; align-items:center; gap:8px; z-index:50; animation:mtpToastIn 0.2s cubic-bezier(0.32,0.72,0,1);">
+      <i data-lucide="check-circle-2" style="width:15px; height:15px;"></i>
+      {{ toast }}
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;sourceHealthState&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;healthy&quot;, &quot;options&quot;: [&quot;healthy&quot;, &quot;delayed&quot;, &quot;down&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Kaynak sağlığı (demo)&quot;}}">
+const SOURCES = ['BDDK', 'TCMB', 'MASAK', 'SPK', 'KVKK', 'Hazine ve Maliye Bakanlığı', 'Resmi Gazete', 'TBB'];
+const SOURCE_SCENARIOS = {
+  healthy: SOURCES.map(s => ({ name: s, status: 'ok', lastFetch: '2 dakika önce' })),
+  delayed: SOURCES.map((s, i) => ({ name: s, status: i === 0 ? 'delayed' : 'ok', lastFetch: i === 0 ? '6 saat önce' : '3 dakika önce' })),
+  down: SOURCES.map((s, i) => ({ name: s, status: i === 0 ? 'delayed' : (i === 6 || i === 7) ? 'down' : 'ok', lastFetch: i === 0 ? '6 saat önce' : (i === 6 || i === 7) ? '2 gün önce' : '4 dakika önce' }))
+};
+
+const UNITS = ["Hukuk İşleri","İç Kontrol","Risk Yönetimi","Bilgi Teknolojileri","Operasyon","Krediler","Perakende Bankacılık","Kurumsal Bankacılık","Hazine","İnsan Kaynakları","Ödeme Sistemleri","Mali Kontrol"];
+
+function sevMeta(sev) {
+  if (sev === 'Kritik') return { bg: 'color-mix(in oklch, var(--destructive) 12%, white)', color: 'var(--destructive)' };
+  if (sev === 'Yüksek') return { bg: 'color-mix(in oklch, var(--warning) 24%, white)', color: 'color-mix(in oklch, var(--warning) 55%, black)' };
+  if (sev === 'Orta') return { bg: 'color-mix(in oklch, var(--info) 14%, white)', color: 'var(--info)' };
+  return { bg: 'var(--muted)', color: 'var(--muted-foreground)' };
+}
+function statusMeta(st) {
+  if (st === 'Onaylandı') return { bg: 'color-mix(in oklch, var(--success) 14%, white)', color: 'color-mix(in oklch, var(--success) 45%, black)' };
+  if (st === 'Reddedildi') return { bg: 'color-mix(in oklch, var(--destructive) 10%, white)', color: 'var(--destructive)' };
+  return { bg: 'var(--secondary)', color: 'var(--muted-foreground)' };
+}
+function confMeta(c) {
+  if (c === 'Yüksek') return { dots: '● ● ●', color: 'var(--primary)' };
+  if (c === 'Orta') return { dots: '● ● ○', color: 'var(--muted-foreground)' };
+  return { dots: '● ○ ○', color: 'var(--muted-foreground)' };
+}
+
+const RAW_RECORDS = [
+  { id: 1, title: 'Bankaların Sermaye Yeterliliğinin Ölçülmesine İlişkin Yönetmelikte Değişiklik', issuer: 'BDDK', type: 'Yönetmelik', publishDate: '18 Ağu 2026', effectiveDate: '15 Eyl 2026', effectiveSoon: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/18',
+    summary: 'Değişiklik, konsolide sermaye yeterliliği rasyosu hesaplamasında kullanılan risk ağırlıklarını güncelliyor ve geçiş süresi için bankalara altı aylık uyum takvimi tanıyor.',
+    topics: ['Sermaye yeterliliği', 'Risk ağırlıkları', 'Konsolide raporlama'],
+    suggestedUnits: [{ unit: 'Risk Yönetimi', reason: 'Sermaye yeterliliği rasyosu hesaplamaları ve risk ağırlıklandırma metodolojisi doğrudan bu birimin sorumluluğunda.' }, { unit: 'Mali Kontrol', reason: 'Konsolide raporlama süreçlerinde rasyo hesaplamasının finansal tablolara etkisi değerlendirilmeli.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '18 Ağu 2026, 09:14', icon: 'bot', note: null }] },
+  { id: 2, title: 'Kredi Kartı İşlemlerinde Azami Faiz Oranlarına İlişkin Tebliğ', issuer: 'TCMB', type: 'Tebliğ', publishDate: '15 Ağu 2026', effectiveDate: '20 Eyl 2026', effectiveSoon: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/tebligler/15',
+    summary: 'Kredi kartı nakit avans ve taksitli işlemlerde uygulanacak azami akdi ve gecikme faiz oranları yeniden belirlendi; yeni oranlar bir ay sonra yürürlüğe girecek.',
+    topics: ['Kredi kartı faiz oranları', 'Tüketici bankacılığı', 'Fiyatlandırma'],
+    suggestedUnits: [{ unit: 'Perakende Bankacılık', reason: 'Kredi kartı ürün faiz parametrelerinin sistemlere yansıtılması bu birimin sorumluluğunda.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '15 Ağu 2026, 08:02', icon: 'bot', note: null }] },
+  { id: 3, title: 'Suç Gelirlerinin Aklanmasının Önlenmesine Dair Tedbirler Yönetmeliğinde Değişiklik', issuer: 'MASAK', type: 'Yönetmelik', publishDate: '21 Ağu 2026', effectiveDate: '5 Eyl 2026', effectiveSoon: true, isToday: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.masak.gov.tr/mevzuat/2026/21',
+    summary: 'Şüpheli işlem bildirim eşikleri düşürüldü ve müşterini tanı sürecinde nihai faydalanıcı tespitine ilişkin ek belge yükümlülükleri getirildi.',
+    topics: ['Şüpheli işlem bildirimi', 'Müşterini tanı', 'Nihai faydalanıcı tespiti'],
+    suggestedUnits: [{ unit: 'İç Kontrol', reason: 'Şüpheli işlem bildirim eşiklerindeki değişiklik izleme kurallarının güncellenmesini gerektiriyor.' }, { unit: 'Hukuk İşleri', reason: 'Yeni belge yükümlülüklerinin müşteri sözleşmelerine ve prosedürlere yansıtılması gerekiyor.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '21 Ağu 2026, 07:40', icon: 'bot', note: null }] },
+  { id: 4, title: 'Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Tebliği', issuer: 'KVKK', type: 'Tebliğ', publishDate: '9 Ağu 2026', effectiveDate: '9 Kas 2026', severity: 'Yüksek', status: 'Onaylandı', confidence: 'Orta',
+    sourceUrl: 'https://www.kvkk.gov.tr/mevzuat/2026/9',
+    summary: 'Yurt dışındaki bulut hizmet sağlayıcılarına veri aktarımında kullanılacak standart sözleşme hükümleri ve bildirim süreleri netleştirildi.',
+    topics: ['Sınır ötesi veri aktarımı', 'Bulut hizmetleri', 'Standart sözleşme hükümleri'],
+    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Bulut altyapısı üzerinden yürüyen veri aktarım süreçlerinin gözden geçirilmesi gerekiyor.' }, { unit: 'Hukuk İşleri', reason: 'Tedarikçi sözleşmelerine standart sözleşme hükümlerinin eklenmesi gerekiyor.' }],
+    decidedBy: 'Elif Demir tarafından onaylandı · 11 Ağu 2026, 10:22',
+    auditTrail: [
+      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '9 Ağu 2026, 08:15', icon: 'bot', note: null },
+      { action: 'İncelemeye alındı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '10 Ağu 2026, 14:02', icon: 'eye', note: null },
+      { action: 'Onaylandı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '11 Ağu 2026, 10:22', icon: 'check-circle-2', note: 'Bilgi Teknolojileri ve Hukuk İşleri birimlerine yönlendirildi.' }
+    ] },
+  { id: 5, title: 'Bankaların Likidite Karşılama Oranı Hesaplamasına İlişkin Genelge', issuer: 'BDDK', type: 'Genelge', publishDate: '6 Ağu 2026', effectiveDate: '6 Eki 2026', severity: 'Orta', status: 'Bekliyor', confidence: 'Orta',
+    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/genelge/6',
+    summary: 'Likidite karşılama oranı hesaplamasında yüksek kaliteli likit varlık sınıflandırmasına ilişkin uygulama örnekleri ve raporlama şablonu güncellendi.',
+    topics: ['Likidite karşılama oranı', 'Likit varlık sınıflandırması'],
+    suggestedUnits: [{ unit: 'Hazine', reason: 'Likit varlık portföyünün sınıflandırılması ve raporlanması Hazine biriminin sorumluluğunda.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '6 Ağu 2026, 09:30', icon: 'bot', note: null }] },
+  { id: 6, title: 'Ödeme Hizmetleri ve Elektronik Para İhracına İlişkin Yönetmelikte Değişiklik', issuer: 'TCMB', type: 'Yönetmelik', publishDate: '12 Ağu 2026', effectiveDate: '12 Kas 2026', severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/yonetmelik/12',
+    summary: 'Açık bankacılık arayüzlerinde üçüncü taraf ödeme hizmeti sağlayıcılarına erişim standartları ve güvenli kimlik doğrulama koşulları güncellendi.',
+    topics: ['Açık bankacılık', 'Üçüncü taraf erişimi', 'Güvenli kimlik doğrulama'],
+    suggestedUnits: [{ unit: 'Ödeme Sistemleri', reason: 'Açık bankacılık API standartlarının uygulanması bu birimin doğrudan sorumluluğunda.' }, { unit: 'Bilgi Teknolojileri', reason: 'Kimlik doğrulama altyapısında teknik uyum çalışması gerekiyor.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '12 Ağu 2026, 11:05', icon: 'bot', note: null }] },
+  { id: 7, title: 'Finansal Tüketicilerin Korunmasına İlişkin Tebliğ Güncellemesi', issuer: 'Hazine ve Maliye Bakanlığı', type: 'Tebliğ', publishDate: '3 Ağu 2026', effectiveDate: '3 Eki 2026', severity: 'Orta', status: 'Reddedildi', confidence: 'Orta',
+    sourceUrl: 'https://www.hmb.gov.tr/mevzuat/2026/3',
+    summary: 'Tüketici kredisi sözleşmelerinde erken ödeme indirimi hesaplama yöntemine açıklık getirildi; mevcut uygulamada değişiklik gerektirmiyor.',
+    topics: ['Tüketici kredisi', 'Erken ödeme indirimi'],
+    suggestedUnits: [{ unit: 'Krediler', reason: 'Erken ödeme indirimi hesaplama yönteminin kredi sistemlerindeki uygulamayla karşılaştırılması önerildi.' }],
+    decidedBy: 'Ahmet Yılmaz tarafından reddedildi · 4 Ağu 2026, 16:40',
+    auditTrail: [
+      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '3 Ağu 2026, 10:00', icon: 'bot', note: null },
+      { action: 'Reddedildi', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: '4 Ağu 2026, 16:40', icon: 'x-circle', note: 'Mevcut hesaplama yöntemi zaten tebliğle uyumlu, aksiyon gerekmiyor.' }
+    ] },
+  { id: 8, title: 'Sermaye Piyasası Araçlarının Kredili Alım Satımına İlişkin Tebliğ', issuer: 'SPK', type: 'Tebliğ', publishDate: '28 Tem 2026', effectiveDate: '28 Eyl 2026', severity: 'Düşük', status: 'Onaylandı', confidence: 'Düşük',
+    sourceUrl: 'https://www.spk.gov.tr/mevzuat/2026/28',
+    summary: 'Kredili menkul kıymet işlemlerinde teminat oranlarına ilişkin küçük bir terminoloji güncellemesi yapıldı; işlem esasları değişmedi.',
+    topics: ['Kredili menkul kıymet işlemleri', 'Teminat oranları'],
+    suggestedUnits: [{ unit: 'Kurumsal Bankacılık', reason: 'Aracılık faaliyetleri kapsamında bilgilendirme amaçlı takip önerildi.' }],
+    decidedBy: 'Ahmet Yılmaz tarafından onaylandı · 29 Tem 2026, 09:12',
+    auditTrail: [
+      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '28 Tem 2026, 08:50', icon: 'bot', note: null },
+      { action: 'Onaylandı', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: '29 Tem 2026, 09:12', icon: 'check-circle-2', note: 'Bilgilendirme amaçlı Kurumsal Bankacılık\'a iletildi.' }
+    ] },
+  { id: 9, title: 'Bankalarca Kullanılacak Uzaktan Kimlik Doğrulama Yöntemlerine İlişkin Rehber', issuer: 'BDDK', type: 'Rehber', publishDate: '20 Ağu 2026', effectiveDate: '25 Eyl 2026', effectiveSoon: true, isToday: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/rehber/20',
+    summary: 'Video görüşme yoluyla uzaktan müşteri ediniminde kimlik doğrulama adımları ve kayıt saklama sürelerine ilişkin asgari standartlar yayımlandı.',
+    topics: ['Uzaktan müşteri edinimi', 'Kimlik doğrulama', 'Kayıt saklama'],
+    suggestedUnits: [{ unit: 'Operasyon', reason: 'Uzaktan müşteri edinimi süreçlerinin yürütülmesi Operasyon biriminin sorumluluğunda.' }, { unit: 'Bilgi Teknolojileri', reason: 'Video kimlik doğrulama altyapısında güncelleme gerekebilir.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '20 Ağu 2026, 09:45', icon: 'bot', note: null }] },
+  { id: 10, title: 'Rekabetin Korunması Hakkında Kanunda Değişiklik – Finansal Hizmetler Kapsamı', issuer: 'Resmi Gazete', type: 'Kanun', publishDate: '30 Tem 2026', effectiveDate: '30 Kas 2026', severity: 'Orta', status: 'Bekliyor', confidence: 'Orta',
+    sourceUrl: 'https://www.resmigazete.gov.tr/2026/07/30',
+    summary: 'Finansal hizmet sağlayıcıları arasındaki veri paylaşımı anlaşmalarının rekabet hukuku kapsamında değerlendirilmesine ilişkin yeni hükümler getirildi.',
+    topics: ['Rekabet hukuku', 'Veri paylaşımı anlaşmaları'],
+    suggestedUnits: [{ unit: 'Hukuk İşleri', reason: 'Mevcut veri paylaşımı anlaşmalarının yeni hükümler karşısında gözden geçirilmesi gerekiyor.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '30 Tem 2026, 13:20', icon: 'bot', note: null }] },
+  { id: 11, title: 'Bankacılık İşlemlerinde Siber Olay Bildirim Süreçlerine İlişkin Genelge', issuer: 'BDDK', type: 'Genelge', publishDate: '22 Ağu 2026', effectiveDate: '22 Kas 2026', isToday: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/genelge/22',
+    summary: 'Önemli siber güvenlik olaylarının BDDK\'ya bildirim süresi 72 saatten 24 saate indirildi ve bildirim şablonuna yeni alanlar eklendi.',
+    topics: ['Siber olay bildirimi', 'Bilgi güvenliği', 'Regülatör raporlama'],
+    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Siber olay tespit ve müdahale süreçlerinin bildirim süresine uyumlu hale getirilmesi gerekiyor.' }, { unit: 'İç Kontrol', reason: 'Yeni bildirim şablonunun süreç dokümantasyonuna işlenmesi gerekiyor.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '22 Ağu 2026, 08:05', icon: 'bot', note: null }] },
+  { id: 12, title: 'Döviz Pozisyonu ve Yurt Dışı Kredi Kullanımına İlişkin Tebliğ', issuer: 'TCMB', type: 'Tebliğ', publishDate: '25 Tem 2026', effectiveDate: '25 Eki 2026', severity: 'Orta', status: 'Onaylandı', confidence: 'Yüksek',
+    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/tebligler/25',
+    summary: 'Bankaların yurt dışından sağladığı kredilerin döviz pozisyonu limiti hesaplamasına dahil edilme yöntemi güncellendi.',
+    topics: ['Döviz pozisyonu', 'Yurt dışı kredi kullanımı'],
+    suggestedUnits: [{ unit: 'Hazine', reason: 'Döviz pozisyonu limit hesaplamalarının güncellenmesi gerekiyor.' }],
+    decidedBy: 'Elif Demir tarafından onaylandı · 27 Tem 2026, 11:00',
+    auditTrail: [
+      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '25 Tem 2026, 09:00', icon: 'bot', note: null },
+      { action: 'Onaylandı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '27 Tem 2026, 11:00', icon: 'check-circle-2', note: 'Hazine birimine yönlendirildi, limit hesaplama güncellemesi talep edildi.' }
+    ] },
+  { id: 13, title: 'Bireysel Emeklilik Sisteminde Otomatik Katılıma İlişkin Yönetmelik Değişikliği', issuer: 'SPK', type: 'Yönetmelik', publishDate: '14 Ağu 2026', effectiveDate: '14 Ara 2026', severity: 'Düşük', status: 'Bekliyor', confidence: 'Düşük',
+    sourceUrl: 'https://www.spk.gov.tr/mevzuat/2026/14',
+    summary: 'Otomatik katılım sisteminden çıkış talebinde bulunan çalışanlara ilişkin bildirim süreleri kısaltıldı.',
+    topics: ['Otomatik katılım', 'Bireysel emeklilik'],
+    suggestedUnits: [{ unit: 'İnsan Kaynakları', reason: 'Çalışanların otomatik katılım bildirim süreçleri İK tarafından yürütülüyor.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '14 Ağu 2026, 10:30', icon: 'bot', note: null }] },
+  { id: 14, title: 'Bankaların Bilgi Sistemleri Yönetimine İlişkin Tebliğ Güncellemesi', issuer: 'BDDK', type: 'Tebliğ', publishDate: '11 Ağu 2026', effectiveDate: '11 Ara 2026', isToday: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
+    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/tebligler/11',
+    summary: 'Kritik bilgi sistemlerinin bulut ortamına taşınmasında izlenecek risk değerlendirme sürecine ve BDDK bildirim yükümlülüğüne ilişkin usul netleştirildi.',
+    topics: ['Bilgi sistemleri yönetimi', 'Bulut geçişi', 'Risk değerlendirmesi'],
+    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Bulut geçiş projelerinin risk değerlendirme sürecine dahil edilmesi gerekiyor.' }, { unit: 'İç Kontrol', reason: 'BDDK bildirim yükümlülüğünün süreçlere işlenmesi takip edilmeli.' }],
+    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '11 Ağu 2026, 08:20', icon: 'bot', note: null }] }
+];
+
+class Component extends DCLogic {
+  state = {
+    view: 'list',
+    selectedId: null,
+    detailTab: 'ozet',
+    filters: { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' },
+    activeMetric: null,
+    page: 1,
+    pageSize: 10,
+    sourceHealthOpen: false,
+    confirmType: null,
+    unitModalOpen: false,
+    unitModalSelected: [],
+    unitSearch: '',
+    toast: null,
+    records: RAW_RECORDS.map(r => ({ ...r, suggestedUnits: r.suggestedUnits.slice() }))
+  };
+
+  componentDidMount() { this.renderIcons(); }
+  componentDidUpdate() { this.renderIcons(); }
+  renderIcons() { if (window.lucide) window.lucide.createIcons(); }
+
+  goToList = () => this.setState({ view: 'list', unitModalOpen: false });
+  openDetail = (id) => this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false });
+  setTabOzet = () => this.setState({ detailTab: 'ozet' });
+  setTabAudit = () => this.setState({ detailTab: 'audit' });
+
+  setSearch = (e) => this.setState({ filters: { ...this.state.filters, search: e.target.value }, page: 1 });
+  setFilterSource = (e) => this.setState({ filters: { ...this.state.filters, source: e.target.value }, page: 1 });
+  setFilterSeverity = (e) => this.setState({ filters: { ...this.state.filters, severity: e.target.value }, page: 1 });
+  setFilterStatus = (e) => this.setState({ filters: { ...this.state.filters, status: e.target.value }, page: 1 });
+  setFilterUnit = (e) => this.setState({ filters: { ...this.state.filters, unit: e.target.value }, page: 1 });
+  setFilterDate = (e) => this.setState({ filters: { ...this.state.filters, date: e.target.value }, page: 1 });
+  clearFilters = () => this.setState({ filters: { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' }, page: 1 });
+  toggleMetric = (key) => this.setState({ activeMetric: this.state.activeMetric === key ? null : key, page: 1 });
+  setPage = (p) => this.setState({ page: p });
+  setPageSize = (e) => this.setState({ pageSize: parseInt(e.target.value, 10), page: 1 });
+  toggleSourceHealth = () => this.setState({ sourceHealthOpen: !this.state.sourceHealthOpen });
+
+  openApprove = () => this.setState({ confirmType: 'approve' });
+  openReject = () => this.setState({ confirmType: 'reject' });
+  closeConfirm = () => this.setState({ confirmType: null });
+  stopProp = (e) => e.stopPropagation();
+
+  showToast = (msg) => {
+    this.setState({ toast: msg });
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 3000);
+  };
+
+  doConfirm = () => {
+    const { confirmType, selectedId, records } = this.state;
+    const rec = records.find(r => r.id === selectedId);
+    if (!rec) return;
+    const newStatus = confirmType === 'approve' ? 'Onaylandı' : 'Reddedildi';
+    const now = 'az önce';
+    rec.status = newStatus;
+    rec.decidedBy = `Ahmet Yılmaz tarafından ${newStatus === 'Onaylandı' ? 'onaylandı' : 'reddedildi'} · ${now}`;
+    rec.auditTrail = [...rec.auditTrail, {
+      action: newStatus, actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: now,
+      icon: newStatus === 'Onaylandı' ? 'check-circle-2' : 'x-circle',
+      note: newStatus === 'Onaylandı' ? `${rec.suggestedUnits.map(s => s.unit).join(', ')} birimine yönlendirildi.` : 'Kayıt reddedildi, aksiyon alınmayacak.'
+    }];
+    this.setState({ records: [...records], confirmType: null });
+    this.showToast(newStatus === 'Onaylandı' ? 'Kayıt onaylandı.' : 'Kayıt reddedildi.');
+  };
+
+  setUnitSearch = (e) => this.setState({ unitSearch: e.target.value });
+
+  openUnitModal = () => {
+    const rec = this.state.records.find(r => r.id === this.state.selectedId);
+    this.setState({ unitModalOpen: true, unitModalSelected: rec ? rec.suggestedUnits.map(s => s.unit) : [], unitSearch: '' });
+  };
+  closeUnitModal = () => this.setState({ unitModalOpen: false });
+  toggleUnitSelected = (name) => {
+    const sel = this.state.unitModalSelected;
+    this.setState({ unitModalSelected: sel.includes(name) ? sel.filter(u => u !== name) : [...sel, name] });
+  };
+  saveUnitChange = () => {
+    const { selectedId, records, unitModalSelected } = this.state;
+    const rec = records.find(r => r.id === selectedId);
+    if (!rec || unitModalSelected.length === 0) return;
+    const old = rec.suggestedUnits.map(s => s.unit).join(', ');
+    rec.suggestedUnits = unitModalSelected.map(name => {
+      const existing = rec.suggestedUnits.find(s => s.unit === name);
+      return existing || { unit: name, reason: 'Uzman tarafından manuel olarak atandı.' };
+    });
+    const updated = unitModalSelected.join(', ');
+    rec.auditTrail = [...rec.auditTrail, { action: 'Birim değiştirildi', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: 'az önce', icon: 'shuffle', note: `Önerilen birim "${old}" iken "${updated}" olarak güncellendi.` }];
+    this.setState({ records: [...records], unitModalOpen: false });
+    this.showToast('Birim güncellendi.');
+  };
+
+  matchesFilters(r) {
+    const f = this.state.filters;
+    if (f.source !== 'all' && r.issuer !== f.source) return false;
+    if (f.severity !== 'all' && r.severity !== f.severity) return false;
+    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.unit !== 'all' && !r.suggestedUnits.some(s => s.unit === f.unit)) return false;
+    if (f.search && !r.title.toLowerCase().includes(f.search.toLowerCase())) return false;
+    const m = this.state.activeMetric;
+    if (m === 'pending' && r.status !== 'Bekliyor') return false;
+    if (m === 'criticalHigh' && !(r.status === 'Bekliyor' && (r.severity === 'Kritik' || r.severity === 'Yüksek'))) return false;
+    if (m === 'today' && !r.isToday) return false;
+    if (m === 'upcoming' && !r.effectiveSoon) return false;
+    return true;
+  }
+
+  renderVals() {
+    const { records, view, selectedId, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, toast, sourceHealthOpen, page, pageSize } = this.state;
+    const filtered = records.filter(r => this.matchesFilters(r));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const pageStart = (safePage - 1) * pageSize;
+    const pagedFiltered = filtered.slice(pageStart, pageStart + pageSize);
+    const rangeLabel = filtered.length === 0 ? '0 kayıt' : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} / ${filtered.length} kayıt`;
+    const rawItems = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) rawItems.push({ isPage: true, n: i });
+    } else {
+      rawItems.push({ isPage: true, n: 1 });
+      if (safePage > 3) rawItems.push({ isPage: false });
+      for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) rawItems.push({ isPage: true, n: i });
+      if (safePage < totalPages - 2) rawItems.push({ isPage: false });
+      rawItems.push({ isPage: true, n: totalPages });
+    }
+    const pageNumbers = rawItems.map((it, idx) => it.isPage ? {
+      label: String(it.n), key: 'p' + it.n, goFn: () => this.setPage(it.n),
+      bg: it.n === safePage ? 'var(--foreground)' : 'var(--card)',
+      color: it.n === safePage ? 'var(--background)' : 'var(--foreground)',
+      cursor: 'pointer', border: '1px solid var(--border)'
+    } : {
+      label: '…', key: 'e' + idx, goFn: () => {},
+      bg: 'transparent', color: 'var(--muted-foreground)', cursor: 'default', border: 'none'
+    });
+    const visibleRecords = pagedFiltered.map(r => {
+      const sm = sevMeta(r.severity), stm = statusMeta(r.status);
+      return { ...r, sevBg: sm.bg, sevColor: sm.color, statusBg: stm.bg, statusColor: stm.color,
+        unitsLabel: r.suggestedUnits.map(s => s.unit).join(', '),
+        effBg: r.effectiveSoon ? 'color-mix(in oklch, var(--primary) 12%, white)' : 'transparent',
+        effColor: r.effectiveSoon ? 'var(--primary)' : 'var(--muted-foreground)',
+        effWeight: r.effectiveSoon ? 600 : 400,
+        openFn: () => this.openDetail(r.id) };
+    });
+
+    const pending = records.filter(r => r.status === 'Bekliyor');
+    const stats = { pending: pending.length, criticalPending: pending.filter(r => r.severity === 'Kritik').length };
+    const pendingCount = pending.length;
+    const criticalHighCount = pending.filter(r => r.severity === 'Kritik' || r.severity === 'Yüksek').length;
+    const todayCount = records.filter(r => r.isToday).length;
+    const upcomingCount = records.filter(r => r.effectiveSoon).length;
+
+    const neutralCard = (key, count, zeroText) => {
+      const isActive = activeMetric === key, isZero = count === 0;
+      return {
+        value: count, isZero, zeroText, isActive, numDisplay: isZero ? 'none' : 'block',
+        onClick: isZero ? (() => {}) : (() => this.toggleMetric(key)),
+        cursor: isZero ? 'default' : 'pointer', opacity: isZero ? 0.55 : 1,
+        bg: isActive ? 'color-mix(in oklch, var(--primary) 12%, white)' : 'var(--card)',
+        border: isActive ? '2px solid var(--primary)' : '1px solid var(--border)',
+        valueColor: 'var(--foreground)'
+      };
+    };
+    const cardPending = neutralCard('pending', pendingCount, 'Bekleyen kayıt yok');
+    const cardToday = neutralCard('today', todayCount, 'Bugün yeni kayıt yok');
+    const cardUpcoming = neutralCard('upcoming', upcomingCount, 'Yaklaşan yürürlük yok');
+    const critZero = criticalHighCount === 0;
+    const critActive = activeMetric === 'criticalHigh';
+    const cardCritical = {
+      value: criticalHighCount, isZero: critZero, zeroText: 'Kritik kayıt yok', isActive: critActive, numDisplay: critZero ? 'none' : 'block',
+      onClick: critZero ? (() => {}) : (() => this.toggleMetric('criticalHigh')),
+      cursor: critZero ? 'default' : 'pointer', opacity: critZero ? 0.55 : 1,
+      bg: critZero ? 'var(--card)' : (critActive ? 'color-mix(in oklch, var(--warning) 30%, white)' : 'color-mix(in oklch, var(--warning) 16%, white)'),
+      border: critZero ? '1px solid var(--border)' : (critActive ? '2px solid color-mix(in oklch, var(--warning) 60%, black)' : '1px solid color-mix(in oklch, var(--warning) 45%, white)'),
+      valueColor: critZero ? 'var(--foreground)' : 'color-mix(in oklch, var(--warning) 55%, black)'
+    };
+
+    const scenarioKey = this.props.sourceHealthState || 'healthy';
+    const rawSourceList = SOURCE_SCENARIOS[scenarioKey] || SOURCE_SCENARIOS.healthy;
+    const sourceList = rawSourceList.map(s => ({ ...s, dotColor: s.status === 'down' ? 'var(--destructive)' : s.status === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)' }));
+    const delayedSources = sourceList.filter(s => s.status === 'delayed');
+    const downSources = sourceList.filter(s => s.status === 'down');
+    const overallStatus = downSources.length > 0 ? 'down' : (delayedSources.length > 0 ? 'delayed' : 'healthy');
+    const healthMeta = {
+      healthy: { text: `${sourceList.length} kaynak aktif`, dotSize: '6px', dotColor: 'var(--success)', dotOpacity: 0.55, bg: 'transparent', border: 'none', textColor: 'var(--muted-foreground)' },
+      delayed: { text: `${delayedSources.length} kaynak gecikmeli`, dotSize: '8px', dotColor: 'var(--warning)', dotOpacity: 1, bg: 'color-mix(in oklch, var(--warning) 18%, white)', border: 'none', textColor: 'color-mix(in oklch, var(--warning) 55%, black)' },
+      down: { text: `${downSources.length} kaynak yanıt vermiyor`, dotSize: '9px', dotColor: 'var(--destructive)', dotOpacity: 1, bg: 'color-mix(in oklch, var(--destructive) 14%, white)', border: '1px solid color-mix(in oklch, var(--destructive) 35%, white)', textColor: 'var(--destructive)' }
+    };
+    const hm = healthMeta[overallStatus];
+    const bannerParts = [];
+    delayedSources.forEach(s => bannerParts.push(`${s.name} ${s.lastFetch.replace(' önce', '')} önce içerik getirmedi (gecikmeli)`));
+    downSources.forEach(s => bannerParts.push(`${s.name} ${s.lastFetch.replace(' önce', '')} önce yanıt vermiyor`));
+    const bannerText = bannerParts.join(' · ');
+
+    const selRaw = records.find(r => r.id === selectedId);
+    let selected = null;
+    if (selRaw) {
+      const sm = sevMeta(selRaw.severity), stm = statusMeta(selRaw.status), cm = confMeta(selRaw.confidence);
+      const trail = selRaw.auditTrail.map((ev, i) => ({ ...ev, hasLine: i < selRaw.auditTrail.length - 1 }));
+      selected = { ...selRaw, sevBg: sm.bg, sevColor: sm.color, statusBg: stm.bg, statusColor: stm.color, confDots: cm.dots, confColor: cm.color, auditTrail: trail, decidedBy: selRaw.decidedBy || '' };
+    }
+
+    const filteredUnitOptions = UNITS.filter(u => u.toLowerCase().includes(unitSearch.toLowerCase())).map(u => {
+      const isChecked = unitModalSelected.includes(u);
+      return { name: u, isChecked, toggleFn: () => this.toggleUnitSelected(u),
+        bg: isChecked ? 'color-mix(in oklch, var(--primary) 10%, white)' : 'transparent',
+        checkBg: isChecked ? 'var(--primary)' : 'var(--background)',
+        checkBorder: isChecked ? 'var(--primary)' : 'var(--border)' };
+    });
+
+    const hasActiveFilters = filters.source !== 'all' || filters.severity !== 'all' || filters.status !== 'all' || filters.unit !== 'all' || filters.date !== 'all' || filters.search !== '';
+
+    const confirmMeta = {
+      approve: { title: 'Kaydı onaylıyor musunuz?', body: `"${selected ? selected.title : ''}" kaydı onaylanacak ve ${selected ? selected.suggestedUnits.map(s => s.unit).join(', ') : ''} birimine yönlendirilecek.`, icon: 'check', iconBg: 'color-mix(in oklch, var(--primary) 14%, white)', iconColor: 'var(--primary)', btnBg: 'var(--primary)', btnLabel: 'Onayla' },
+      reject: { title: 'Kaydı reddediyor musunuz?', body: `"${selected ? selected.title : ''}" kaydı reddedilecek ve herhangi bir birime yönlendirilmeyecek.`, icon: 'x', iconBg: 'color-mix(in oklch, var(--destructive) 12%, white)', iconColor: 'var(--destructive)', btnBg: 'var(--destructive)', btnLabel: 'Reddet' }
+    };
+    const cm2 = confirmType ? confirmMeta[confirmType] : null;
+
+    return {
+      isListView: view === 'list', isDetailView: view === 'detail',
+      filters, unitOptions: UNITS, hasActiveFilters,
+      setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,
+      setFilterStatus: this.setFilterStatus, setFilterUnit: this.setFilterUnit, setFilterDate: this.setFilterDate, clearFilters: this.clearFilters,
+      visibleRecords, hasResults: filtered.length > 0, noResults: filtered.length === 0,
+      resultCountLabel: rangeLabel, pageSize, setPageSize: this.setPageSize,
+      totalPages, currentPage: safePage, pageNumbers,
+      prevDisabled: safePage <= 1, nextDisabled: safePage >= totalPages,
+      prevOpacity: safePage <= 1 ? 0.4 : 1, nextOpacity: safePage >= totalPages ? 0.4 : 1,
+      goPrev: safePage <= 1 ? (() => {}) : (() => this.setPage(safePage - 1)),
+      goNext: safePage >= totalPages ? (() => {}) : (() => this.setPage(safePage + 1)),
+      showPagination: filtered.length > pageSize,
+      stats, goToList: this.goToList,
+      pendingCount, pendingIsZero: pendingCount === 0, pendingNotZero: pendingCount > 0, criticalHighCount, todayCount, upcomingCount,
+      cardPending, cardCritical, cardToday, cardUpcoming,
+      healthText: hm.text, healthDotSize: hm.dotSize, healthDotColor: hm.dotColor, healthDotOpacity: hm.dotOpacity,
+      healthBg: hm.bg, healthBorder: hm.border, healthTextColor: hm.textColor,
+      showHealthBanner: overallStatus !== 'healthy', bannerText,
+      sourceHealthOpen, toggleSourceHealth: this.toggleSourceHealth, sourceList,
+      selected, isPending: !!selected && selected.status === 'Bekliyor',
+      isTabOzet: detailTab === 'ozet', isTabAudit: detailTab === 'audit',
+      setTabOzet: this.setTabOzet, setTabAudit: this.setTabAudit,
+      tabOzetBg: detailTab === 'ozet' ? 'var(--card)' : 'transparent', tabOzetColor: detailTab === 'ozet' ? 'var(--foreground)' : 'var(--muted-foreground)',
+      tabAuditBg: detailTab === 'audit' ? 'var(--card)' : 'transparent', tabAuditColor: detailTab === 'audit' ? 'var(--foreground)' : 'var(--muted-foreground)',
+      openApprove: this.openApprove, openReject: this.openReject,
+      openUnitModal: this.openUnitModal, closeUnitModal: this.closeUnitModal, unitModalOpen, unitSearch, setUnitSearch: this.setUnitSearch, saveUnitChange: this.saveUnitChange, filteredUnitOptions,
+      unitsSaveDisabled: unitModalSelected.length === 0, saveOpacity: unitModalSelected.length === 0 ? 0.5 : 1,
+      confirmOpen: !!confirmType, confirmTitle: cm2 ? cm2.title : '', confirmBody: cm2 ? cm2.body : '',
+      confirmIcon: cm2 ? cm2.icon : '', confirmIconBg: cm2 ? cm2.iconBg : '', confirmIconColor: cm2 ? cm2.iconColor : '',
+      confirmBtnBg: cm2 ? cm2.btnBg : '', confirmBtnLabel: cm2 ? cm2.btnLabel : '',
+      closeConfirm: this.closeConfirm, doConfirm: this.doConfirm, stopProp: this.stopProp,
+      toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>
