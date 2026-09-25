@@ -39,8 +39,13 @@ def _print_report(r) -> None:
 
 
 def cmd_run(args) -> int:
+    from app.ai.dedupe_confirm import make_confirmer
+    from app.ai.llm_client import get_llm
+
     s, sf, st = _ctx()
-    r = DocumentProcessor(s, st).process_pending(sf, limit=args.limit, source=args.source)
+    llm = get_llm(s)
+    confirmer = make_confirmer(llm, sf, s) if llm is not None else None   # belirsiz bant (0.70–0.90) LLM'e sorulur
+    r = DocumentProcessor(s, st, confirmer=confirmer).process_pending(sf, limit=args.limit, source=args.source)
     _print_report(r)
     return 1 if r.failed else 0
 

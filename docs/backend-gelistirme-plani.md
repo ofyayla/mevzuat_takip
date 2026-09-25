@@ -449,6 +449,9 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
   - `uncertain=true` ya da oylar bölünmüşse, skor ne olursa olsun kayıt **portala düşer** ve "Düşük güven" gösterilir.
   - Eşik altında kalan kayıtlar silinmez, `IRRELEVANT` durumunda saklanır. Paralel çalışmadaki kaçırma analizi için `GET /evaluation/filtered-out` ile listelenebilir.
 - **Güven bandı:** skor ≥ 0.75 → Yüksek, 0.45–0.75 → Orta, < 0.45 → Düşük (eşikler `app_setting`'de).
+- **Uygulama notu (25.09.2026):** Metni çıkarılamamış (OCR bekleyen) belgede "metin yok" tek başına tereddüt sayılmaz; model
+  başlığa göre karar verir, kayıt eşiğin yarısıyla değerlendirilir. İlk canlı ölçümde kılavuzun "metin yoksa uncertain
+  işaretle" kuralı taranmış RG PDF'lerinin (kamulaştırma, atama, AYM kararları) tamamını portala düşürüyordu.
 
 **Önem derecesi (`ai/severity.py`):**
 - Kurallar ve LLM birlikte çalışır: çalıştayda yazılı hâle getirilen kriterler LLM prompt'una verilir. Çıktı: `{severity, rationale}`.

@@ -11,6 +11,8 @@ dependencies = [
     "pymupdf>=1.24",           # İK-2: PDF metin katmanı ve sayfa sayımı
     "python-docx>=1.1",        # İK-2: DOCX
     "rapidfuzz>=3.6",          # İK-2: tekilleştirme benzerlik skoru
+    "openai>=1.40",            # İK-3: OpenAI ve vLLM (OpenAI uyumlu) için tek istemci
+    "jinja2>=3.1",             # İK-3: sürümlü prompt şablonları
     "curl_cffi>=0.7",          # tarayıcı TLS parmak izi taklidi (Resmî Gazete, Ticaret Bakanlığı)
     "selectolax>=0.3.21",
     "feedparser>=6.0",
@@ -30,6 +32,7 @@ dev = ["pytest>=8", "respx>=0.21", "ruff>=0.4"]
 [project.scripts]
 mevzuat-collect = "app.collectors.cli:main"
 mevzuat-process = "app.processing.cli:main"
+mevzuat-ai = "app.ai.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

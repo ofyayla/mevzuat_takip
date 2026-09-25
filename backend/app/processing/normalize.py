@@ -183,6 +183,17 @@ ISSUERS: dict[str, tuple[str, str]] = {
     "TBMM": ("Türkiye Büyük Millet Meclisi", r"türkiye büyük millet meclisi"),
 }
 
+# Bağlı kuruluş → üst kurum. RG'de bağlı kuruluşun düzenlemesi üst kurum adıyla yayımlanır (MASAK genel tebliğleri
+# "Hazine ve Maliye Bakanlığından:" satırıyla başlar); eşleştirmede ikisi uyumlu sayılır.
+ISSUER_PARENT = {"MASAK": "HMB"}
+
+
+def issuers_compatible(a: str | None, b: str | None) -> bool:
+    if not a or not b or a == b:
+        return True
+    return ISSUER_PARENT.get(a) == b or ISSUER_PARENT.get(b) == a
+
+
 # RG'deki yürütme metinleri "… Kurumundan:" satırıyla başlar
 _ISSUER_LINE = re.compile(r"^[|*\s]*(?P<name>[^\n:|*]{4,160}?(?:dan|den|tan|ten))\s*\**\s*:", re.M)
 _ABLATIVE = re.compile(r"(?:n?dan|n?den|tan|ten)$")   # "Kurumundan" → "Kurumu", "Bakanlığından" → "Bakanlığı"

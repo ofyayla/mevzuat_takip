@@ -59,6 +59,31 @@ class Settings(BaseSettings):
     dedupe_date_window_days: int = 7
     process_max_attempts: int = 3
 
+    # İK-3: LLM (plan §7). Yerelde OpenAI, kurumda vLLM (OpenAI uyumlu) — aynı istemci
+    llm_provider: str = "none"               # none | openai | vllm
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None          # vllm: http://10.144.100.204:8806/v1
+    llm_model: str = "gpt-4.1-mini"          # vllm: Qwen/Qwen3.6-35B-A3B-FP8
+    llm_timeout_s: float = 120.0
+    llm_max_concurrency: int = 2
+    llm_enable_thinking: bool = True         # yalnızca vllm (Qwen thinking)
+    llm_thinking_tasks: str = "relevance,severity,summary,unit_match"
+    llm_store_reasoning: bool = False
+    llm_json_mode: str = "json_schema"       # json_schema | json_object (sunucu şema zorlamasını desteklemiyorsa)
+    taxonomy_file: Path = BACKEND_DIR / "config" / "taxonomy.yaml"
+    labeling_guide_file: Path = BACKEND_DIR / "config" / "labeling_guide.md"
+
+    # İK-3: ilgililik / güven (başlangıç değerleri; çalışma zamanında app_setting tablosundan ezilir)
+    relevance_threshold: float = 0.30
+    relevance_samples: int = 3               # self-consistency örnek sayısı
+    relevance_sample_temperature: float = 0.7
+    relevance_weight_model: float = 0.6
+    relevance_weight_votes: float = 0.3
+    relevance_weight_rules: float = 0.1
+    confidence_high: float = 0.75
+    confidence_medium: float = 0.45
+    relevance_max_input_chars: int = 18000   # ~6.000 token
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):

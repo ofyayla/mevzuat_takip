@@ -2,7 +2,8 @@
 
 Hazır olanlar: **kaynak toplama altyapısı (İK-1)**: 9 resmi kaynağın (KEP hariç) taranması, yeni/değişen içeriğin
 tespiti, ham arşiv ve kaynak bazlı sağlık verisi; **belge işleme ve tekilleştirme (İK-2)**: metin çıkarma, OCR,
-aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması; **mevzuat tespiti ve önceliklendirme (İK-3)**:
+LLM ile ilgililik, göreli güven skoru ve önem derecesi. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -30,6 +31,7 @@ mevzuat-collect ca-fetch www.bddk.org.tr       # sunucu TLS ara sertifikasını 
 
 celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS_URL gerekir)
 celery -A app.worker worker -Q process -c 2    # İK-2 metin çıkarma + tekilleştirme
+celery -A app.worker worker -Q ai -c 2         # İK-3 LLM (GPU yükü: düşük eşzamanlılık)
 celery -A app.worker beat                      # sources.yaml'daki cron pencereleri
 ```
 
@@ -117,6 +119,51 @@ taramadaki eski belgeler varsayılan olarak OCR'a gönderilmez (`OCR_BASELINE=fa
 5. Resmî yayım tarihi RG tarihidir (RG kopyasından ya da kurum belgesindeki "(… tarih ve 33375 sayılı Resmî
    Gazete'de yayımlanmıştır.)" atfından).
 
+## Mevzuat tespiti ve önceliklendirme (İK-3)
+
+```bash
+mevzuat-ai llm-check                         # LLM bağlantısı ve şemalı çıktı testi
+mevzuat-ai classify                          # NEW düzenlemeleri sınıflandır (--id N --force: yeniden)
+mevzuat-ai show 42                           # karar, skor bileşenleri, oylar, uygulanan önem kuralları
+mevzuat-ai calls                             # son LLM çağrıları; görev bazında gecikme/token
+mevzuat-ai setting relevance_threshold 0.35  # çalışma zamanı eşiği (app_setting; kod dağıtımı gerekmez)
+mevzuat-ai eval tests/eval/relevance_v0.jsonl  # recall / precision / eşik taraması / önem isabeti
+```
+
+`.env`: yerelde `LLM_PROVIDER=openai` + `LLM_API_KEY`; kurumda `LLM_PROVIDER=vllm`,
+`LLM_BASE_URL=http://10.144.100.204:8806/v1`, `LLM_MODEL=Qwen/Qwen3.6-35B-A3B-FP8`. İşleme görevi yeni düzenleme
+açtığında sınıflandırma görevini tetikler; Beat ayrıca saatte iki kez bekleyenleri tarar.
+
+**Akış:** `NEW → RELEVANT` (portala düşer, İK-4 özetler) / `IRRELEVANT` (silinmez) / `AI_FAILED` (3 deneme).
+`BASELINE` ve `MERGED` kayıtlar sınıflandırılmaz.
+
+**Güven skoru** (model eğitimi yok, kalibre olasılık yerine göreli skor):
+`0.6·model skoru (3 örneğin ortalaması) + 0.3·"ilgili" oy oranı (self-consistency) + 0.1·kural sinyali`
+(kaynak/kurum önceliği + "bankalar", "katılım bankaları" … anahtar kelimeleri). Bant: ≥0.75 Yüksek, ≥0.45 Orta.
+**Yüksek duyarlılık:** skor eşik (0.30) altında olsa bile örneklerin çoğunluğu tereddüt bildirdiyse veya oylar
+bölündüyse kayıt portala düşer, güven "Düşük" gösterilir. Metni çıkarılamamış belgede (OCR bekleyen) eşiğin yarısı uygulanır.
+
+**Önem:** LLM taksonomideki tanımlara göre önerir, sonra Başkanlık kuralları uygulanır: kritik kalıplar (idari para
+cezası, sermaye yeterliliği, zorunlu karşılık …) veya yayım tarihinde yürürlüğe girip bankaları muhatap alan
+düzenleme → en az "Yüksek"; Duyuru/Basın Duyurusu/Bülten/İlan → en fazla "Orta" (tavan, tabandan önceliklidir).
+
+**Bilgi tabanı (v0 TASLAK, çalıştay çıktısıyla değiştirilecek):** `config/taxonomy.yaml` (kurum profili, 14 konu,
+açıkça ilgisiz sınıflar, önem tanımları ve kuralları), `config/labeling_guide.md`, `config/fewshot_relevance.yaml`.
+Bu dosyalar değişince prompt sürümü değişir; önbellek eski kriterlerle üretilmiş sonucu kullanmaz.
+
+**LLM katmanı** (`app/ai/llm_client.py`): OpenAI ve vLLM için tek istemci; `json_schema` (strict) ile yapılandırılmış
+çıktı, Qwen `<think>` / `reasoning_content` ayrıştırma, görev bazlı thinking (`LLM_THINKING_TASKS`), bir kez şema
+onarma, geçici hatalarda retry. Her çağrı `llm_call` tablosunda (görev, prompt sürümü, gecikme, token, durum); aynı
+girdi için önbellek. Prompt'lar `app/ai/prompts/*.v1.*.j2`; kaynak metin `<kaynak_metin>` içinde verilir.
+İK-2'deki tekilleştirmenin belirsiz bandı (0.70–0.90) LLM varsa artık ona sorulur (`dedupe_confirm`, thinking kapalı).
+
+**Değerlendirme seti** `tests/eval/relevance_v0.jsonl`: 18–25.09.2026 canlı verisinden 55 kayıt, **taslak etiketler**
+(Başkanlık gözden geçirmeli). gpt-4.1-mini ile ölçüm (25.09.2026): recall 1.0, precision 0.96–1.0 (örnekleme
+değişkenliği), önem ±1 isabeti 1.0. Aynı penceredeki 212 düzenlemenin tamamı: 120 ilgili / 92 ilgisiz; RG'nin 77
+maddesinden 11'i ilgili.
+Küçük ve yalnızca açık vakalardan oluşan bu set bir kalibrasyon değil, hattın doğru çalıştığının kanıtıdır; eşik
+paralel çalışmada Başkanlık etiketleriyle ayarlanacak (İK-8).
+
 ## Testler
 
 ```bash
@@ -141,7 +188,9 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 - Alembic migrasyonları henüz yok; tablolar ilk çalıştırmada `create_all` ile oluşturuluyor. `create_all` mevcut
   tabloya sütun eklemez: İK-1 döneminde oluşturulmuş bir yerel veritabanı İK-2 ile kullanılamaz (silinip yeniden
   oluşturulmalı). Üretim kurulumundan önce migrasyon altyapısı eklenmeli.
-- Tekilleştirmenin belirsiz bandı (0.70–0.90) LLM onayını bekliyor; LLM katmanı İK-3 ile gelecek. O zamana kadar bu
-  kayıtlar ayrı düzenleme olarak açılır ve `mevzuat-process review` ile listelenir.
+- LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
+  `mevzuat-process review` ile listelenir.
+- Taksonomi, etiketleme kılavuzu ve değerlendirme etiketleri çalıştay öncesi taslaktır. Kurum içi vLLM/Qwen ile henüz
+  denenmedi (geliştirme ortamı kurum ağı dışında); `mevzuat-ai llm-check` ve `eval` kurumda çalıştırılmalı.
 - KEP adaptörü bu kapsamın dışında (erişim yöntemi belirsiz; plan §6 İK-1).
 - BDDK yurt dışı IP'lerinden erişilemiyor; bulut CI'da canlı test çalıştırılamaz (replay testleri ağ gerektirmez).

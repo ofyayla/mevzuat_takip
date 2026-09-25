@@ -27,11 +27,13 @@ from sqlalchemy.orm import Session
 from app.collectors.dates import tr_lower
 from app.db import RawDocument, Regulation, RegulationKey, RegulationSourceLink, utcnow
 from app.processing.normalize import (
+    ISSUER_PARENT,
     ISSUERS,
     TitleFacts,
     detect_issuer,
     detect_rg_issue,
     detect_rg_reference,
+    issuers_compatible,
     match_issuer,
     parse_title,
     title_key,
@@ -95,8 +97,10 @@ def doc_facts(raw: RawDocument) -> DocFacts:
     issuer, issuer_name = None, None
     if raw.source_code == "RESMI_GAZETE":
         issuer, issuer_name = detect_issuer(text)
-        if issuer is None:
-            issuer = match_issuer(raw.title or "") or match_issuer(extra.get("ilan_veren") or "")
+        title_issuer = match_issuer(raw.title or "") or match_issuer(extra.get("ilan_veren") or "")
+        if issuer is None or (title_issuer and ISSUER_PARENT.get(title_issuer) == issuer):
+            issuer = title_issuer or issuer     # "Mali Suçları Araştırma Kurulu Genel Tebliği" → MASAK (HMB değil)
+            issuer_name = None if title_issuer else issuer_name
     elif raw.external_id.startswith("mevzuat.gov.tr:"):
         issuer = match_issuer(raw.title or "") or detect_issuer(text)[0] or raw.source_code
     else:
@@ -119,7 +123,8 @@ def doc_facts(raw: RawDocument) -> DocFacts:
     if issuer and tf.seq_no and tf.reg_type:
         f.strong_keys.append(f"no:{issuer}:{tr_lower(tf.reg_type)}:{tf.seq_no.lower()}")
     if len(tf.key) >= MIN_TITLE_KEY_LEN and tf.key not in GENERIC_TITLE_KEYS:
-        f.weak_keys.append(f"title:{issuer or '?'}:{tf.key}")
+        # bağlı kuruluşun anahtarı üst kurum koduyla üretilir: RG'deki "HMB" ile MASAK sitesindeki kopya eşleşsin
+        f.weak_keys.append(f"title:{ISSUER_PARENT.get(issuer, issuer) or '?'}:{tf.key}")
     return f
 
 
@@ -228,7 +233,7 @@ class Linker:
         ).order_by(Regulation.id.desc()).limit(500)).all()
         best, best_score = None, 0.0
         for reg in cands:
-            if reg.issuer and f.issuer and reg.issuer != f.issuer:
+            if not issuers_compatible(reg.issuer, f.issuer):
                 continue
             if f.source_code in self._sources_of(reg.id):
                 continue
@@ -239,7 +244,7 @@ class Linker:
 
     def score(self, f: DocFacts, reg: Regulation) -> float:
         title_sim = fuzz.token_set_ratio(f.title.key, title_key(reg.title)) / 100
-        issuer_sim = 1.0 if (reg.issuer and reg.issuer == f.issuer) else 0.5
+        issuer_sim = 1.0 if (reg.issuer and f.issuer and issuers_compatible(reg.issuer, f.issuer)) else 0.5
         reg_text = self._primary_text(reg.id)
         if f.text.strip() and reg_text.strip():
             text_sim = fuzz.ratio(tr_lower(f.text[:2000]), tr_lower(reg_text[:2000])) / 100

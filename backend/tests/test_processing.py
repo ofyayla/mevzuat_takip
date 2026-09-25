@@ -370,3 +370,24 @@ def test_azure_client_errors(settings):
 
 def test_page_ranges():
     assert page_ranges([1, 2, 3, 7, 9, 10]) == "1-3,7,9-10" and page_ranges([5]) == "5"
+
+
+def test_masak_communique_in_rg_matches_masak_site(settings, env):
+    """RG'deki MASAK genel tebliği "Hazine ve Maliye Bakanlığından:" satırıyla yayımlanır (MASAK bakanlığa bağlı)."""
+    sf, storage = env
+    with sf() as s:
+        s.add(Source(code="MASAK", name="MASAK"))
+        s.commit()
+    title = "Mali Suçları Araştırma Kurulu Genel Tebliği (Sıra No: 34)"
+    add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260922-4",
+            url="https://www.resmigazete.gov.tr/eskiler/2026/09/20260922-4.htm", title="–– " + title,
+            published=date(2026, 9, 22),
+            content=("<html><body><p>Hazine ve Maliye Bakanlığından:</p><p>MALİ SUÇLARI ARAŞTIRMA KURULU GENEL "
+                     "TEBLİĞİ (SIRA NO: 34)</p><p>MADDE 1- Bu Tebliğin amacı …</p></body></html>").encode())
+    add_raw(sf, storage, source="MASAK", channel="icerik", external_id="posts:7001", url="https://masak.hmb.gov.tr/x",
+            title="MASAK Genel Tebliği (Sıra No: 34) Yayımlandı", published=date(2026, 9, 23),
+            content=b"<html><body><p>34 sira nolu genel teblig yayimlanmistir.</p></body></html>")
+    DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
+    [reg] = regs(sf)
+    assert reg.issuer == "MASAK" and reg.reg_type == "Tebliğ"
+    assert links(sf)[2].matched_key == "no:MASAK:tebliğ:34"

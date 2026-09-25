@@ -1,0 +1,102 @@
+# Konu taksonomisi ve önem kriterleri — v0 TASLAK
+#
+# DURUM: Çalıştay öncesi taslaktır (Kapsam Formu İK-3: "Değerlendirme kriterleri, proje başında Başkanlık
+# uzmanlarıyla yapılacak çalıştayda yazılı hale getirilecek"). Başkanlık onayı bekliyor. Çalıştay çıktısı bu dosyanın
+# yerine konur; kod değişmez. Sürüm alanı değiştiğinde prompt önbelleği (llm_call.input_hash) otomatik geçersizleşir.
+version: "v0-taslak"
+approved_by: null
+
+institution:
+  name: "Banka"
+  profile: >
+    Türkiye'de faaliyet gösteren bir katılım bankası. Faizsiz bankacılık ilkelerine göre fon toplar (katılma
+    hesapları) ve fon kullandırır (murabaha, icara, müşareke, mudaraba, sukuk). BDDK'nın denetimine tabi bir kredi
+    kuruluşudur; TKBB üyesidir. Bireysel, KOBİ ve kurumsal müşterilere kart, ödeme, dış ticaret, hazine ve yatırım
+    hizmetleri sunar; aracı kurum ve portföy yönetimi iştirakleri olabilir.
+
+# İlgililik: düzenleme aşağıdaki konulardan birinde bankaya yükümlülük, hak, kısıt veya süre getiriyorsa ilgilidir.
+topics:
+  - {code: SERMAYE_LIKIDITE, name: "Sermaye yeterliliği, likidite, kaldıraç, karşılıklar",
+     keywords: ["sermaye yeterliliği", "özkaynak", "likidite", "kaldıraç", "karşılık", "risk ağırlığı", "basel"]}
+  - {code: KREDI_FON, name: "Kredi / fon kullandırma, teminat, kredi sınırları, kredi kartları",
+     keywords: ["kredi", "fon kullandırma", "kredi kartı", "taksit", "teminat", "tüketici kredisi", "konut"]}
+  - {code: KATILIM, name: "Katılım bankacılığı, faizsiz bankacılık standartları, katılma hesapları, sukuk",
+     keywords: ["katılım bankası", "katılma hesabı", "faizsiz", "danışma kurulu", "icara", "murabaha", "sukuk", "kira sertifika"]}
+  - {code: MEVDUAT_FON, name: "Mevduat / katılma fonu, tasarruf sigortası, faiz-kâr payı oranları",
+     keywords: ["mevduat", "katılım fonu", "tmsf", "sigorta primi", "kâr payı", "faiz oran"]}
+  - {code: ODEME, name: "Ödeme hizmetleri, elektronik para, FAST, kartlı ödemeler, açık bankacılık",
+     keywords: ["ödeme hizmet", "elektronik para", "fast", "karekod", "açık bankacılık", "ödeme sistem"]}
+  - {code: KAMBIYO, name: "Kambiyo, döviz pozisyonu, yurt dışı kredi, zorunlu karşılıklar, TCMB para politikası araçları",
+     keywords: ["kambiyo", "döviz", "zorunlu karşılık", "reeskont", "türk lirası", "menkul kıymet tesis"]}
+  - {code: AML, name: "Suç gelirlerinin aklanması, terörün finansmanı, yaptırımlar, müşteriyi tanıma",
+     keywords: ["aklama", "terörün finansman", "şüpheli işlem", "müşteriyi tanı", "masak", "yaptırım", "dondurma"]}
+  - {code: VERI_BT, name: "Kişisel veriler, bilgi sistemleri, siber güvenlik, dış hizmet, uzaktan kimlik doğrulama",
+     keywords: ["kişisel veri", "bilgi sistem", "siber", "dış hizmet", "uzaktan kimlik", "bulut", "sır"]}
+  - {code: TUKETICI, name: "Finansal tüketicinin korunması, ücret ve komisyonlar, reklam, şikâyet",
+     keywords: ["finansal tüketici", "ücret", "komisyon", "tüketici", "reklam", "şikayet", "hakem heyeti"]}
+  - {code: RAPORLAMA, name: "Muhasebe, finansal raporlama, bağımsız denetim, kamuyu aydınlatma, BDDK raporlamaları",
+     keywords: ["muhasebe", "tekdüzen", "finansal tablo", "bağımsız denetim", "raporlama", "enflasyon muhasebesi"]}
+  - {code: KURUMSAL, name: "Kuruluş/faaliyet izinleri, ortaklık, yönetim, iç sistemler, personel yükümlülükleri",
+     keywords: ["faaliyet izni", "kuruluş izni", "iç sistem", "iç denetim", "iç kontrol", "yönetim kurulu", "birleşme"]}
+  - {code: SERMAYE_PIYASASI, name: "Sermaye piyasası araçları ve hizmetleri (bankanın ihraççı/aracı rolü)",
+     keywords: ["borçlanma araç", "ihraç", "aracı kurum", "portföy", "halka arz", "kamuyu aydınlatma"]}
+  - {code: VERGI_HARC, name: "Bankacılık işlemlerine ilişkin vergi, harç, BSMV, KKDF",
+     keywords: ["bsmv", "kkdf", "banka ve sigorta muameleleri", "damga vergisi", "harç"]}
+  - {code: REKABET_TICARET, name: "Rekabet hukuku (finans sektörü), ticaret hukuku, şirketler",
+     keywords: ["rekabet", "hakim durum", "uyumlu eylem", "ticaret sicil", "anonim şirket"]}
+
+# İlgisiz örnek sınıflar (yüksek duyarlılık ilkesi gereği yalnızca açıkça ilgisizse elenir)
+clearly_irrelevant:
+  - "Üniversite, fakülte, yüksekokul eğitim-öğretim ve sınav yönetmelikleri"
+  - "Belirli taşınmazlar için kamulaştırma, acele kamulaştırma, imar ve arazi toplulaştırma kararları"
+  - "Atama, görevden alma kararları; yargı ve ihale ilanları"
+  - "Bankacılık dışı sektörlere özgü teknik düzenlemeler (tarım, sağlık, havacılık vb.) — finansman/ödeme yükümlülüğü yoksa"
+  - "Kurumların etkinlik, sempozyum, staj, sınav ve personel alım duyuruları"
+  - "Kamu kurumlarının (BDDK, KVKK dahil) kendi teşkilat, personel, disiplin ve iç çalışma yönetmelikleri; personel alım ilanları"
+  - "Anayasa Mahkemesi bireysel başvuru kararları; Hâkimler ve Savcılar Kurulu kararları"
+  - "Belirli bir şirketin birleşme/devralma izni (Rekabet) — banka taraf değilse"
+
+# Önem derecesi kriterleri (LLM'e verilir; kural katmanı ai/severity.py içindedir)
+severity:
+  Kritik: >
+    Bankanın temel yükümlülüklerini doğrudan ve kısa sürede değiştirir: sermaye/likidite/karşılık oranları,
+    AML/yaptırım yükümlülükleri, siber olay ve raporlama süreleri, faaliyet izinleri; idari para cezası veya
+    yaptırım içerir; yürürlüğe girişi 30 günden kısa ve bankaları doğrudan muhatap alır.
+  Yüksek: >
+    Bankanın süreç, ürün veya sistemlerinde değişiklik gerektirir (kredi/kart kuralları, ödeme hizmetleri, kişisel
+    veri, tüketici ücretleri, BT yönetimi); uyum için proje/iş planı gerekir.
+  Orta: >
+    Sınırlı bir iş alanını etkiler veya dolaylıdır; bilgilendirme niteliğinde ama izlenmesi gereken değişiklikler;
+    genelge ve rehberlerdeki açıklayıcı güncellemeler; başka bir bankanın kuruluş/faaliyet izni verilmesi, kaldırılması
+    veya bölünme/birleşme onayı (piyasa ve karşı taraf bilgisi — bankamıza yükümlülük getirmez).
+  Düşük: >
+    Bankayı dolaylı ya da çok sınırlı etkiler (ör. iştirak alanına özgü, teknik güncelleme, sektör geneline ilişkin
+    bilgi notu); banka dışı finansal kuruluşların (finansman, faktoring, varlık yönetim, e-para şirketi) izin kararları.
+
+severity_rules:
+  # tür → en fazla bu derece (Başkanlık kuralı LLM'den önceliklidir)
+  max_by_type: {"Duyuru": "Orta", "Basın Duyurusu": "Orta", "Bülten": "Orta", "İlan": "Orta",
+                "Düzenleme Taslağı": "Yüksek"}
+  # başlık kalıbı → en fazla (LLM türü "Tebliğ" dese de taslak henüz yürürlükte değildir, görüşe açılmıştır)
+  max_by_title: {"taslağı": "Yüksek"}
+  # bu kalıplardan biri metinde geçiyorsa en az "Yüksek" (Kritik adayı olarak LLM'e ayrıca bildirilir)
+  critical_patterns:
+    - "idari para cezası"
+    - "sermaye yeterlili"
+    - "likidite karşılama"
+    - "zorunlu karşılık"
+    - "raporlama süre"
+    - "şüpheli işlem bildirim"
+    - "siber olay"
+  # yayım tarihinde yürürlüğe giren ve bankaları doğrudan muhatap alan düzenleme → en az "Yüksek"
+  immediate_effect_patterns: ["yayımı tarihinde yürürlüğe girer", "yayımlandığı tarihte yürürlüğe girer"]
+  bank_addressee_patterns: ["bankalar", "katılım bankaları", "kredi kuruluşları", "finansal kuruluşlar"]
+
+# Kural tabanlı ilgililik sinyalleri (güven skorunda ağırlık 0.1)
+relevance_rules:
+  source_priority: {BDDK: 1.0, TKBB: 1.0, TCMB: 0.9, MASAK: 0.9, KVKK: 0.7, SPK: 0.6, TICARET: 0.5, REKABET: 0.4,
+                    RESMI_GAZETE: 0.5}
+  # RG'de yayımlayan kuruma göre öncelik (issuer kodu)
+  issuer_priority: {BDDK: 1.0, TCMB: 0.9, MASAK: 0.9, HMB: 0.8, TMSF: 0.9, KVKK: 0.7, SPK: 0.6, CB: 0.6, TBMM: 0.6}
+  bank_keywords: ["bankalar", "katılım bankaları", "kredi kuruluşları", "finansal kuruluşlar", "finansal kurumlar",
+                  "faizsiz", "katılma hesabı", "kredi kartı", "ödeme hizmet", "elektronik para"]

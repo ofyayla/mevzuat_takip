@@ -126,6 +126,15 @@ class Regulation(Base):
     processing_status: Mapped[str] = mapped_column(String(24), default="NEW", index=True)
     review_status: Mapped[str] = mapped_column(String(16), default="Bekliyor")
     needs_dedupe_review: Mapped[bool] = mapped_column(Boolean, default=False)  # belirsiz bant (0.70–0.90)
+    # İK-3: ilgililik ve önem (YZ)
+    is_relevant: Mapped[bool | None] = mapped_column(Boolean, index=True)
+    relevance_score: Mapped[float | None] = mapped_column(Float)
+    confidence_band: Mapped[str | None] = mapped_column(String(8))     # Yüksek | Orta | Düşük
+    severity: Mapped[str | None] = mapped_column(String(8), index=True)  # Kritik | Yüksek | Orta | Düşük
+    severity_rationale: Mapped[str | None] = mapped_column(Text)
+    ai_reg_type: Mapped[str | None] = mapped_column(String(64))
+    classification: Mapped[dict] = mapped_column(JSON, default=dict)   # oylar, bileşenler, gerekçe, kriterler
+    classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -155,6 +164,40 @@ class RegulationSourceLink(Base):
     match_score: Mapped[float | None] = mapped_column(Float)
     matched_key: Mapped[str | None] = mapped_column(String(600))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LlmCall(Base):
+    """Her LLM çağrısının izi (plan §5.3): maliyet, hata ayıklama, denetim ve önbellek (input_hash)."""
+
+    __tablename__ = "llm_call"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    task: Mapped[str] = mapped_column(String(32), index=True)   # relevance | severity | dedupe_confirm | …
+    provider: Mapped[str] = mapped_column(String(16))
+    model: Mapped[str] = mapped_column(String(100))
+    prompt_version: Mapped[str] = mapped_column(String(64))
+    input_hash: Mapped[str] = mapped_column(String(64), index=True)
+    regulation_id: Mapped[int | None] = mapped_column(ForeignKey("regulation.id"), index=True)
+    request: Mapped[dict | None] = mapped_column(JSON)
+    response: Mapped[dict | None] = mapped_column(JSON)          # {"outputs": [...], "raw": [...]}
+    reasoning: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))              # ok | invalid | error
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AppSetting(Base):
+    """Çalışma zamanında değiştirilebilen eşikler (paralel çalışmada kod dağıtımı gerekmeden ayarlanır)."""
+
+    __tablename__ = "app_setting"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200))
+    updated_by: Mapped[str | None] = mapped_column(String(100))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 def make_sessionmaker(database_url: str) -> sessionmaker[Session]:
