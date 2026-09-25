@@ -1,10 +1,11 @@
 """Celery uygulaması ve Beat zamanlaması.
 
 Zamanlama config/sources.yaml içindeki ``schedule`` (cron, Europe/Istanbul) alanlarından üretilir; kaynak
-başına ayrı görev olduğu için bir kaynaktaki sorun diğerlerini etkilemez. Toplama görevleri ``collect``
-kuyruğunda çalışır (DMZ'de ayrı worker olarak da konuşlandırılabilir — plan §2.1).
+başına ayrı görev olduğu için bir kaynaktaki sorun diğerlerini etkilemez. Toplama görevleri ``collect``, belge
+işleme görevleri ``process`` kuyruğunda çalışır (DMZ'de ayrı worker olarak da konuşlandırılabilir — plan §2.1).
 
   celery -A app.worker worker -Q collect -c 4
+  celery -A app.worker worker -Q process -c 2      # İK-2: metin çıkarma + tekilleştirme
   celery -A app.worker beat
 """
 from __future__ import annotations
@@ -17,13 +18,13 @@ from app.settings import get_settings
 
 settings = get_settings()
 
-app = Celery("mevzuat", broker=settings.redis_url or "memory://", backend=None, include=["app.tasks.collect"])
+app = Celery("mevzuat", broker=settings.redis_url or "memory://", backend=None, include=["app.tasks.collect", "app.tasks.process"])
 app.conf.update(
     timezone=settings.timezone,
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    task_routes={"app.tasks.collect.*": {"queue": "collect"}},
+    task_routes={"app.tasks.collect.*": {"queue": "collect"}, "app.tasks.process.*": {"queue": "process"}},
     task_default_queue="default",
 )
 
@@ -44,6 +45,9 @@ def build_beat_schedule() -> dict:
                 "args": (source.code,),
                 "options": {"expires": 3600},  # birikmiş eski tetiklemeler çalıştırılmaz
             }
+    # Güvenlik ağı: tetiklemesi kaçan veya yeniden denenecek (EXTRACT_FAILED) belgeler
+    schedule["process-pending"] = {"task": "app.tasks.process.process_pending", "schedule": _crontab("*/15 * * * *"),
+                                   "options": {"expires": 900}}
     return schedule
 
 

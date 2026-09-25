@@ -23,7 +23,7 @@
 | KEP erişimi | **Henüz belli değil** → soyut `KepAdapter` arayüzü + ilk sürümde **drop-folder** adaptörü | IMAP/Muhaberat entegrasyonu keşifte netleşince aynı arayüzle eklenir |
 | Dağıtım | **Docker Compose** (VM üzerinde) | api, worker, beat, postgres (+ kurum Redis'i) |
 | Ham arşiv depolama | Dosya sistemi (Docker volume), içerik adresli (`sha256`) | `StorageBackend` arayüzüyle soyutlanır; ileride S3/MinIO'ya geçilebilir |
-| OCR | Tesseract (`tur` dil paketi) + `ocrmypdf` | Tamamen on-prem |
+| OCR | Kurumdaki **Azure Document Intelligence "Read"** (`prebuilt-read`, REST v4.0) servisi | Kurumda ayakta olan servis kullanılır (25.09.2026 kararı; önceki taslak: Tesseract + ocrmypdf). Yalnızca taranmış sayfalar gönderilir |
 
 ---
 
@@ -159,7 +159,7 @@ Akış: `collect(source)` → her yeni öğe için `extract(raw_id)` → `dedupe
 | Kuyruk | `celery[redis]`, `redis` | Beat ile zamanlama; `redis` kilidi ile aynı kaynağa eşzamanlı tarama engellenir |
 | HTTP toplama | `httpx` (proxy, retry, timeout), `curl_cffi` (tarayıcı TLS parmak izi — RG ve Ticaret Bakanlığı için zorunlu), `tenacity`; opsiyonel `playwright` | Keşifte RG ve Ticaret Bakanlığı'nın tarayıcı olmayan istemcileri TLS imzasından engellediği görüldü |
 | HTML ayrıştırma | `selectolax` (hızlı CSS seçici), `feedparser` (RSS/Atom), `trafilatura` (ana metin çıkarma, İK-2) | |
-| PDF | `pymupdf` (metin + sayfa görüntüsü), `ocrmypdf` + `tesseract-ocr-tur` | Metin katmanı yoksa veya çok azsa OCR'a düşülür |
+| PDF | `pymupdf` (metin katmanı, görüntü kaplama oranı) + Azure Document Intelligence Read | Metin katmanı yoksa, çok azsa veya çöpse (ToUnicode'suz font) o sayfalar OCR'a gönderilir. Not: PyMuPDF AGPL lisanslıdır; kurum içi kullanımda lisans değerlendirilmeli, alternatif `pypdfium2` |
 | Office/UDF | `python-docx`; UYAP `.udf` ve e-Yazışma `.eyp` paketleri için özel ayrıştırıcı (KEP keşfinde netleşecek) | |
 | Benzerlik | `rapidfuzz`, PostgreSQL `pg_trgm` | Tekilleştirme ve few-shot örnek seçimi |
 | LLM | `openai` (Python SDK) — hem OpenAI hem vLLM için aynı istemci | vLLM OpenAI uyumlu olduğu için sağlayıcı değiştirmek yalnızca config değişikliği |
@@ -416,7 +416,7 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
 
 **Metin çıkarma (`processing/extract.py`):**
 - **HTML:** `trafilatura` ile ana içerik alınır; başarısız olursa adaptöre özel CSS seçicilerle alınır. Tablolar Markdown tablosuna dönüştürülür.
-- **PDF:** `pymupdf` ile sayfa sayfa metin çıkarılır. Sayfa başına karakter sayısı eşiğin altındaysa (taranmış belge) `ocrmypdf --language tur` çalıştırılır ve OCR güveni kaydedilir.
+- **PDF:** `pymupdf` ile sayfa sayfa metin çıkarılır. Taranmış sayfalar (metin < 40 karakter; < 250 karakter ve sayfanın ≥ %25'i görüntü; ya da metin katmanı anlamsız karakterlerden oluşuyor) Azure Document Intelligence Read servisine `pages=` parametresiyle yalnızca o sayfalar olarak gönderilir; kelime güvenlerinin ortalaması `ocr_confidence` olarak kaydedilir. Canlı veride RG'nin taranmış PDF'lerinin ilk sayfasında ~120 karakterlik okunamaz (kontrol karakteri) üst bilgi bulunduğu görüldü.
 - **E-posta (KEP):** `email` modülüyle gövde ve ekler ayrıştırılır. Her ek, `parent_id` ile bağlanmış ayrı bir `raw_document` olur.
 - **Normalizasyon (`normalize.py`):** Türkçe büyük/küçük harf dönüşümü (`İ→i`, `I→ı`), birden fazla boşluğun sadeleştirilmesi, tire ile bölünmüş satırların birleştirilmesi, RG başlık kalıplarının ("… Yönetmelikte Değişiklik Yapılmasına Dair Yönetmelik") ayrıştırılması.
 
@@ -748,7 +748,7 @@ Kapsam formundaki 67 adam/günlük iş kırılımı, backend görevlerine şöyl
 | İK-1 | Kalan kaynak adaptörleri (3-4 kaynak) | 2 | Ticaret Bakanlığı, Rekabet Kurumu (+ keşifte çıkan ek alt kaynaklar) |
 | İK-1 | KEP posta kutusu bağlantısı | 2 | `KepAdapter` arayüzü + `DropFolderKepAdapter` + `.eml`/`.eyp` ayrıştırma; erişim yöntemi netleşirse gerçek adaptör |
 | İK-2 | PDF/HTML ayrıştırma | 2 | `extract.py`, `normalize.py`, tablo çıkarma |
-| İK-2 | OCR entegrasyonu | 2 | `ocrmypdf` hattı, OCR kalite skoru, zaman aşımı |
+| İK-2 | OCR entegrasyonu | 2 | Azure Document Intelligence Read istemcisi (`ocr.py`), OCR kalite skoru, zaman aşımı, yeniden deneme |
 | İK-2 | Tekilleştirme ve kanonik düzenleme kaydı | 3 | `dedupe.py`, `regulation` + `regulation_source_link`, split endpoint'i |
 
 ### Aşama 3 — YZ Analiz (19 A/G)

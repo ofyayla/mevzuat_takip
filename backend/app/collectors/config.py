@@ -19,6 +19,7 @@ class ChannelConfig(BaseModel):
     enabled: bool = True
     fetch_detail: bool = True        # False: yalnızca liste satırı kaydedilir (ör. dış siteye giden bağlantılar)
     attachment_pattern: str | None = None  # detay sayfasındaki eklerin (PDF vb.) href deseni
+    content_selector: str | None = None    # İK-2: detay sayfasında ana metnin CSS seçicisi (trafilatura yerine)
     # Liste satırı değişmese de içerik bu kadar gün sonra yeniden indirilip hash'le karşılaştırılır. Değişiklik
     # tarihi vermeyen ve metni yerinde güncellenen kaynaklar için (konsolide metinler: mevzuat.gov.tr, SPK mevzuat).
     refresh_after_days: int | None = None

@@ -6,9 +6,10 @@ Kurallar:
 - Detay indirildiğinde içerik hash'i son sürümle aynıysa yeni sürüm açılmaz; farklıysa sürüm artar.
 - Ham içerik asla silinmez; eski sürümler ``is_latest=False`` olarak kalır.
 - ``max_details`` sınırı aşılırsa kalan öğeler bir sonraki çalıştırmaya kalır (ilk çalıştırmadaki birikim).
-- Bir kanalın ilk taramasında sitede zaten duran içerik ``processing_status=BASELINE`` ile arşivlenir; bunlar
+- Bir kanalın ilk taramasında sitede zaten duran içerik ``is_baseline=True`` ile arşivlenir; bunlar
   "yeni düzenleme" sayılmaz ve YZ hattına gönderilmez. Kanal, ertelenen öğe kalmadan bir taramayı tamamlayana
-  kadar bu kural geçerlidir (``baseline_complete`` bayrağı fetch_run.channels içinde taşınır). Geriye dönük işleme gerekiyorsa BASELINE kayıtlar ayrıca kuyruğa alınabilir.
+  kadar bu kural geçerlidir (``baseline_complete`` bayrağı fetch_run.channels içinde taşınır). Bu belgeler metin çıkarma ve tekilleştirmeden geçer
+  (sonradan yayımlanan kopyalarının eşleşebilmesi için) ama oluşan düzenleme ``BASELINE`` olur ve YZ'ye gitmez.
 """
 from __future__ import annotations
 
@@ -239,7 +240,7 @@ class SourceCollector:
                 rep.new += 1
             parent = self._add_doc(session, run, channel, ref, main, key, sha, version, listing_hash)
             if baseline and prev is None:
-                parent.processing_status = "BASELINE"
+                parent.is_baseline = True
             session.flush()
             for att in docs[1:]:
                 akey, asha = self.storage.put(att.content)
@@ -247,7 +248,7 @@ class SourceCollector:
                                   att.title or ref.title, ref.published_at, ref.category)
                 row = self._add_doc(session, run, channel, att_ref, att, akey, asha, version, None,
                                     parent_id=parent.id)
-                row.processing_status = parent.processing_status   # BASELINE ana belgenin ekleri de BASELINE
+                row.is_baseline = parent.is_baseline   # eski içeriğin ekleri de eski içeriktir
             session.commit()
         return budget
 

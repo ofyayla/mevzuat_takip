@@ -38,7 +38,8 @@ def test_beat_schedule_built():
 
     schedule = build_beat_schedule()
     assert "collect-RESMI_GAZETE-0" in schedule
-    assert all(v["task"] == "app.tasks.collect.collect_source" for v in schedule.values())
+    assert all(v["task"] == "app.tasks.collect.collect_source" for k, v in schedule.items() if k.startswith("collect-"))
+    assert schedule["process-pending"]["task"] == "app.tasks.process.process_pending"
 
 
 def test_all_sources_verified(sources):

@@ -77,6 +77,8 @@ def test_tcmb(sources, settings):
     feed = run_channel(sources, settings, "TCMB", "basin_duyurulari")
     assert feed.items[0].published_at == date(2026, 9, 17)
     assert feed.items[0].external_id == "2026/duy2026-42"
+    assert not any("&" in i.title and ";" in i.title for i in feed.items), "HTML varlıkları çözülmeli"
+    assert any("’" in i.title for i in feed.items)
     mev = run_channel(sources, settings, "TCMB", "mevzuat")
     with_cache_id = [i for i in mev.items if i.version_key]
     assert len(with_cache_id) >= 0.95 * len(mev.items), "CACHEID sürüm anahtarı olarak alınmalı"

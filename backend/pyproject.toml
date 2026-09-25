@@ -7,6 +7,10 @@ dependencies = [
     "httpx>=0.27",
     "certifi",                 # ek ara sertifikalarla birleşik CA paketi için temel depo
     "cryptography>=42",        # ca-fetch: AIA'dan ara sertifika indirme ve zincir doğrulama
+    "trafilatura>=1.12",       # İK-2: HTML ana metin çıkarma
+    "pymupdf>=1.24",           # İK-2: PDF metin katmanı ve sayfa sayımı
+    "python-docx>=1.1",        # İK-2: DOCX
+    "rapidfuzz>=3.6",          # İK-2: tekilleştirme benzerlik skoru
     "curl_cffi>=0.7",          # tarayıcı TLS parmak izi taklidi (Resmî Gazete, Ticaret Bakanlığı)
     "selectolax>=0.3.21",
     "feedparser>=6.0",
@@ -25,6 +29,7 @@ dev = ["pytest>=8", "respx>=0.21", "ruff>=0.4"]
 
 [project.scripts]
 mevzuat-collect = "app.collectors.cli:main"
+mevzuat-process = "app.processing.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -31,6 +31,7 @@ sources:
     channels:
       - name: fihrist
         strategy: resmi_gazete
+        content_selector: "body"     # Word'den üretilmiş .htm: trafilatura tek tablo hücresine düzleştiriyor
         params:
           lookback_days: 1
           max_mukerrer: 4
@@ -71,6 +72,7 @@ sources:
         strategy: link_pattern
         category: Basın Duyurusu
         attachment_pattern: "/Duyuru/EkGetir/"
+        content_selector: "#content-container"   # asıl metin çoğunlukla ekteki PDF'te
         params: &bddk_duyuru
           urls: ["https://www.bddk.org.tr/Duyuru/Liste/39"]
           scope: ".kategoriList"
@@ -82,6 +84,7 @@ sources:
         strategy: link_pattern
         category: Mevzuat Duyurusu
         attachment_pattern: "/Duyuru/EkGetir/"
+        content_selector: "#content-container"   # asıl metin çoğunlukla ekteki PDF'te
         params:
           <<: *bddk_duyuru
           urls: ["https://www.bddk.org.tr/Duyuru/Liste/40"]
@@ -89,6 +92,7 @@ sources:
         strategy: link_pattern
         category: Kuruluş Duyurusu
         attachment_pattern: "/Duyuru/EkGetir/"
+        content_selector: "#content-container"   # asıl metin çoğunlukla ekteki PDF'te
         params:
           <<: *bddk_duyuru
           urls: ["https://www.bddk.org.tr/Duyuru/Liste/48"]

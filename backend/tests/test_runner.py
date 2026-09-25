@@ -143,13 +143,13 @@ def test_first_run_is_baseline_until_backlog_done(settings):
     rep = c.run(max_details=10)                      # birikim bitti
     assert rep.channels[0].baseline and rep.channels[0].baseline_complete
     # Eski içeriğin ekleri de BASELINE olmalı; yoksa YZ hattına "yeni" diye düşer
-    assert {(r.role, r.processing_status) for r in docs(sf)} == {("main", "BASELINE"), ("attachment", "BASELINE")}
+    assert {(r.role, r.is_baseline) for r in docs(sf)} == {("main", True), ("attachment", True)}
     # artık sitede yeni çıkan içerik (ve eki) normal akışa girer
     pages[LIST] = (listing(*rows, ("/d/3", "Yeni Duyuru", "26.09.2026")), "text/html")
     rep = c.run()
     assert not rep.channels[0].baseline and rep.new == 1
     new = [r for r in docs(sf) if r.external_id.startswith("/d/3")]
-    assert {(r.role, r.processing_status) for r in new} == {("main", "FETCHED"), ("attachment", "FETCHED")}
+    assert {(r.role, r.is_baseline) for r in new} == {("main", False), ("attachment", False)}
 
 
 def test_refresh_after_days_detects_in_place_update(settings):

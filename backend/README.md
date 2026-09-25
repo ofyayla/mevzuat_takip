@@ -1,7 +1,8 @@
 # Mevzuat Takip — Backend
 
-Bu aşamada **kaynak toplama altyapısı (İK-1)** hazır: 9 resmi kaynağın (KEP hariç) taranması, yeni/değişen içeriğin
-tespiti, ham arşiv ve kaynak bazlı sağlık verisi. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+Hazır olanlar: **kaynak toplama altyapısı (İK-1)**: 9 resmi kaynağın (KEP hariç) taranması, yeni/değişen içeriğin
+tespiti, ham arşiv ve kaynak bazlı sağlık verisi; **belge işleme ve tekilleştirme (İK-2)**: metin çıkarma, OCR,
+aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -28,6 +29,7 @@ mevzuat-collect run RESMI_GAZETE --max-details 50
 mevzuat-collect ca-fetch www.bddk.org.tr       # sunucu TLS ara sertifikasını göndermiyorsa AIA'dan indirip doğrular
 
 celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS_URL gerekir)
+celery -A app.worker worker -Q process -c 2    # İK-2 metin çıkarma + tekilleştirme
 celery -A app.worker beat                      # sources.yaml'daki cron pencereleri
 ```
 
@@ -71,6 +73,50 @@ Her `fetch_run` kaydı kanal bazında şunları tutar: öğe sayısı, sayfa say
 içermeyen liste `structure_alert=True` olur. Bu, "sessiz bozulma" senaryosunun sinyalidir. İmza değişikliği
 `structure_changed` olarak işaretlenir (erken uyarı).
 
+## Belge işleme ve tekilleştirme (İK-2)
+
+```bash
+mevzuat-process run                  # bekleyen ham belgeler: metin çıkar → tekil düzenlemeye bağla
+mevzuat-process show 42              # düzenleme #42 ve bağlı belgeleri (kaynak, eşleşme yöntemi, skor)
+mevzuat-process text 1234            # bir belgenin çıkarılmış metni
+mevzuat-process review               # tekilleştirmede onay bekleyen çiftler (skor 0.70–0.90)
+mevzuat-process merge 57 42          # onay: #57'yi #42'ye kat
+mevzuat-process split 1234           # yanlış birleştirmeyi geri al (belge + ekleri yeni düzenlemeye)
+mevzuat-process ocr-check            # OCR servisine bağlantı testi (taranmış örnek PDF üretip gönderir)
+mevzuat-process reextract            # OCR bekleyen belgeleri yeniden işle (servis sonradan açıldıysa)
+```
+
+Toplama görevi yeni belge bulduğunda işleme görevini tetikler; Beat ayrıca 15 dakikada bir bekleyenleri tarar.
+
+**Durumlar:** `raw_document`: `FETCHED → EXTRACTED → LINKED`, geçici hatada `EXTRACT_FAILED` (3 deneme).
+`regulation`: `NEW` (YZ hattına girer, İK-3) veya `BASELINE` (ilk taramada sitede zaten duran içerik; arşivlenir ve
+tekilleştirmeye katılır, YZ'ye gitmez), birleştirilmiş kayıtlar `MERGED`.
+
+**Metin çıkarma:**
+
+| İçerik | Yöntem |
+|---|---|
+| HTML | Kanalın `content_selector`'ı (RG: `body`, BDDK: `#content-container`), yoksa trafilatura; blok elemanlarında satır kırılır, "MADDE 1-" ve "…Kurumundan:" satırları korunur |
+| PDF | PyMuPDF metin katmanı. Taranmış sayfalar (metin < 40 karakter, ya da < 250 karakter ve sayfanın ≥ %25'i görüntü, ya da metin katmanı çöp) yalnızca o sayfalar olarak OCR'a gönderilir |
+| DOCX / görüntü / liste satırı | python-docx / OCR / başlık + özet + ek alanlar |
+| .doc, .xlsx vb. | Desteklenmiyor: metin boş, belge başlığıyla bağlanır (hata sayılmaz) |
+
+**OCR:** kurumdaki Azure Document Intelligence "Read" (`prebuilt-read`) servisi. `.env`: `OCR_PROVIDER=azure_di`,
+`OCR_ENDPOINT`, gerekiyorsa `OCR_API_KEY`. Servis v3 kurulumuysa `OCR_API_VERSION=2023-07-31` ve
+`OCR_PATH_PREFIX=formrecognizer`. OCR kapalıyken taranmış sayfalar `extra.ocr_pending_pages` ile işaretlenir; ilk
+taramadaki eski belgeler varsayılan olarak OCR'a gönderilmez (`OCR_BASELINE=false`).
+
+**Tekilleştirme** (`app/processing/dedupe.py`):
+1. Aynı kaynak kimliğinin yeni sürümü → aynı düzenleme (`same_document`, `extra.content_updates`); ek → ana belgesi.
+2. Güçlü anahtar: kanonik URL, mevzuat.gov.tr kimliği, `karar:<kurum>:<sayı>`, `no:<kurum>:<tür>:<sıra no>`.
+   Örn. BDDK "(18.09.2026 - 11572) …" = RG "…Kurulunun 18/09/2026 Tarihli ve 11572 Sayılı Kararı".
+3. Zayıf anahtar (başlık + kurum) ve bulanık skor yalnızca **farklı kaynaklar** arasında: aynı kaynak her ay aynı
+   başlıklı duyuru yayımlayabiliyor. Kurumları bilinen ve farklı iki kayıt aday olmaz.
+4. Skor = 0.6·başlık + 0.3·metin + 0.1·kurum; ±7 gün. ≥0.90 otomatik; 0.70–0.90 `confirmer` (LLM, İK-3'te) yoksa
+   yeni kayıt + `needs_dedupe_review`; <0.70 yeni.
+5. Resmî yayım tarihi RG tarihidir (RG kopyasından ya da kurum belgesindeki "(… tarih ve 33375 sayılı Resmî
+   Gazete'de yayımlanmıştır.)" atfından).
+
 ## Testler
 
 ```bash
@@ -92,7 +138,10 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 
 ## Bilinen kısıtlar
 
-- Metin çıkarma, OCR ve tekilleştirme (İK-2) sonraki adımdır. Ham belgeler `processing_status=FETCHED` ile bekler.
-- Alembic migrasyonları henüz yok; tablolar ilk çalıştırmada `create_all` ile oluşturuluyor.
+- Alembic migrasyonları henüz yok; tablolar ilk çalıştırmada `create_all` ile oluşturuluyor. `create_all` mevcut
+  tabloya sütun eklemez: İK-1 döneminde oluşturulmuş bir yerel veritabanı İK-2 ile kullanılamaz (silinip yeniden
+  oluşturulmalı). Üretim kurulumundan önce migrasyon altyapısı eklenmeli.
+- Tekilleştirmenin belirsiz bandı (0.70–0.90) LLM onayını bekliyor; LLM katmanı İK-3 ile gelecek. O zamana kadar bu
+  kayıtlar ayrı düzenleme olarak açılır ve `mevzuat-process review` ile listelenir.
 - KEP adaptörü bu kapsamın dışında (erişim yöntemi belirsiz; plan §6 İK-1).
 - BDDK yurt dışı IP'lerinden erişilemiyor; bulut CI'da canlı test çalıştırılamaz (replay testleri ağ gerektirmez).

@@ -36,7 +36,10 @@ def collect_source(self, code: str, channels: list[str] | None = None, max_detai
     except LockBusy:
         log.info("%s: başka bir tarama sürüyor, atlandı", code)
         return {"source": code, "status": "skipped"}
-    # İK-2: yeni ham belgeler burada metin çıkarma kuyruğuna verilecek (processing.extract)
+    if report.new or report.changed:
+        from app.tasks.process import process_pending
+
+        process_pending.delay(source=code)
     return {"source": code, "status": report.status, "run_id": report.run_id, "new": report.new,
             "changed": report.changed, "structure_alert": any(c.empty_listing for c in report.channels)}
 

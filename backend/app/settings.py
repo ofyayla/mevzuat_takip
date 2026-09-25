@@ -40,6 +40,25 @@ class Settings(BaseSettings):
     collect_max_bytes: int = 50 * 1024 * 1024
     collect_default_lookback_days: int = 30
 
+    # İK-2: metin çıkarma / OCR (kurumdaki Azure Document Intelligence "Read" servisi)
+    ocr_provider: str = "none"               # none | azure_di
+    ocr_endpoint: str | None = None          # ör. https://docintel.kurum.local veya http://10.x.x.x:5000
+    ocr_api_key: str | None = None           # Ocp-Apim-Subscription-Key (anahtar istemeyen kurulumda boş)
+    ocr_api_version: str = "2024-11-30"      # v4.0 GA; v3 kurulumu için 2023-07-31 + ocr_path_prefix=formrecognizer
+    ocr_path_prefix: str = "documentintelligence"
+    ocr_model: str = "prebuilt-read"
+    ocr_locale: str | None = "tr-TR"
+    ocr_timeout_s: float = 180.0
+    ocr_min_chars_per_page: int = 40         # metin katmanı bundan azsa sayfa taranmış kabul edilir
+    ocr_baseline: bool = False               # ilk taramadaki eski belgeler de OCR'a gönderilsin mi (yük)
+    ocr_verify_tls: bool = True
+
+    # İK-2: tekilleştirme
+    dedupe_auto_threshold: float = 0.90      # ≥ → otomatik birleştir
+    dedupe_review_threshold: float = 0.70    # [0.70, 0.90) → onay bekliyor (LLM/insan)
+    dedupe_date_window_days: int = 7
+    process_max_attempts: int = 3
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):

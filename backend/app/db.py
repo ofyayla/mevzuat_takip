@@ -1,4 +1,5 @@
-"""Toplama katmanının veritabanı modelleri (plan §5.1: source, fetch_run, raw_document).
+"""Veritabanı modelleri: toplama (plan §5.1: source, fetch_run, raw_document) ve tekil düzenleme kaydı
+(§5.2: regulation, regulation_key, regulation_source_link — İK-2).
 
 Üretimde PostgreSQL, yerel geliştirmede ve testlerde SQLite kullanılır; tipler ikisiyle de uyumludur.
 Alembic migrasyonları sonraki adımda bu modellerden üretilecektir.
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -89,8 +91,70 @@ class RawDocument(Base):
     storage_key: Mapped[str] = mapped_column(String(200))
     fetch_run_id: Mapped[int | None] = mapped_column(ForeignKey("fetch_run.id"))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    processing_status: Mapped[str] = mapped_column(String(24), default="FETCHED")  # İK-2 bunu ilerletir
+    # FETCHED → EXTRACTED → LINKED; EXTRACT_FAILED (yeniden denenir). Bkz. plan §2.2
+    processing_status: Mapped[str] = mapped_column(String(24), default="FETCHED", index=True)
+    # Kanalın ilk taramasında sitede zaten duran içerik: arşive ve tekilleştirmeye girer, YZ hattına girmez
+    is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
     extra: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # İK-2: metin çıkarma
+    text: Mapped[str | None] = mapped_column(Text)
+    extraction_method: Mapped[str | None] = mapped_column(String(24))  # html|pdf_text|ocr|pdf_text+ocr|docx|…
+    ocr_confidence: Mapped[float | None] = mapped_column(Float)
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    extract_error: Mapped[str | None] = mapped_column(Text)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    regulation_id: Mapped[int | None] = mapped_column(ForeignKey("regulation.id"), index=True)
+
+
+class Regulation(Base):
+    """Tekil düzenleme kaydı (portaldaki "kayıt"). Aynı düzenlemenin farklı kaynaklardaki yayınları
+    ``regulation_source_link`` ile bağlanır; YZ adımları (İK-3..5) düzenleme başına bir kez çalışır."""
+
+    __tablename__ = "regulation"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(Text)
+    issuer: Mapped[str | None] = mapped_column(String(64), index=True)       # kurum kodu (BDDK, SPK …)
+    issuer_name: Mapped[str | None] = mapped_column(String(300))
+    reg_type: Mapped[str | None] = mapped_column(String(64))                # kural tabanlı ön tahmin; İK-3 kesinleştirir
+    is_amendment: Mapped[bool] = mapped_column(Boolean, default=False)
+    publish_date: Mapped[date | None] = mapped_column(Date, index=True)
+    primary_source_code: Mapped[str] = mapped_column(ForeignKey("source.code"))
+    canonical_key: Mapped[str] = mapped_column(String(600))
+    # NEW → (İK-3) CLASSIFIED … ; BASELINE: yalnızca ilk taramada görülen eski içerikten oluştu, YZ'ye gitmez
+    processing_status: Mapped[str] = mapped_column(String(24), default="NEW", index=True)
+    review_status: Mapped[str] = mapped_column(String(16), default="Bekliyor")
+    needs_dedupe_review: Mapped[bool] = mapped_column(Boolean, default=False)  # belirsiz bant (0.70–0.90)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class RegulationKey(Base):
+    """Kesin eşleştirme anahtarları (ör. ``url:…``, ``karar:BDDK:11572``, ``title:BDDK:…``). Bir anahtar tek
+    düzenlemeye aittir; aynı anahtarı üreten yeni belge doğrudan o düzenlemeye bağlanır."""
+
+    __tablename__ = "regulation_key"
+
+    key: Mapped[str] = mapped_column(String(600), primary_key=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    strong: Mapped[bool] = mapped_column(Boolean, default=True)   # False: başlık anahtarı (yalnızca kaynaklar arası)
+    raw_document_id: Mapped[int | None] = mapped_column(ForeignKey("raw_document.id"))  # anahtarı üreten belge
+
+
+class RegulationSourceLink(Base):
+    __tablename__ = "regulation_source_link"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    raw_document_id: Mapped[int] = mapped_column(ForeignKey("raw_document.id"), unique=True)
+    # new | same_document | attachment | exact_key | fuzzy_title | llm_confirmed | manual
+    match_method: Mapped[str] = mapped_column(String(24))
+    match_score: Mapped[float | None] = mapped_column(Float)
+    matched_key: Mapped[str | None] = mapped_column(String(600))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 def make_sessionmaker(database_url: str) -> sessionmaker[Session]:

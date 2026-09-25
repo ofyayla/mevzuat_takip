@@ -1,0 +1,14 @@
+{
+ "https://www.resmigazete.gov.tr/eskiler/2026/09/20260919-5.pdf": {
+  "file": "1aa4174b41237c5a.pdf",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/eskiler/2026/09/20260919-5.pdf",
+  "content_type": "application/pdf"
+ },
+ "https://www.resmigazete.gov.tr/eskiler/2026/09/20260918-9.htm": {
+  "file": "a3bba506ca13b92d.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/eskiler/2026/09/20260918-9.htm",
+  "content_type": "text/html"
+ }
+}

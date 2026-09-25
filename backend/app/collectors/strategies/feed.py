@@ -7,6 +7,7 @@ params:
 from __future__ import annotations
 
 import hashlib
+import html
 
 import feedparser
 
@@ -40,11 +41,13 @@ class FeedStrategy:
                     link = "https://" + link.removeprefix("http://")  # TCMB beslemesi http bağlantı veriyor
                 # Bazı kurumlar (TCMB) Türkçe tarih yazdığı için feedparser'ın ayrıştırmasına güvenmiyoruz
                 published = parse_tr_date(e.get("published") or e.get("updated"))
+                # TCMB başlıkları çift kaçışlı gönderiyor ("Kara&amp;rsquo;nın"); feedparser bir katmanı çözüyor
+                title = clean(html.unescape(e.get("title") or ""))
                 items.append(ItemRef(
                     source=ctx.source.code, channel=ctx.channel.name,
                     external_id=external_id(link, p.get("id_pattern")),
-                    url=link, title=clean(e.get("title")), published_at=published,
-                    category=ctx.channel.category, summary=clean(e.get("summary")) or None,
+                    url=link, title=title, published_at=published,
+                    category=ctx.channel.category, summary=clean(html.unescape(e.get("summary") or "")) or None,
                     version_key=e.get("updated") or None,
                     extra={"feed_id": clean(e.get("id"))},
                 ))
