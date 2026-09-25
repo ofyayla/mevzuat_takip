@@ -10,5 +10,17 @@
   "status": 200,
   "final_url": "https://spk.gov.tr/duyurular/basin-duyurulari/2026",
   "content_type": "text/html; charset=utf-8"
+ },
+ "https://mevzuat.spk.gov.tr/api/Search/All": {
+  "file": "379233e7d81aafe5.json",
+  "status": 200,
+  "final_url": "https://mevzuat.spk.gov.tr/api/Search/All",
+  "content_type": "application/json; charset=utf-8"
+ },
+ "https://mevzuat.spk.gov.tr/api/IlkeKarari/File/384": {
+  "file": "761173b9c88f1793.pdf",
+  "status": 200,
+  "final_url": "https://mevzuat.spk.gov.tr/api/IlkeKarari/File/384",
+  "content_type": "application/pdf"
  }
 }

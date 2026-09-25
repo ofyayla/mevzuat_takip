@@ -41,7 +41,22 @@ def test_beat_schedule_built():
     assert all(v["task"] == "app.tasks.collect.collect_source" for v in schedule.values())
 
 
-def test_unverified_sources_are_flagged(sources):
-    # BDDK geliştirme ortamından erişilemedi; kurum ağında probe ile doğrulanana kadar işaretli kalmalı
-    assert sources.get("BDDK").verified is None
-    assert all(s.verified for s in sources.sources if s.code != "BDDK")
+def test_all_sources_verified(sources):
+    # BDDK 25.09.2026'da Türkiye'den canlı doğrulandı (yurt dışı IP'lerinden erişilemiyor)
+    assert all(s.verified for s in sources.sources)
+
+
+def test_intermediate_certificates_valid():
+    """config/certs altındaki ara sertifikalar okunabilir, CA ve süresi geçmemiş olmalı."""
+    from datetime import datetime, timezone
+
+    from cryptography import x509
+
+    from app.settings import BACKEND_DIR
+
+    files = sorted((BACKEND_DIR / "config" / "certs").glob("*.pem"))
+    assert {f.name for f in files} >= {"globalsign-rsa-ov-ssl-ca-2018.pem", "geotrust-tls-rsa-ca-g1.pem"}
+    for f in files:
+        cert = x509.load_pem_x509_certificate(f.read_bytes())
+        assert cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca, f.name
+        assert cert.not_valid_after_utc > datetime.now(timezone.utc), f"{f.name} süresi dolmuş: ca-fetch çalıştırın"

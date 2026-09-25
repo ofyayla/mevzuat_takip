@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     sources_file: Path = BACKEND_DIR / "config" / "sources.yaml"
     https_proxy: str | None = None           # boşsa ortamdaki HTTPS_PROXY kullanılır
     ca_bundle: str | None = None             # boşsa REQUESTS_CA_BUNDLE / SSL_CERT_FILE / sistem deposu
+    # Zincirini eksik gönderen sunucular (BDDK, mevzuat.gov.tr, Resmî Gazete) için ara sertifikalar. Buradaki
+    # *.pem dosyaları kök deposuna eklenir; güven yine kök sertifikaya dayanır. `mevzuat-collect ca-fetch` ile güncellenir.
+    extra_ca_dir: Path = BACKEND_DIR / "config" / "certs"
     http_user_agent: str = "MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)"
     collect_request_delay_s: float = 1.5
     collect_timeout_s: float = 30.0

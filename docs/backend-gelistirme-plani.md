@@ -390,13 +390,13 @@ class SourceAdapter(Protocol):
 
 | Kaynak | Yöntem | İstemci | Durum |
 |---|---|---|---|
-| **Resmî Gazete** | `/fihrist?tarih=…&mukerrer=N` (asıl + mükerrer, bugün + dün) | impersonate | ✅ uygulandı |
-| **BDDK** | Link deseni: `Duyuru/Liste/{39,40}`, `Mevzuat/Liste/55` → `Detay` + `EkGetir` | impersonate | ⚠️ yazıldı, kurum ağında doğrulanacak |
-| **SPK** | Bülten PDF listesi + basın duyuruları | httpx | ✅ uygulandı |
+| **Resmî Gazete** | `/fihrist?tarih=…&mukerrer=N` (asıl + mükerrer, bugün + dün) + Çeşitli İlânlar (kurum filtreli) | impersonate | ✅ uygulandı |
+| **BDDK** | Link deseni: `Duyuru/Liste/{39,40,48}`, `Mevzuat/Liste/{49–52,55,56,58}` → `Detay`/`DokumanGetir` + `EkGetir`; kanun/yönetmelik tam metni mevzuat.gov.tr'den | impersonate | ✅ uygulandı (TR'den doğrulandı) |
+| **SPK** | Bülten PDF listesi + basın duyuruları + SPK Mevzuat Sistemi JSON API'si | httpx | ✅ uygulandı |
 | **TCMB** | Atom beslemesi (basın duyuruları) + 6 mevzuat belge listesi (CACHEID sürüm anahtarı) | httpx | ✅ uygulandı |
 | **KVKK** | Duyurular, kurul kararları, yönetmelik/tebliğ/rehber listeleri | httpx | ✅ uygulandı |
 | **MASAK** | WordPress REST API (`/portal/v2/posts,pages`, `modified_after`) | httpx | ✅ uygulandı |
-| **Ticaret Bakanlığı** | Duyurular + tüketici mevzuatı listesi | impersonate | ✅ uygulandı |
+| **Ticaret Bakanlığı** | Duyurular + tüketici mevzuatı (tam metin mevzuat.gov.tr'den) | impersonate | ✅ uygulandı |
 | **Rekabet Kurumu** | Duyurular + kurul kararları (sayı/tarih/tür alanlarıyla) | httpx | ✅ uygulandı |
 | **TKBB** | Duyurular + birlik düzenlemeleri (idari/mesleki) | httpx | ✅ uygulandı |
 | **Banka KEP** | Bkz. aşağıdaki KEP bölümü | — | kapsam dışı (bu adım) |

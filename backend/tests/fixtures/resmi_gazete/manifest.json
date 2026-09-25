@@ -22,5 +22,23 @@
   "status": 200,
   "final_url": "https://www.resmigazete.gov.tr/",
   "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260925-4.htm": {
+  "file": "c4fc2264afa2d723.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260925-4.htm",
+  "content_type": "text/html"
+ },
+ "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260924-4.htm": {
+  "file": "3d1bb4db92620459.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260924-4.htm",
+  "content_type": "text/html"
+ },
+ "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260917-4.htm": {
+  "file": "fa8384dd1b03b1b0.html",
+  "status": 200,
+  "final_url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260917-4.htm",
+  "content_type": "text/html"
  }
 }

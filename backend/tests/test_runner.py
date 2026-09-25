@@ -134,16 +134,76 @@ def test_first_run_is_baseline_until_backlog_done(settings):
     src = make_source()
     rows = [(f"/d/{i}", f"Duyuru {i}", "25.09.2026") for i in range(3)]
     pages = {LIST: (listing(*rows), "text/html")}
-    pages.update({f"https://ornek.gov.tr/d/{i}": (f"<p>{i}</p>", "text/html") for i in range(4)})
+    pages.update({f"https://ornek.gov.tr/d/{i}": (f"<p>{i} <a href='/ek/{i}.pdf'>ek</a></p>", "text/html")
+                  for i in range(4)})
+    pages.update({f"https://ornek.gov.tr/ek/{i}.pdf": (f"%PDF {i}".encode(), "application/pdf") for i in range(4)})
     c, sf = collector(settings, src, pages)
     rep = c.run(max_details=2)                       # ilk tarama, 1 öğe ertelendi
     assert rep.channels[0].baseline and not rep.channels[0].baseline_complete
     rep = c.run(max_details=10)                      # birikim bitti
     assert rep.channels[0].baseline and rep.channels[0].baseline_complete
-    assert {r.processing_status for r in docs(sf)} == {"BASELINE"}
-    # artık sitede yeni çıkan içerik normal akışa girer
+    # Eski içeriğin ekleri de BASELINE olmalı; yoksa YZ hattına "yeni" diye düşer
+    assert {(r.role, r.processing_status) for r in docs(sf)} == {("main", "BASELINE"), ("attachment", "BASELINE")}
+    # artık sitede yeni çıkan içerik (ve eki) normal akışa girer
     pages[LIST] = (listing(*rows, ("/d/3", "Yeni Duyuru", "26.09.2026")), "text/html")
     rep = c.run()
     assert not rep.channels[0].baseline and rep.new == 1
-    new_doc = [r for r in docs(sf) if r.external_id == "/d/3"][0]
-    assert new_doc.processing_status == "FETCHED"
+    new = [r for r in docs(sf) if r.external_id.startswith("/d/3")]
+    assert {(r.role, r.processing_status) for r in new} == {("main", "FETCHED"), ("attachment", "FETCHED")}
+
+
+def test_refresh_after_days_detects_in_place_update(settings):
+    """Liste satırı hiç değişmeyen ama metni yerinde güncellenen belge (konsolide metin) yakalanmalı."""
+    src = make_source(refresh_after_days=14, refresh_max_per_run=1)
+    pages = {
+        LIST: (listing(("/d/1", "Yönetmelik A", ""), ("/d/2", "Yönetmelik B", "")), "text/html"),
+        "https://ornek.gov.tr/d/1": ("<html><body>A metni</body></html>", "text/html"),
+        "https://ornek.gov.tr/d/2": ("<html><body>B metni</body></html>", "text/html"),
+    }
+    c, sf = collector(settings, src, pages)
+    c.run()
+    t0 = datetime.now(timezone.utc)
+
+    # Süre dolmadan: yalnızca liste istenir
+    c.fetcher.requested.clear()
+    c.run(now=t0 + timedelta(days=1))
+    assert c.fetcher.requested == [LIST]
+
+    # Süre doldu, içerik aynı: yeniden indirilir ama sürüm açılmaz; çalıştırma başına en fazla 1 öğe
+    c.fetcher.requested.clear()
+    rep = c.run(now=t0 + timedelta(days=15))
+    assert rep.channels[0].refreshed == 1 and rep.changed == 0
+    assert c.fetcher.requested == [LIST, "https://ornek.gov.tr/d/1"]
+    c.fetcher.requested.clear()
+    c.run(now=t0 + timedelta(days=15))   # d/1 az önce kontrol edildi → sıra d/2'de
+    assert c.fetcher.requested == [LIST, "https://ornek.gov.tr/d/2"]
+
+    # d/1 metni yerinde değişti; bir sonraki kontrol döneminde yeni sürüm açılır
+    pages["https://ornek.gov.tr/d/1"] = ("<html><body>A metni — değişiklik</body></html>", "text/html")
+    rep = c.run(now=t0 + timedelta(days=40))
+    assert rep.changed == 1
+    v = [(r.version, r.is_latest) for r in docs(sf) if r.external_id == "/d/1"]
+    assert v == [(1, False), (2, True)]
+
+
+def test_mevzuat_gov_links_fetched_as_full_text(settings):
+    src = SourceConfig.model_validate({
+        "code": "ORNEK", "name": "Örnek", "base_url": "https://ornek.gov.tr",
+        "allowed_hosts": ["www.mevzuat.gov.tr", "mevzuat.gov.tr"],
+        "channels": [{"name": "mevzuat", "strategy": "link_pattern",
+                      "params": {"urls": [LIST], "href_pattern": "mevzuat\\.gov\\.tr", "date_regex": None}}]})
+    old = "http://www.mevzuat.gov.tr/Metin.Aspx?MevzuatKod=7.5.11180&MevzuatIliski=0&sourceXmlSearch=x"
+    new = "https://mevzuat.gov.tr/mevzuat?MevzuatNo=11180&MevzuatTur=7&MevzuatTertip=5"
+    iframe = ("https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?"
+              "MevzuatTur=7&MevzuatNo=11180&MevzuatTertip=5")
+    pages = {
+        LIST: (f"<html><body><a href='{old}'>Banka Kartları Yönetmeliği</a>"
+               f"<a href='{new}'>Banka Kartları Yönetmeliği</a></body></html>", "text/html"),
+        iframe: ("<html><body>MADDE 1 – Amaç</body></html>", "text/html"),
+    }
+    c, sf = collector(settings, src, pages)
+    rep = c.run()
+    assert rep.new == 1                                   # iki biçim tek belge
+    row = docs(sf)[0]
+    assert row.external_id == "mevzuat.gov.tr:7.5.11180" and row.role == "main"
+    assert row.final_url == iframe and row.extra["mevzuat_tur"] == 7

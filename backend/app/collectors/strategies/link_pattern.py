@@ -8,6 +8,10 @@ params:
   href_pattern: öğe bağlantısı regex'i (mutlak URL üzerinde aranır)
   exclude_pattern: hariç tutulacak href regex'i (opsiyonel)
   scope: aramanın yapılacağı kapsayıcı (CSS, opsiyonel; varsayılan tüm gövde)
+  link_selector: aday bağlantıların CSS seçicisi (varsayılan 'a[href]'; ör. yalnızca başlık bağlantıları)
+  group_selector: öğenin üst elemanlarında aranan grup başlığı (ör. akordeon alt kategori) → extra.group
+  group_strip: grup başlığından silinecek regex (ör. "\\(\\d+\\)$" öğe sayısı)
+  fields: {ad: regex} — öğe metninden ek alanlar (ör. karar sayısı); title_strip'ten önce uygulanır
   title_selector: başlığın, bağlantının/üst elemanının içindeki CSS seçicisi (opsiyonel)
   date_selector: tarihin, öğe kapsayıcısı içindeki CSS seçicisi (opsiyonel; date_regex'ten önce denenir)
   date_regex: bağlantı/üst eleman metninde tarih regex'i (opsiyonel)
@@ -21,7 +25,14 @@ import re
 
 from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import DATE_TEXT_PATTERN, parse_tr_date
-from app.collectors.strategies._html import absolutize, clean, external_id, link_title, node_signature, parse_html
+from app.collectors.strategies._html import (
+    absolutize,
+    clean,
+    external_id,
+    link_title,
+    node_signature,
+    parse_html,
+)
 from app.collectors.strategies._urls import expand_urls
 
 
@@ -51,7 +62,9 @@ class LinkPatternStrategy:
                     continue
                 containers = []
                 found = 0
-                for a in root.css("a[href]"):
+                for a in root.css(p.get("link_selector", "a[href]")):
+                    if not a.attributes.get("href"):
+                        continue
                     link = absolutize(resp.final_url, a.attributes["href"])
                     if not href_rx.search(link) or (exclude_rx and exclude_rx.search(link)) or link in seen:
                         continue
@@ -97,6 +110,12 @@ class LinkPatternStrategy:
                 probe_text = clean(probe.text(separator=" "))
                 if len(probe_text) > 600:  # birden fazla öğe içeren kapsayıcıya ulaşıldı
                     break
+        extra: dict[str, str] = {}
+        for name, rx in (p.get("fields") or {}).items():
+            if m := re.search(rx, text):
+                extra[name] = clean(m.group(1) if m.groups() else m.group(0))
+        if p.get("group_selector") and (group := self._group(a, p["group_selector"], p.get("group_strip"))):
+            extra["group"] = group
         for rx in p.get("title_strip", []):
             title = clean(re.sub(rx, "", title))
         if not title:
@@ -106,4 +125,17 @@ class LinkPatternStrategy:
             version = m.group(1) if m.groups() else m.group(0)
         return ItemRef(source=ctx.source.code, channel=ctx.channel.name,
                        external_id=external_id(link, p.get("id_pattern")), url=link, title=title,
-                       published_at=published, category=ctx.channel.category, version_key=version), container
+                       published_at=published, category=ctx.channel.category, version_key=version,
+                       extra=extra), container
+
+    @staticmethod
+    def _group(a, selector: str, strip: str | None, max_depth: int = 8) -> str | None:
+        cur = a.parent
+        for _ in range(max_depth):
+            if cur is None or cur.tag in ("body", "html"):
+                return None
+            if (node := cur.css_first(selector)) is not None:
+                text = clean(node.text(separator=" "))
+                return clean(re.sub(strip, "", text)) if strip else text
+            cur = cur.parent
+        return None

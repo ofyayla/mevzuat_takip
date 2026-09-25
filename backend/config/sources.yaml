@@ -25,63 +25,128 @@ sources:
     expected: {silence_tolerance_hours: 30, business_days_only: false, min_items_per_run: 1}
     notes: >
       Mükerrer sayılar gün içinde geç saatlerde yayımlanabildiği için gece yarısına yakın pencereler var ve
-      bir önceki gün de yeniden taranıyor. İLÂN BÖLÜMÜ varsayılan olarak alınmıyor.
+      bir önceki gün de yeniden taranıyor. İLÂN BÖLÜMÜ bütünüyle alınmaz; yalnızca "Çeşitli İlânlar" dizini
+      açılıp ilan veren kurumu aşağıdaki listeye uyan ilanlar (ör. BDDK faaliyet izni iptali, TCMB ilanları)
+      ayrı öğe olarak alınır. Türkiye'den bağlanıldığında sunucu TLS ara sertifikasını göndermiyor (config/certs).
     channels:
       - name: fihrist
         strategy: resmi_gazete
-        params: {lookback_days: 1, max_mukerrer: 4, exclude_sections: ["İLÂN BÖLÜMÜ"]}
+        params:
+          lookback_days: 1
+          max_mukerrer: 4
+          exclude_sections: ["İLÂN BÖLÜMÜ"]
+          ilan_indexes: ["Çeşitli İlânlar"]
+          ilan_issuers:
+            - "bankacılık düzenleme ve denetleme kurum"
+            - "merkez bankası"
+            - "sermaye piyasası kurul"
+            - "mali suçları araştırma kurul"
+            - "tasarruf mevduatı sigorta fonu"
+            - "kişisel verileri koruma kurum"
+            - "rekabet kurum"
+            - "^ticaret bakanlığı"
+            - "sigortacılık ve özel emeklilik düzenleme"
+            - "^hazine ve maliye bakanlığından"
+            - "katılım bankaları birliği|bankalar birliği"
+            - "borsa istanbul|merkezi kayıt kuruluşu|takasbank"
 
   # ---------------------------------------------------------------------------------------------
   - code: BDDK
     name: Bankacılık Düzenleme ve Denetleme Kurumu
     base_url: https://www.bddk.org.tr
     client: impersonate
-    allowed_hosts: ["www.bddk.org.tr", "bddk.org.tr"]
-    verified: null               # geliştirme ortamından erişilemedi (yurt dışı IP engeli) — kurum ağında doğrulanacak
+    allowed_hosts: ["www.bddk.org.tr", "bddk.org.tr", "www.mevzuat.gov.tr", "mevzuat.gov.tr"]
+    verified: "2026-09-25"
     schedule: ["0 8-20 * * 1-5"]
     expected: {silence_tolerance_hours: 120, business_days_only: true}
     notes: >
-      URL desenleri web aramasıyla doğrulandı (Duyuru/Liste/{id}, Duyuru/Detay/{id}, Duyuru/EkGetir/{id}?ekId=,
-      Mevzuat/Liste/{id}, Mevzuat/Detay/{id}). Liste kimlikleri: 39 Duyuru Listesi, 40 Mevzuat Duyuruları,
-      55 Resmi Gazetede Yayımlanan Kurul Kararları. Diğer kategoriler probe çıktısına göre eklenecek.
-      Kanallar CSS'e bağımlı olmayan link_pattern stratejisiyle tanımlandı.
+      Türkiye'den (25.09.2026) canlı doğrulandı; yurt dışı IP'lerinden erişilemiyor. Sunucu TLS ara sertifikasını
+      göndermiyor (config/certs/globalsign-rsa-ov-ssl-ca-2018.pem). Liste kimlikleri: Duyuru 39 Basın, 40 Mevzuat,
+      48 Kuruluş; Mevzuat 49 Kanunlar, 50 Bankacılık Kanununa İlişkin Düzenlemeler (akordeon: yönetmelik, genelge,
+      tebliğ, rehber …), 51 Banka/Kredi Kartları, 52 Finansal Kiralama/Faktoring/Finansman, 55 RG'de yayımlanan ve
+      56 yayımlanmayan Kurul Kararları, 58 Düzenleme Taslakları. 41 (İK), 42 (veri), 54 (Kurum iç düzenlemeleri)
+      ve 63 (mülga) kapsam dışı. Kanun/yönetmelik bağlantıları mevzuat.gov.tr'ye gider; tam metin oradan alınır.
     channels:
       - name: duyurular
         strategy: link_pattern
-        category: Duyuru
+        category: Basın Duyurusu
         attachment_pattern: "/Duyuru/EkGetir/"
-        params:
+        params: &bddk_duyuru
           urls: ["https://www.bddk.org.tr/Duyuru/Liste/39"]
+          scope: ".kategoriList"
           href_pattern: "/Duyuru/Detay/\\d+"
           id_pattern: "/Duyuru/Detay/(\\d+)"
+          date_selector: ".gorunenTarih"
+          title_strip: ["^\\d{2}\\.\\d{2}\\.\\d{4}\\s*"]
       - name: mevzuat_duyurulari
         strategy: link_pattern
         category: Mevzuat Duyurusu
         attachment_pattern: "/Duyuru/EkGetir/"
         params:
+          <<: *bddk_duyuru
           urls: ["https://www.bddk.org.tr/Duyuru/Liste/40"]
-          href_pattern: "/Duyuru/Detay/\\d+"
-          id_pattern: "/Duyuru/Detay/(\\d+)"
+      - name: kurulus_duyurulari
+        strategy: link_pattern
+        category: Kuruluş Duyurusu
+        attachment_pattern: "/Duyuru/EkGetir/"
+        params:
+          <<: *bddk_duyuru
+          urls: ["https://www.bddk.org.tr/Duyuru/Liste/48"]
+          fields: &bddk_karar_fields
+            karar_tarihi: "\\((\\d{2}\\.\\d{2}\\.\\d{4})\\s*-\\s*\\d+\\)"
+            karar_sayisi: "\\(\\d{2}\\.\\d{2}\\.\\d{4}\\s*-\\s*(\\d+)\\)"
+          title_strip: ["^\\d{2}\\.\\d{2}\\.\\d{4}\\s*", "^\\(\\d{2}\\.\\d{2}\\.\\d{4}\\s*-\\s*\\d+\\)\\s*"]
       - name: rg_kurul_kararlari
         strategy: link_pattern
-        category: Kurul Kararı
-        attachment_pattern: "/Mevzuat/DokumanGetir/|\\.pdf"
-        params:
+        category: Kurul Kararı (RG)
+        params: &bddk_mevzuat
           urls: ["https://www.bddk.org.tr/Mevzuat/Liste/55"]
-          href_pattern: "/Mevzuat/(Detay|DokumanGetir)/\\d+"
+          scope: "#partialContainer"
+          link_selector: "a.mevzuatBaslik[href]"
+          href_pattern: "."
           id_pattern: "/Mevzuat/(?:Detay|DokumanGetir)/(\\d+)"
+          date_regex: "\\((\\d{2}\\.\\d{2}\\.\\d{4})\\s*-"
+          fields: *bddk_karar_fields
+          title_strip: ["^\\(\\d{2}\\.\\d{2}\\.\\d{4}\\s*-\\s*\\d+\\)\\s*"]
+      - name: kurul_kararlari
+        strategy: link_pattern
+        category: Kurul Kararı
+        params:
+          <<: *bddk_mevzuat
+          urls: ["https://www.bddk.org.tr/Mevzuat/Liste/56"]
+      - name: duzenleme_taslaklari
+        strategy: link_pattern
+        category: Düzenleme Taslağı
+        params:
+          <<: *bddk_mevzuat
+          urls: ["https://www.bddk.org.tr/Mevzuat/Liste/58"]
+      - name: duzenlemeler
+        strategy: link_pattern
+        category: Düzenleme
+        refresh_after_days: 14       # konsolide metinler yerinde güncellenir (mevzuat.gov.tr, DokumanGetir)
+        params:
+          <<: *bddk_mevzuat
+          urls:
+            - "https://www.bddk.org.tr/Mevzuat/Liste/49"
+            - "https://www.bddk.org.tr/Mevzuat/Liste/50"
+            - "https://www.bddk.org.tr/Mevzuat/Liste/51"
+            - "https://www.bddk.org.tr/Mevzuat/Liste/52"
+          date_regex: null
+          group_selector: ".accordionHeader"
+          group_strip: "\\(\\d+\\)$"
 
   # ---------------------------------------------------------------------------------------------
   - code: SPK
     name: Sermaye Piyasası Kurulu
     base_url: https://spk.gov.tr
-    allowed_hosts: ["spk.gov.tr", "www.spk.gov.tr"]
+    allowed_hosts: ["spk.gov.tr", "www.spk.gov.tr", "mevzuat.spk.gov.tr"]
     verified: "2026-09-25"
     schedule: ["0 9 * * 1-5", "0 14 * * 1-5", "30 19 * * *"]
     expected: {silence_tolerance_hours: 192, business_days_only: true}
     notes: >
-      SPK düzenlemeleri haftalık/olağanüstü SPK Bültenlerinde (PDF) yayımlanır. mevzuat.spk.gov.tr alt alanı
-      geliştirme ortamının izin listesinde değildi; gerekirse eklenebilir.
+      SPK düzenlemeleri haftalık/olağanüstü SPK Bültenlerinde (PDF) yayımlanır. Tebliğ, yönetmelik, rehber ve
+      ilke kararlarının güncel (konsolide) metinleri SPK Mevzuat Sistemi'nden (mevzuat.spk.gov.tr, React) gelir;
+      ön yüzün kullandığı /api/Search/All uç noktası tüm listeyi JSON olarak verir, dosya /api/{tür}/File/{id}.
     channels:
       - name: bultenler
         strategy: css_list
@@ -104,6 +169,28 @@ sources:
           date: ".liste-tarih"
           summary: ".liste-icerik"
           id_pattern: "/basin-duyurulari/(\\d{4}/[^/?#]+)$|/data/([0-9a-f]{24})/"
+      - name: mevzuat
+        strategy: json_api
+        category: Mevzuat
+        refresh_after_days: 14       # API değişiklik tarihi vermiyor; metinler yerinde güncelleniyor
+        params:
+          urls: ["https://mevzuat.spk.gov.tr/api/Search/All"]
+          id: "{contentSource}-{contentID}"
+          url: "https://mevzuat.spk.gov.tr/api/{contentSource}/File/{contentID}"
+          public_url: "https://mevzuat.spk.gov.tr/{link}"
+          title: title
+          date: [kurulKararTarihi, resmiGazeteTarihi]
+          category: tur
+          fields:
+            sayi: sayi
+            no: no
+            kurul_toplanti_no: kurulToplantiNo
+            resmi_gazete_sayi: resmiGazeteSayi
+            bulten_yili: bultenYili
+            bulten_no: bultenNo
+            kisim: kisim
+            bolum: bolum
+            baglantili_tebligler: baglantiliTebliglerStr
 
   # ---------------------------------------------------------------------------------------------
   - code: TCMB
@@ -213,13 +300,13 @@ sources:
     name: Ticaret Bakanlığı
     base_url: https://ticaret.gov.tr
     client: impersonate
-    allowed_hosts: ["ticaret.gov.tr", "www.ticaret.gov.tr", "*.ticaret.gov.tr"]
+    allowed_hosts: ["ticaret.gov.tr", "www.ticaret.gov.tr", "*.ticaret.gov.tr", "www.mevzuat.gov.tr", "mevzuat.gov.tr"]
     verified: "2026-09-25"
     schedule: ["0 10 * * 1-5", "0 16 * * 1-5"]
     expected: {silence_tolerance_hours: 168, business_days_only: true}
     notes: >
-      Tüketici mevzuatı listesindeki bağlantılar mevzuat.gov.tr'ye gider; bu kanal yalnızca liste değişikliğini
-      izler (fetch_detail: false). Bakanlık tebliğleri ayrıca Resmî Gazete'den de gelir.
+      Tüketici mevzuatı listesindeki bağlantılar mevzuat.gov.tr'ye gider; tam metin oradan alınır (konsolide metin
+      yerinde güncellendiği için 14 günde bir yeniden kontrol edilir). Bakanlık tebliğleri ayrıca Resmî Gazete'den de gelir.
     channels:
       - name: duyurular
         strategy: css_list
@@ -232,7 +319,7 @@ sources:
       - name: tuketici_mevzuati
         strategy: link_pattern
         category: Tüketici Mevzuatı
-        fetch_detail: false
+        refresh_after_days: 14
         params:
           urls: ["https://ticaret.gov.tr/tuketici/mevzuat/teblig-ve-kilavuzlar"]
           href_pattern: "mevzuat\\.gov\\.tr/mevzuat\\?|/data/[0-9a-f]{24}/"

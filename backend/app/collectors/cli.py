@@ -7,6 +7,8 @@
                                                   # fixture olarak kaydeder (kurum ağında doğrulama için)
   mevzuat-collect run KOD|all [--channel K] [--max-details N]
                                                   # tam tarama: detay + ekler + arşiv + DB
+  mevzuat-collect ca-fetch HOST [HOST ...]        # zincirini eksik gönderen sunucunun ara sertifikasını AIA'dan
+                                                  # indirip doğrular ve config/certs/ altına yazar
 """
 from __future__ import annotations
 
@@ -15,11 +17,13 @@ import logging
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.collectors.config import SourceConfig, load_sources
-from app.collectors.http import FetchError, Fetcher, Recorder
+from app.collectors.http import Fetcher, FetchError, Recorder
 from app.collectors.locks import LockBusy, source_lock
 from app.collectors.runner import SourceCollector, list_channel
+from app.collectors.tls import fetch_intermediate, is_chain_error
 from app.db import make_sessionmaker
 from app.settings import get_settings
 from app.storage import FileSystemStorage
@@ -45,6 +49,7 @@ def cmd_sources(args) -> int:
 def cmd_check_access(args) -> int:
     settings = get_settings()
     failures = 0
+    chain_hosts: set[str] = set()
     for s in _sources(args):
         fetcher = Fetcher(s, settings)
         t0 = time.monotonic()
@@ -54,12 +59,38 @@ def cmd_check_access(args) -> int:
             detail = f"HTTP {r.status}, {len(r.content)} bayt"
         except FetchError as e:
             ok, detail = False, str(e)
+            if is_chain_error(detail):
+                chain_hosts.add(urlparse(e.url).hostname or "")
         finally:
             fetcher.close()
         failures += not ok
         print(f"{'OK  ' if ok else 'HATA'} {s.code:<14} {s.base_url:<34} [{s.client}] "
               f"{time.monotonic() - t0:5.1f}s  {detail}")
+    if chain_hosts:
+        print("\nSunucu TLS zincirini eksik gönderiyor (ara sertifika yok). Düzeltmek için:\n"
+              f"  mevzuat-collect ca-fetch {' '.join(sorted(chain_hosts))}")
     return 1 if failures else 0
+
+
+def cmd_ca_fetch(args) -> int:
+    settings = get_settings()
+    out_dir = settings.extra_ca_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rc = 0
+    for host in args.hosts:
+        host = urlparse(host).hostname or host if "://" in host else host
+        try:
+            res = fetch_intermediate(host, ca_bundle=settings.resolved_ca_bundle(), proxy=settings.resolved_proxy())
+        except (OSError, ValueError) as e:
+            print(f"HATA {host}: {e}")
+            rc = 1
+            continue
+        target = out_dir / res.filename
+        state = "zaten var" if target.exists() and res.pem in target.read_bytes() else "yazıldı"
+        if state == "yazıldı":
+            target.write_bytes(res.file_content())
+        print(f"OK   {host}: {res.subject} (bitiş {res.not_after:%Y-%m-%d}) → {target} [{state}]")
+    return rc
 
 
 def cmd_probe(args) -> int:
@@ -121,6 +152,7 @@ def cmd_run(args) -> int:
         print(f"{s.code:<14} {rep.status:<8} yeni={rep.new} değişen={rep.changed} istek={rep.requests}")
         for c in rep.channels:
             extra = " (ilk tarama: mevcut içerik BASELINE)" if c.baseline else ""
+            extra += f" yeniden-kontrol={c.refreshed}" if c.refreshed else ""
             extra += " ⚠ boş liste" if c.empty_listing else ""
             extra += " ⚠ yapı imzası değişti" if c.structure_changed else ""
             print(f"    {c.name:<22} öğe={c.items:<4} yeni={c.new:<4} değişen={c.changed:<3} "
@@ -149,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--channel", action="append")
     p.add_argument("--max-details", type=int, default=200)
     p.set_defaults(fn=cmd_run)
+    p = sub.add_parser("ca-fetch")
+    p.add_argument("hosts", nargs="+")
+    p.set_defaults(fn=cmd_ca_fetch)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

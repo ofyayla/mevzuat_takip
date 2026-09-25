@@ -89,6 +89,30 @@ def build_url(url: str, params: dict[str, Any] | None) -> str:
     return url + ("&" if "?" in url else "?") + urlencode(params)
 
 
+def build_ca_bundle(base: str | bool, extra: list[Path], out_dir: Path) -> str:
+    """Temel CA paketi (ayar/ortam ya da certifi) + ek ara sertifikalardan birleşik bir PEM dosyası üretir.
+
+    İçerik hash'i dosya adında olduğu için aynı girdiler aynı dosyayı yeniden kullanır.
+    """
+    if isinstance(base, str):
+        base_path = Path(base)
+    else:
+        import certifi
+
+        base_path = Path(certifi.where())
+    parts = [base_path.read_bytes()]
+    for path in extra:
+        if not path.exists():
+            raise FileNotFoundError(f"ek CA sertifikası bulunamadı: {path}")
+        parts.append(path.read_bytes())
+    data = b"\n".join(p.rstrip() for p in parts) + b"\n"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"bundle-{hashlib.sha256(data).hexdigest()[:16]}.pem"
+    if not out.exists():
+        out.write_bytes(data)
+    return str(out)
+
+
 # --------------------------------------------------------------------------------------------- backends
 
 class _Backend:
@@ -101,9 +125,13 @@ class _Backend:
 
 class _HttpxBackend(_Backend):
     def __init__(self, proxy: str | None, verify: str | bool):
+        import ssl
+
         import httpx
 
         self._httpx = httpx
+        if isinstance(verify, str):  # httpx, dosya yolu yerine SSLContext bekliyor
+            verify = ssl.create_default_context(cafile=verify)
         self.client = httpx.Client(proxy=proxy, verify=verify, follow_redirects=True, trust_env=proxy is None)
 
     def get(self, url, headers, timeout):
@@ -215,6 +243,9 @@ class Fetcher:
     def _get_backend(self) -> _Backend:
         if self._backend is None:
             proxy, verify = self.settings.resolved_proxy(), self.settings.resolved_ca_bundle()
+            extra = sorted(self.settings.extra_ca_dir.glob("*.pem")) if self.settings.extra_ca_dir.is_dir() else []
+            if extra and verify is not False:
+                verify = build_ca_bundle(verify, extra, self.settings.raw_storage_dir.parent / "ca")
             kind = self.source.client
             if kind == "impersonate":
                 self._backend = _ImpersonateBackend(proxy, verify)

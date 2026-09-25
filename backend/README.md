@@ -25,6 +25,7 @@ mevzuat-collect probe TCMB                     # yalnızca listeyi çeker ve gö
 mevzuat-collect probe BDDK --record tests/fixtures/bddk --with-details   # yanıtları fixture olarak kaydet
 mevzuat-collect run all                        # tam tarama: detay + ekler + arşiv + DB
 mevzuat-collect run RESMI_GAZETE --max-details 50
+mevzuat-collect ca-fetch www.bddk.org.tr       # sunucu TLS ara sertifikasını göndermiyorsa AIA'dan indirip doğrular
 
 celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS_URL gerekir)
 celery -A app.worker beat                      # sources.yaml'daki cron pencereleri
@@ -36,8 +37,9 @@ celery -A app.worker beat                      # sources.yaml'daki cron pencerel
 config/sources.yaml ──► SourceConfig ──► kanal başına Strategy ──► ItemRef listesi
                                                 │
          Fetcher (httpx | curl_cffi | Playwright)   ▼
-         proxy · CA · host izin listesi ·      SourceCollector.run()
-         istek aralığı · retry · Recorder        ├─ liste satırı değişmemiş  → atla (istek yok)
+         proxy · CA + config/certs ·           SourceCollector.run()   (resolvers: mevzuat.gov.tr → kanonik id)
+         host izin listesi · istek aralığı ·     ├─ liste satırı değişmemiş  → atla (istek yok)
+         retry · Recorder                        │    └─ refresh_after_days doldu → yeniden indir, hash karşılaştır
                                                  ├─ yeni/değişmiş            → detay + ekler indir
                                                  ├─ içerik hash'i aynı       → sürüm açma
                                                  ├─ içerik farklı            → version+1, eskisi is_latest=False
@@ -49,11 +51,15 @@ config/sources.yaml ──► SourceConfig ──► kanal başına Strategy ─
 
 | Strateji | Kullanım | Kaynaklar |
 |---|---|---|
-| `resmi_gazete` | Fihrist (asıl + mükerrer, bugün + dün) | Resmî Gazete |
+| `resmi_gazete` | Fihrist (asıl + mükerrer, bugün + dün) + Çeşitli İlânlar'dan kurum filtreli ilanlar | Resmî Gazete |
 | `feed` | RSS/Atom | TCMB basın duyuruları |
 | `wordpress_api` | WP REST, `modified_after` ile artımlı | MASAK |
+| `json_api` | JSON liste uç noktası, alan eşlemesi YAML'da | SPK Mevzuat Sistemi |
 | `css_list` | CSS seçicili liste (tarih, özet, ek alan regex'leri, sayfalama) | SPK, KVKK, Ticaret, Rekabet kararları |
-| `link_pattern` | href deseni, başlık üst elemandan, CSS'e bağımsız | TCMB mevzuat, TKBB, Rekabet duyuruları, BDDK |
+| `link_pattern` | href deseni, başlık üst elemandan, CSS'e bağımsız; grup başlığı ve ek alanlar | TCMB mevzuat, TKBB, Rekabet duyuruları, BDDK, Ticaret tüketici mevzuatı |
+
+Dış belge sitelerine giden bağlantılar (şimdilik mevzuat.gov.tr) `app/collectors/resolvers.py` ile kanonik kimliğe
+çevrilir ve tam metin indirilir; host'un kaynağın `allowed_hosts` listesinde olması gerekir.
 
 Yeni bir kaynak/kanal eklemek çoğunlukla yalnızca `sources.yaml` düzenlemesi gerektirir. Önce `probe` ile denenir,
 sonra `--record` ile fixture kaydedilir ve `tests/test_sources_replay.py` dosyasına bir satır eklenir.
@@ -73,12 +79,20 @@ pytest                 # ağ gerektirmez
 
 - `tests/fixtures/<kaynak>/`: 25.09.2026'da canlı sitelerden `probe --record` ile kaydedilen gerçek yanıtlar.
   Testler bu yanıtları `ReplayFetcher` ile oynatır.
-- `tests/test_bddk_synthetic.py`: BDDK geliştirme ortamından erişilemediği için **sentetik** HTML kullanır. Kurum
-  ağında gerçek fixture'larla değiştirilecek.
+- BDDK fixture'ları Türkiye'den kaydedildi (yurt dışı IP'lerinden erişilemiyor). Fixture boyutunu makul tutmak için
+  kanal başına tek detay saklandı, 300 KB üzeri ekler çıkarıldı.
+
+## TLS: eksik ara sertifika
+
+BDDK, Resmî Gazete ve mevzuat.gov.tr (Türkiye'den bağlanıldığında) TLS ara sertifikasını göndermiyor. Tarayıcılar
+bunu fark ettirmez; curl/httpx `unable to get local issuer certificate` verir. `config/certs/*.pem` dosyaları kök
+deposuna (`CA_BUNDLE` veya certifi) eklenir. Sertifika yenilendiğinde `check-access` hatayı gösterir ve
+`mevzuat-collect ca-fetch <host>` önerir; komut yeni ara sertifikayı AIA adresinden indirir, zinciri köke karşı
+doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 
 ## Bilinen kısıtlar
 
-- **BDDK doğrulanmadı** (yurt dışı IP engeli). `verified: null` olarak işaretli; bkz. keşif raporu.
 - Metin çıkarma, OCR ve tekilleştirme (İK-2) sonraki adımdır. Ham belgeler `processing_status=FETCHED` ile bekler.
 - Alembic migrasyonları henüz yok; tablolar ilk çalıştırmada `create_all` ile oluşturuluyor.
 - KEP adaptörü bu kapsamın dışında (erişim yöntemi belirsiz; plan §6 İK-1).
+- BDDK yurt dışı IP'lerinden erişilemiyor; bulut CI'da canlı test çalıştırılamaz (replay testleri ağ gerektirmez).

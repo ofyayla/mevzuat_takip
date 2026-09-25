@@ -4,13 +4,15 @@ from __future__ import annotations
 from app.collectors.base import Strategy
 from app.collectors.strategies.css_list import CssListStrategy
 from app.collectors.strategies.feed import FeedStrategy
+from app.collectors.strategies.json_api import JsonApiStrategy
 from app.collectors.strategies.link_pattern import LinkPatternStrategy
 from app.collectors.strategies.resmi_gazete import ResmiGazeteStrategy
 from app.collectors.strategies.wordpress import WordPressApiStrategy
 
 STRATEGIES: dict[str, type] = {
     s.name: s
-    for s in (FeedStrategy, CssListStrategy, LinkPatternStrategy, WordPressApiStrategy, ResmiGazeteStrategy)
+    for s in (FeedStrategy, CssListStrategy, LinkPatternStrategy, WordPressApiStrategy, ResmiGazeteStrategy,
+              JsonApiStrategy)
 }
 
 

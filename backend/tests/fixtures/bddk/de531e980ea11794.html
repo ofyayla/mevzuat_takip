@@ -1,0 +1,3045 @@
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width" />
+    <title>Duyuru Listesi</title>
+    <link rel="shortcut icon" type="image/png" href="/Content/TemplateAssets/layout_images/favicon.ico" />
+
+    <link href="/Content/TemplateAssets/css/bootstrap.css" rel="stylesheet" />
+    <link href="/Content/TemplateAssets/css/fontawesome.min.css" rel="stylesheet" />
+    <link href="/Content/TemplateDefault/defaultLess2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateDefault/navbar2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateDefault/liste2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateDefault/detay2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateDefault/organizasyon2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateDefault/veri2.less" rel="stylesheet/less" type="text/css" />
+    <link href="/Content/TemplateAssets/css/brands.min.css" rel="stylesheet" />
+
+    <script src="/Scripts/jquery-3.6.0.min.js"></script>
+    <script src="/Scripts/bootstrap.js"></script>
+    <script src="/Scripts/fontawesome-all.js"></script>
+    <script src="/Scripts/less.min.js"></script>
+    <script src="/Scripts/brands.js"></script>
+
+    <script>
+
+        function SearchFunction() {
+            var metin = document.getElementById('searchText').value.toLocaleLowerCase('tr-TR');
+            if (metin.length > 3) {
+
+                /* Duyuru, Güncel */
+                $(".kategoriList ul li").hide();
+                $(".kategoriList ul li .text").filter(function (index) {
+                    return $(this).text().toLocaleLowerCase('tr-TR').indexOf(metin) >= 0;
+                }).parent().parent().parent().show();
+
+
+                /* Mevzuat, Kuruluş */
+                if ($("#accordion > div").hasClass("card")) {
+                    $("#accordion div.card").hide(); //hide div.card (hide accordion)
+                    $("#accordion div.card .accordionBody ul li").hide(); //hide li
+                    $("#accordion div.card .accordionBody table tbody tr ").hide(); //hide li
+
+                    var list_baslikContainer = $("#accordion div.card .accordionBody ul li .baslikContainer").filter(function (index) {
+                        return $(this).text().toLowerCase().indexOf(metin) >= 0;
+                    });
+
+                    var list_baslikContainer2 = $("#accordion div.card .accordionBody table tbody tr td .baslikContainer").filter(function (index) {
+                        return $(this).text().toLowerCase().indexOf(metin) >= 0;
+                    });
+
+                    list_baslikContainer.parent().show(); //show li
+                    list_baslikContainer2.parent().parent().show(); //show li
+                    var list_accoridon = list_baslikContainer.parent().parent().parent().parent().parent();
+                    var list_accoridon2 = list_baslikContainer2.parent().parent().parent().parent().parent().parent().parent();
+                    list_accoridon.show();
+                    list_accoridon2.show();
+                    list_accoridon.find("h5 button small").hide();
+                    list_accoridon2.find("h5 button small").hide();
+                }
+                else {
+                    $(".accordionBody ul li").hide();
+                    $(".accordionBody ul li .baslikContainer").filter(function (index) {
+                        return $(this).text().toLowerCase().indexOf(metin) >= 0;
+                    }).parent().show();
+
+                    $(".accordionBody table tbody tr ").hide();
+                    $(".accordionBody table tbody tr td .baslikContainer").filter(function (index) {
+                        return $(this).text().toLowerCase().indexOf(metin) >= 0;
+                    }).parent().parent().show();
+                }
+
+
+                /* Sss */
+                $(".accordionSss div.card").hide();
+                $(".accordionSss div.card h5 button").filter(function (index) {
+                    return $(this).text().toLowerCase().indexOf(metin) >= 0;
+                }).parent().parent().parent().show();
+            }
+            else {
+                /* Duyuru, Güncel */
+                $(".kategoriList ul li").show();
+                /* Mevzuat, Kuruluş (accordion yokken) */
+                $(".accordionBody ul li").show();
+                $(".accordionBody table tbody tr ").show();
+
+                /* Sss (her zaman), Mevzuat, Kuruluş (accordion varken) */
+                $("#accordion div.card").show();
+                $("#accordion div.card h5 button small").show();
+            }
+        }
+
+        $(document).ready(function () {
+
+            //Detay sayfası galeri resimlerini görüntülemek için
+            $("ul.resimList .imgContainer img").click(function () {
+                var srcData = $(this).attr("src");
+                $('#showImgModal img').attr("src", srcData);
+                $('#showImgModal').modal('show')
+            });
+
+
+            //Organizasyon Şeması sayfalarında (IsSema == true) şema resim, ad, ünvan görüntülemek için
+            var listHiyerarsi = [
+                { BagliBirimler: ["Hukuk İşleri Daire Başkanlığı", "Ekonomik Değerlendirmeler Daire Başkanlığı"] },
+                { BagliBirimler: ["Denetim I Daire Başkanlığı", "Denetim II Daire Başkanlığı", "Denetim III Daire Başkanlığı", "Denetim V Daire Başkanlığı"] },
+                { BagliBirimler: ["Uygulama I Daire Başkanlığı", "Uygulama II Daire Başkanlığı", "Uygulama III Daire Başkanlığı", "Uygulama IV Daire Başkanlığı"] },
+                { BagliBirimler: ["Bilgi Sistemleri Uyum Daire Başkanlığı", "Veri ve Sistem Yönetimi Daire Başkanlığı", "Finansal Tüketici İlişkileri Daire Başkanlığı"] },
+                { BagliBirimler: ["Denetim IV Daire Başkanlığı", "Düzenleme Daire Başkanlığı", "Risk Yönetimi Daire Başkanlığı"] },
+                { BagliBirimler: ["Strateji Geliştirme Daire Başkanlığı", "Kurumsal İletişim ve Dış İlişkiler Daire Başkanlığı", "Uygulama V Daire Başkanlığı", "Destek Hizmetleri Daire Başkanlığı"] },
+            ];
+            $("ul.isSema .imgContainer img").click(function () {
+                var srcData = $(this).attr("src");
+                var ad = $(this).attr("data-ad");
+                var unvan = $(this).attr("data-unvan");
+                var hiyerarsiSiraNo = $(this).attr("data-hiyerarsiSiraNo");
+                $('#showIsSemaModal img').attr("src", srcData);
+                $('#showIsSemaModal h4').text(ad);
+                $('#showIsSemaModal p').text(unvan);
+
+                var bagliBirimler = listHiyerarsi[hiyerarsiSiraNo].BagliBirimler;
+                
+                var $ul = $("<ul>");
+                for (var i = 0; i < bagliBirimler.length; i++) {
+                    var $li = $("<li>", { "text": bagliBirimler[i] });
+                    $ul.append($li);
+                }
+                $("#divBagliBirimler").empty();
+                //$("#divBagliBirimler").append($ul);
+                $('#showIsSemaModal').modal('show');
+            });
+
+
+            //Mevzuat Liste sayfasında satırları gezerken default button'ları belirginleştirmek için
+            $("a.mevzuatBaslik").hover(function () {
+                var detayTuru = $(this).attr("data-detayTuru"); //a elementi
+                var oncelikliDetayTuru = $(this).parent().children("div.divMevzuatDetay[data-detayTuru  = '" + detayTuru + "']").children("a");
+                oncelikliDetayTuru.addClass("detayliGorHover");
+            });
+            $("a.mevzuatBaslik").mouseout(function () {
+                $(this).parent().children().children().removeClass("detayliGorHover");
+            });
+
+
+            //Kuruluş liste sayfasında kuruluş detaylarını görüntülemek için
+            $("button.detayliGor").click(function () {
+                var ad = $(this).attr("data-ad");
+                var aciklama = $(this).attr("data-aciklama");
+                var isFaaliyette = $(this).attr("data-isFaaliyette");
+                var eftKodu = $(this).attr("data-eftKodu");
+                var isDijital = $(this).attr("data-isDijital");
+                var telefon = $(this).attr("data-telefon");
+                var faks = $(this).attr("data-faks");
+                var adres = $(this).attr("data-adres");
+                var webAdresi = $(this).attr("data-webAdresi");
+
+                var sektordenCikisTarihi = $(this).attr("data-sektordenCikisTarihi");
+                var kurulKarari = $(this).attr("data-kurulKarari");
+
+                $("#kurulusDetayModal h4").text("");
+                $("#kurulusDetayModal p > span").text("");
+
+                $("#kurulusDetayModal h4").text(ad);
+                $("#kurulusDetayModal p.pAciklama > span").text(aciklama);
+
+                if (isFaaliyette == 1) {
+                    if (eftKodu != null && eftKodu != '') {
+                        $("#kurulusDetayModal p.pEftKodu").show();
+                        $("#kurulusDetayModal p.pEftKodu > span").text(eftKodu);
+                        $("#kurulusDetayModal p.pEftKodu > small").text(isDijital);
+                        //$("#kurulusDetayModal p.pEftKodu > span").text(eftKodu);
+                    }
+                    else {
+                        $("#kurulusDetayModal p.pEftKodu").hide();
+                    }
+                    $("#kurulusDetayModal p.pTelefon").show();
+                    $("#kurulusDetayModal p.pFaks").show();
+                    $("#kurulusDetayModal p.pAdres").show();
+                    $("#kurulusDetayModal p.pWebAdresi").show();
+                    $("#kurulusDetayModal p.pSektordenCikisTarihi").hide();
+                    $("#kurulusDetayModal p.pKurulKarari").hide();
+
+                    $("#kurulusDetayModal p.pTelefon > span").text(telefon);
+                    $("#kurulusDetayModal p.pFaks > span").text(faks);
+                    $("#kurulusDetayModal p.pAdres > span").text(adres);
+                    $("#kurulusDetayModal p.pWebAdresi > span").text(webAdresi);
+                }
+                else {
+                    $("#kurulusDetayModal p.pEftKodu").hide();
+                    $("#kurulusDetayModal p.pTelefon").hide();
+                    $("#kurulusDetayModal p.pFaks").hide();
+                    $("#kurulusDetayModal p.pAdres").hide();
+                    $("#kurulusDetayModal p.pWebAdresi").hide();
+                    $("#kurulusDetayModal p.pSektordenCikisTarihi").show();
+                    $("#kurulusDetayModal p.pKurulKarari").show();
+
+                    $("#kurulusDetayModal p.pSektordenCikisTarihi > span").text(sektordenCikisTarihi);
+                    $("#kurulusDetayModal p.pKurulKarari > span").text(kurulKarari);
+                }
+
+
+
+            });
+        });
+    </script>
+</head>
+
+<body>
+
+
+    <div class="modal" tabindex="-1" role="dialog" id="showImgModal">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <img id="showImg" style="width:100%;" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" tabindex="-1" role="dialog" id="showIsSemaModal">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <img />
+                    <h4 class="text-center"></h4>
+                    <p class="text-center"></p>
+                    <!-- divBagliBirimler içinde Organizasyon Şeması içindeki daire başkanlıkları görüntüleniyor. Hiyerarşide değişiklik olursa bu sayfadaki "listHiyerarsi" json list düzenlenmeli. -->
+                    <div id="divBagliBirimler"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    
+
+
+
+<header class="container-fluid">
+    
+    <div id="bannerBar" class="container-fluid">
+        <div class="container" style="padding:0;">
+            <a href="/">
+                    <img class="float-left" src="/Content/TemplateDefault/layout_images/banner_sol_tr_eski.png" />
+            </a>
+            <img class="float-right" src="/Content/TemplateDefault/layout_images/banner_sag.png" />
+            
+
+
+        </div>
+    </div>
+</header>
+<!-- NOT: sticky-top menüler mobilde scroll edilemiyor. Bu yüzden kaldırdık. -->
+
+<div id="mainBar" class="container-fluid" >
+
+    
+
+<style>
+    .dropdown-toggle::after {
+        display: none !important;
+    }
+</style>
+
+<div class="container navbar-container vertical-menu">
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <a class="navbar-brand d-lg-none" href="/">
+            <img src="/Content/TemplateDefault/layout_images/son/bddk_logo.png" style="background:#fff;height:48px;" />
+            
+        </a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav mr-auto">
+
+                        <li class="nav-item dropdown position-static">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Hakkımızda
+                            </a>
+                            <div class="dropdown-menu w-100" aria-labelledby="navbarDropdown">
+                                <div class="row">
+                                    <div class="col-lg-3 d-lg-block d-none">
+                                        <img src="/Content/TemplateDefault/layout_images/icons/kurumHakkinda.jpg" class="img-fluid"  />
+                                    </div>
+                                    <div class="col-lg-9 col-12">
+                                        <div class="row">
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/19">Tarih&#231;e</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/20">Misyon ve Vizyon</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/21">Başkan ve Kurul &#220;yeleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/22">Organizasyon Şeması</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/23">Faaliyet Raporları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/37">Stratejik Planlar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/25">Uluslararası İlişkiler</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/26">BDDK Bankacılık ve Finansal Piyasalar Dergisi</a>
+                                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/195">İnsan Kaynakları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/35">S&#252;rd&#252;r&#252;lebilir Bankacılık</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/24">Etik Komisyonu</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/KurumHakkinda/Detay/198">Kurumsal Kimlik</a>
+                                                                    </li>
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown position-static">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Duyurular
+                            </a>
+                            <div class="dropdown-menu w-100" aria-labelledby="navbarDropdown">
+                                <div class="row">
+                                    <div class="col-lg-3 d-lg-block d-none">
+                                        <img src="/Content/TemplateDefault/layout_images/icons/duyurular.jpg" class="img-fluid"  />
+                                    </div>
+                                    <div class="col-lg-9 col-12">
+                                        <div class="row">
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/39">Basın Duyuruları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/40">Mevzuat Duyuruları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/48">Kuruluş Duyuruları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/42">Veri Yayımlama Duyuruları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/41">İnsan Kaynakları Duyuruları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/197">G&#252;ncel Duyurular</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Duyuru/Liste/43">Duyuru Arşivi</a>
+                                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown position-static">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Mevzuat
+                            </a>
+                            <div class="dropdown-menu w-100" aria-labelledby="navbarDropdown">
+                                <div class="row">
+                                    <div class="col-lg-3 d-lg-block d-none">
+                                        <img src="/Content/TemplateDefault/layout_images/icons/mevzuat.jpg" class="img-fluid"  />
+                                    </div>
+                                    <div class="col-lg-9 col-12">
+                                        <div class="row">
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/49">Kanunlar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/50">Bankacılık Kanununa İlişkin D&#252;zenlemeler</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/51">Banka Kartları ve Kredi Kartları Kanununa İlişkin D&#252;zenlemeler</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/52">Finansal Kiralama, Faktoring, Finansman ve Tasarruf Finansman Şirketleri Kanununa İlişkin D&#252;zenlemeler</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/54">Bankacılık D&#252;zenleme ve Denetleme Kurumuna İlişkin D&#252;zenlemeler</a>
+                                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/55">Resmi Gazetede Yayımlanan Kurul Kararları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/56">Resmi Gazetede Yayımlanmayan Kurul Kararları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/58">D&#252;zenleme Taslakları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Mevzuat/Liste/63">M&#252;lga D&#252;zenlemeler</a>
+                                                                    </li>
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown position-static">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Veriler
+                            </a>
+                            <div class="dropdown-menu w-100" aria-labelledby="navbarDropdown">
+                                <div class="row">
+                                    <div class="col-lg-3 d-lg-block d-none">
+                                        <img src="/Content/TemplateDefault/layout_images/icons/veriler.jpg" class="img-fluid"  />
+                                    </div>
+                                    <div class="col-lg-9 col-12">
+                                        <div class="row">
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Veri/Index/69">Bankacılık Sekt&#246;r&#252; Verileri</a>
+                                                                        <ul>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/157">G&#252;nl&#252;k B&#252;lten</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/158">Haftalık B&#252;lten</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/159">Aylık B&#252;lten</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/160">FinT&#252;rk - İllere G&#246;re</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/161">Kredi Kartı Bilgileri Uygulaması</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/162">&#220;&#231;er Aylık Temel G&#246;stergeler</a></li>
+                                                                        </ul>
+                                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Veri/Index/70">Banka Dışı Mali Kuruluş Verileri</a>
+                                                                        <ul>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/163">Faktoring</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/164">Finansal Kiralama</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/165">Finansman Şirketleri</a></li>
+                                                                                <li><a class="dropdown-item" href="/Veri/Detay/166">Varlık Y&#246;netim</a></li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Veri/Detay/75">Bağımsız Denetim Raporları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Veri/Detay/71">VERİ YAYIMLAMA TAKVİMİ</a>
+                                                                    </li>
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown position-static">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Kuruluşlar
+                            </a>
+                            <div class="dropdown-menu w-100" aria-labelledby="navbarDropdown">
+                                <div class="row">
+                                    <div class="col-lg-3 d-lg-block d-none">
+                                        <img src="/Content/TemplateDefault/layout_images/icons/kuruluslar.jpg" class="img-fluid"  />
+                                    </div>
+                                    <div class="col-lg-9 col-12">
+                                        <div class="row">
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/77">Bankalar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/78">Finansal Kiralama Şirketleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/79">Faktoring Şirketleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/80">Finansman Şirketleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/89">Tasarruf Finansman Şirketleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/81">Finansal Holding Şirketleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/82">Varlık Y&#246;netim Şirketleri</a>
+                                                                    </li>
+
+                                                </ul>
+                                            </div>
+                                            <div class="col-lg-6 col-12">
+                                                <ul>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/83">Yabancı Bankaların T&#252;rkiye Temsilcilikleri</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/84">Bankalarda Bağımsız Denetim Yapmaya Yetkili Kuruluşlar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/85">Bankalara Değerleme Hizmeti Vermeye Yetkili Kuruluşlar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/86">Yetkili Derecelendirme Kuruluşları</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/88">5464 sayılı Banka Kartları ve Kredi Kartları Kanunu Kapsamında Faaliyet İzni Verilen Kuruluşlar</a>
+                                                                    </li>
+                                                                    <li>
+                                                                            <a class="dropdown-item" href="/Kurulus/Liste/87">Meslek Birlikleri</a>
+                                                                    </li>
+
+
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item position-static">
+                            <a class="nav-link" href="/Sss">
+                                SSS
+                            </a>
+                        </li>
+                        <li class="nav-item position-static">
+                            <a class="nav-link" href="/Iletisim">
+                                İletişim
+                            </a>
+                        </li>
+
+            </ul>
+            
+
+            <div id="mainSearch2" class="form-inline col-lg-3 d-lg-block d-none">
+                <form method="get" action="/Home/Ara">
+                    <input type="search" id="tags" placeholder="Ara" name="metin">
+                    <button type="submit"><i class="fa fa-search"></i></button>
+                </form>
+            </div>
+
+            
+                <div id="ustMenu" class="col-lg-1">
+                    <nav class="nav float-right">
+                        <a class="nav-link" style="color:white" href="/Home/DilDegistir">EN</a>
+                    </nav>
+                </div>
+
+            </div>
+    </nav>
+</div>
+
+</div>
+
+
+    <div id="main-container">
+        <div id="upperImage-container">
+            <div id="inner-container" class="container">
+                <div class="row">
+
+                        <div id="content-container" class="col-md-9">
+                            
+
+
+
+<h2>
+Basın Duyuruları
+    <span class="title-under"></span>
+</h2>
+
+
+<div id="inPageSearch" class="">
+    <input type="search" id="searchText" placeholder="Ara" name="metin" oninput="SearchFunction()">
+</div>
+
+<div id="partialContainer">
+    
+
+
+<div class="kategoriListContainer">
+    <div class="kategoriList">
+        <ul>
+                            <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/3303">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.09.2026</span>
+                                Bank Mellat Merkezi Tahran İstanbul T&#252;rkiye Merkez Şubesinin Faaliyet İzninin Kaldırılmasına İlişkin Basın Duyurusu 
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/3301">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.09.2026</span>
+                                Golden Global Yatırım Bankası A.Ş. Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/3297">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">14.08.2026</span>
+                                Dolandırıcılık Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2289">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">22.05.2026</span>
+                                BDDK 2025 Faaliyet Raporunun Yayımlanması Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2152">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.02.2026</span>
+                                Dolandırıcılık Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2158">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.01.2026</span>
+                                30 Ocak 2026 tarihinde Kamuoyu ile Paylaşılan Makro İhtiyati &#214;nlemlere İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2157">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">30.01.2026</span>
+                                Bireysel Kredi Kartları ve İhtiya&#231; Kredilerinin Yeniden Yapılandırılması, Kredi Kartları ve Kredili Mevduat Hesaplarının Limitlerinin Belirlenmesi ve Konut Kredilerinde Kredi Değer Oranı Değişikliği Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2150">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.01.2026</span>
+                                Temassız &#214;demelerde Şifresiz İşlem Limitine İlişkin Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2138">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.10.2025</span>
+                                BDDK Altıncı Stratejik Planı (2025-2028) Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2122">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.07.2025</span>
+                                Kredi Kartları ve İhtiya&#231; Kredilerinin Yeniden Yapılandırılmasına İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2116">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">30.05.2025</span>
+                                BDDK 2024 Faaliyet Raporunun Yayımlanması Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2110">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.04.2025</span>
+                                Bankaların Yeşil Varlık Oranı Hesaplaması Hakkında Tebliğ” İle “İklimle Bağlantılı Finansal Risklerin Y&#246;netimine İlişkin Rehber” Hakkında Basın A&#231;ıklaması Yayınlanmıştır.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2109">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.04.2025</span>
+                                Bankacılık Mevzuatının Basel Standartlarına Uyumlu Bulunmasına İlişkin Rapor (RCAP) Hakkında Basın A&#231;ıklaması yayınlanmıştır.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2105">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.03.2025</span>
+                                Bankpozitif Kredi ve Kalkınma Bankası A.Ş. Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2101">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">14.02.2025</span>
+                                T&#252;ketici Kredileri Genel Vade Sınırının Değiştirilmesine İlişkin  Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2097">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">06.01.2025</span>
+                                Dolandırıcılık Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2093">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">05.12.2024</span>
+                                Enflasyon Muhasebesi Uygulamasına İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2074">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.09.2024</span>
+                                Kredi Kartı ve İhtiya&#231; Kredilerinin Yeniden Yapılandırılması ile Kredi Kartı Asgari &#214;deme Tutarının Değiştirilmesine İlişkin Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2073">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.09.2024</span>
+                                Bireysel Krediler ve Konut Kredilerinin Risk Ağırlıklarına İlişkin Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2065">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.08.2024</span>
+                                Enflasyon Muhasebesi Uygulamasına Ge&#231;iş Hazırlıklarına İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2064">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">19.08.2024</span>
+                                T&#252;rk Bankacılık Sekt&#246;r&#252; S&#252;rd&#252;r&#252;lebilir Bankacılık Soru Seti Bulguları Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2054">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.06.2024</span>
+                                Basel IV Standartlarına Uyum Kapsamında Hazırlanan D&#252;zenleme Taslakları Hakkında Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2053">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.05.2024</span>
+                                BDDK 2023 Faaliyet Raporunun Yayımlanması Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2047">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.04.2024</span>
+                                Kalkınma ve Yatırım Bankalarında Mevduat Sayılmayacak Fonlara İlişkin Y&#246;netmelik Taslağı ile Bu Bankaların Tabi Olacağı Kredi Sınırlarına İlişkin Tebliğ Taslağı Hk. Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2046">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.04.2024</span>
+                                Zamanaşımına Uğrayan Hesapların Mektup Limitinin Y&#252;kseltilmesine İlişkin 18.04.2024 tarihli ve 10894 sayılı Kurul Kararı
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2027">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">10.11.2023</span>
+                                Basın A&#231;ıklaması (Dolandırıcılık Uyarısı Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2016">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.07.2023</span>
+                                Basın A&#231;ıklaması (Finansal İstikrarın G&#252;&#231;lendirilmesine Y&#246;nelik Kurul Kararları Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/2008">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">30.05.2023</span>
+                                Basın A&#231;ıklaması (BDDK Yıllık Faaliyet Raporu 2022)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/1983">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.01.2023</span>
+                                Avrupa Birliği Sınırda Karbon D&#252;zenleme Mekanizmasının T&#252;rk Bankacılık Sekt&#246;r&#252; Kredi Portf&#246;y&#252;ne Olası Etkileri Hk. Etki Analizi &#199;alışması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/1977">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.12.2022</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/951">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.06.2022</span>
+                                Kredi Kullandırımlarına İlişkin 24.06.2022 tarihli ve 10250 Sayılı Bankacılık D&#252;zenleme ve Denetleme Kurulu Kararı Hakkında A&#231;ıklama
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/950">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">23.06.2022</span>
+                                Finansal İstikrarın G&#252;&#231;lendirilmesine Y&#246;nelik Tedbirler Hk. Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/949">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.06.2022</span>
+                                S&#252;rd&#252;r&#252;lebilir Bankacılık &#199;alışmaları Hk. Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/948">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.06.2022</span>
+                                Finansal İstikrarın G&#252;&#231;lendirilmesine Y&#246;nelik Tedbirler
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/936">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.04.2022</span>
+                                Tasarruf Finansman Şirketlerinin İntibak S&#252;recine İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/925">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.02.2022</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/923">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">04.02.2022</span>
+                                Murise Ait Mevduat/Katılım Fonu Hesabı Bulunan Banka Sorgulama Hizmeti Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/911">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.01.2022</span>
+                                Banka Dışı Mali Kuruluşların Uzaktan Kimlik Tespiti Yapmalarına İlişkin D&#252;zenleme Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/907">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.12.2021</span>
+                                BDDK Beşinci Stratejik Planı (2022-2024) Hakkında
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/904">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.12.2021</span>
+                                Dijital Bankalar ve Servis Modeli Bankacılığı Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/902">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.12.2021</span>
+                                S&#252;rd&#252;r&#252;lebilir Bankacılık Stratejik Planı Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/901">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">24.12.2021</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/899">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.12.2021</span>
+                                Kredilerin Amacına Uygun Kullandırımı Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/896">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.12.2021</span>
+                                Kurumumuz Sosyal Medya Hesapları Hakkında
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/887">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.11.2021</span>
+                                Tasarruf Finansman Şirketleri Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/877">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">07.10.2021</span>
+                                İntibak S&#252;reci Devam Eden Tasarruf Finansman Şirketleri Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/851">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.07.2021</span>
+                                Tasarruf Finansman Şİrketlerinin Tasfiye S&#252;reci Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/848">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">08.07.2021</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/847">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.07.2021</span>
+                                Tasarruf Finansman Şirketleri Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/846">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.07.2021</span>
+                                Tasarruf Finansman Faaliyetinde Bulunan Kişi ve Kuruluşlar Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/845">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">01.07.2021</span>
+                                Basın A&#231;ıklaması (Makro İhtiyati Tedbirler Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/839">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">10.06.2021</span>
+                                BDDK Yıllık Faaliyet Raporu 2020
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/741">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.04.2021</span>
+                                Bireysel Bankacılık Analiz ve Derecelendirme Modeli Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/739">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">08.04.2021</span>
+                                Tasarruf Finansman Şİrketleri Yasal Başvuru S&#252;resinin Sonra Ermesi Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/737">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.03.2021</span>
+                                Tasarruf Finansman Faaliyetleri Hk. 
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/735">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">12.03.2021</span>
+                                Tasarruf Finansman Faaliyetinde Bulunan Kişi ve Kuruluşlar Hk.
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/730">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.12.2020</span>
+                                Basın A&#231;ıklaması (Kredi Vade Sınırları ve Kredi Kartı Taksit Sınırlarında Değişiklik Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/728">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">08.12.2020</span>
+                                Basın A&#231;ıklaması (Pandemi D&#246;nemi Kararları Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/726">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">30.11.2020</span>
+                                Basın A&#231;ıklaması (Yurtdışı Yerleşiklerle Ger&#231;ekleştirilen TL İşlemlere İlişkin Sınırlar Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/724">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">24.11.2020</span>
+                                (24.11.2020-9271) Aktif Rasyosunun(AR) Y&#252;r&#252;rl&#252;kten Kaldırılması Hk Kurul Kararı
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/720">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.11.2020</span>
+                                Basın A&#231;ıklaması (T&#252;rev İşlem Sınırları Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/718">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.10.2020</span>
+                                (26.10.2020-9238) Aktif Rasyosunun(AR) Revize Edilmesi Hk Kurul Kararı
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/716">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">01.10.2020</span>
+                                Basın A&#231;ıklaması (Sahte İnternet Siteleri Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/712">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">25.09.2020</span>
+                                Basın A&#231;ıklaması (T&#252;rev İşlem Sınırları Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/705">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">06.08.2020</span>
+                                Basın A&#231;ıklaması (Yurt dışı Yerleşiklerle Ger&#231;ekleştirilen TL İşlemlere İlişkin Sınırlar Hk) 
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/704">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">06.08.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/702">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.07.2020</span>
+                                Basın A&#231;ıklaması(Yurtdışı Yerleşiklerle Ger&#231;ekleştirilen TL İşlemlere İlişkin Sınırlar Hk)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/701">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.07.2020</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Limiti ve Asgari &#214;deme Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/700">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.07.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/699">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.06.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/698">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">25.06.2020</span>
+                                Basın A&#231;ıklaması (BDDK Yıllık Faaliyet Raporu 2019)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/697">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.06.2020</span>
+                                 Basın A&#231;ıklaması (Kredi Kartı Taksitlendirme S&#252;releri Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/695">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/694">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">21.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/693">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/692">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/689">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">07.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/688">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">05.05.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/687">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">12.04.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/686">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">07.04.2020</span>
+                                Basın a&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/685">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">03.04.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/684">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.03.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/683">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">23.03.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/682">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.03.2020</span>
+                                Basın A&#231;ıklaması (İş S&#252;rekliliği Tedbirleri)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/681">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">04.03.2020</span>
+                                Basın A&#231;ıklaması (e-Devlet Hizmeti)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/679">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">10.02.2020</span>
+                                &#220;cretler Y&#246;netmeliği Değişiklikleri
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/677">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">09.02.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/676">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.01.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/675">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">24.01.2020</span>
+                                Vefat Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/674">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.01.2020</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/673">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.01.2020</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Taksitlendirme S&#252;releri Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/669">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.12.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/668">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.12.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/667">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">04.12.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/664">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">25.10.2019</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Taksitlendirme S&#252;releri Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/662">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.09.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/658">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.06.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/657">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">14.06.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/656">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.06.2019</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Asgari &#214;deme Tutarı Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/655">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">12.06.2019</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Taksitlendirme S&#252;releri Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/654">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">24.05.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/653">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">21.05.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/648">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.03.2019</span>
+                                Basın A&#231;ıklaması (Kredi Kartı Taksitlendirme S&#252;releri Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/647">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.03.2019</span>
+                                Basın Duyurusu (Stratejik Plan 2019-2021 Hk.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/646">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">23.03.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/645">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">23.03.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/641">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.02.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/640">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">14.02.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/638">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">12.02.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/637">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">01.02.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/636">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">21.01.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/635">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.01.2019</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/633">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">27.12.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/631">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">19.09.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/630">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.09.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/629">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">08.09.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/628">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">04.09.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/627">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.08.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/625">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.08.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/624">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">14.08.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/622">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.08.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/620">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.08.2018</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/619">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.08.2018</span>
+                                Makro İhtiyati D&#252;zenlemeleri İ&#231;eren Taslaklar Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/596">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">06.03.2018</span>
+                                Kredilerin Sınıflandırılması ve Bunlar İ&#231;in Ayrılacak Karşılıklara İlişkin Usul ve Esaslar Hakkında Y&#246;netmelik Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/590">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.12.2017</span>
+                                Karşılık Y&#246;netmeliği Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/589">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.12.2017</span>
+                                Online Kredi Kartı Kullanımı İ&#231;in M&#252;şteri Onayının Alınması Uygulamasına Ge&#231;iş İ&#231;in Bankalara Ek S&#252;re Verilmesi Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/586">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.11.2017</span>
+                                Bankaların Birleşme, Devir, B&#246;l&#252;nme ve Hisse Değişimi Hakkında Y&#246;netmelikte Değişiklik Yapılmasına Dair Y&#246;netmelik Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/585">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">31.10.2017</span>
+                                Fatura &#214;demelerine Aracılık Hizmeti Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/584">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">21.10.2017</span>
+                                Bazı Basın Organlarında Bankalar Hakkında &#199;ıkan Haberler Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/583">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.08.2017</span>
+                                Online Kredi Kartı Kullanımı İ&#231;in M&#252;şteri Onayının Alınması Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/582">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.08.2017</span>
+                                Banka Kartları ve Kredi Kartları Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/581">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.03.2017</span>
+                                Dolandırıcılık Uyarısı Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/580">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.03.2017</span>
+                                Online Kredi Kartı Kullanımı Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/579">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.01.2017</span>
+                                Bank of China Limited Hakkında Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/577">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.12.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/576">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">22.06.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/575">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">20.06.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/573">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">11.04.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/571">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">05.04.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/570">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">16.03.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/569">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">19.02.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/568">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.01.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/567">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">18.01.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/566">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">08.01.2016</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/565">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.12.2015</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/564">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">28.12.2015</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/563">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">23.12.2015</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/562">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">30.11.2015</span>
+                                T&#252;rk Bankacılık Sekt&#246;r&#252;n&#252;n Konsolide Olmayan Ana G&#246;stergeleri (Ekim 2015)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/561">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">26.10.2015</span>
+                                İyi Uygulama Rehberleri
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/560">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">02.10.2015</span>
+                                Sistemik &#214;nemli Bankalar Hakkında Y&#246;netmelik Taslağına İlişkin Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/559">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.09.2015</span>
+                                İyi Uygulama Rehberinin G&#246;r&#252;şe A&#231;ılması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/558">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">03.09.2015</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/557">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">19.08.2015</span>
+                                Başkanımız Sayın Mehmet Ali AKBEN&#39;in 19.08.2015 tarihinde Anadolu Ajansı Finans Masası&#39;nda verdiği m&#252;lakat
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/556">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">17.08.2015</span>
+                                İyi Uygulama Rehberlerinin G&#246;r&#252;şe A&#231;ılması Basın Duyurusu
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/555">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">15.07.2015</span>
+                                Basın A&#231;ıklaması 15 Temmuz 2015
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/554">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">29.05.2015</span>
+                                29 Mayıs 2015 tarihli Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/553">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">13.04.2015</span>
+                                Basın A&#231;ıklaması
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/552">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">03.02.2015</span>
+                                Basın A&#231;ıklaması (Asya Katılım Bankası AŞ.)
+                            </span>
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="kategoriContainer">
+                        <a href="/Duyuru/Detay/551">
+                            <span class="icon">
+                                <span class="iconCircle"><i class="fa fa-file-alt fa-2x"></i></span>
+                            </span>
+                            <span class="text">
+                                <span class="gorunenTarih">03.02.2015</span>
+                                T&#252;rk Bankacılık Sekt&#246;r&#252;n&#252;n Konsolide Olmayan Ana G&#246;stergeleri (Aralık 2014 )
+                            </span>
+                        </a>
+                    </div>
+                </li>
+        </ul>
+    </div>
+</div>
+</div>
+
+                        </div>
+                        <div id="yanMenuContainer" class="col-md-3">
+                            <ul>
+                                <li class="liUstKategori">
+                                    <a class="aUstKategori" href="/Duyuru/Index/2">Duyurular</a>
+                                    <ul>                                        
+                                            <li>
+                                                    <a href="/Duyuru/Liste/39">Basın Duyuruları</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/40">Mevzuat Duyuruları</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/48">Kuruluş Duyuruları</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/42">Veri Yayımlama Duyuruları</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/41">İnsan Kaynakları Duyuruları</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/197">G&#252;ncel Duyurular</a>
+                                            </li>
+                                            <li>
+                                                    <a href="/Duyuru/Liste/43">Duyuru Arşivi</a>
+                                            </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+<style>
+
+    ul.honk {
+        list-style: none;
+        padding-left: 0;
+    }
+
+        ul.honk > li {
+            float: left;
+            padding: 1em;
+        }
+
+        ul.honk a {
+            color: #fff;
+            text-decoration: none;
+        }
+
+        ul.honk > li > ul {
+            list-style: none;
+            padding-left: 0;
+            border-top: 1px solid #fff;
+            font-size: 10pt;
+        }
+
+            ul.honk > li > ul > li {
+                padding-top: 1em;
+            }
+</style>
+
+
+    <footer>
+        <div class="container">
+            <div class="row">
+
+                <div class="col-lg-8 col-md-12">
+                    <ul class="row honk">
+                            <li class="col-lg-3 col-md-6 text-center">
+                                <a href="/KurumHakkinda">
+                                    Hakkımızda
+                                </a>
+
+                            <ul>
+                                            <li class="text-left">
+
+
+                                                <a href="/KurumHakkinda/Detay/21">Başkan ve Kurul &#220;yeleri</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/KurumHakkinda/Detay/22">Organizasyon Şeması</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/KurumHakkinda/Detay/23">Faaliyet Raporları</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/KurumHakkinda/Detay/195">İnsan Kaynakları</a>
+
+                                            </li>
+
+                            </ul>
+
+                            </li>
+                            <li class="col-lg-3 col-md-6 text-center">
+                                <a href="/Duyuru">
+                                    Duyurular
+                                </a>
+
+                            <ul>
+                                            <li class="text-left">
+
+
+                                                <a href="/Duyuru/Liste/39">Basın Duyuruları</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/Duyuru/Liste/42">Veri Yayımlama Duyuruları</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/Duyuru/Liste/41">İnsan Kaynakları Duyuruları</a>
+
+                                            </li>
+
+                            </ul>
+
+                            </li>
+                            <li class="col-lg-3 col-md-6 text-center">
+                                <a href="/Veri">
+                                    Veriler
+                                </a>
+
+                            <ul>
+                                            <li class="text-left">
+
+
+                                                <a href="/Veri/Index/69">Bankacılık Sekt&#246;r&#252; Verileri</a>
+
+                                            </li>
+                                            <li class="text-left">
+
+
+                                                <a href="/Veri/Index/70">Banka Dışı Mali Kuruluş Verileri</a>
+
+                                            </li>
+
+                            </ul>
+
+                            </li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-4 col-md-12 iletisimContainer">
+                    <p class="text-right">
+                        <a target="_blank" class="text-white ml-2" href="https://twitter.com/BDDKResmi"><i class="fa-brands fa-square-x-twitter fa-2x " ></i></a>
+                        <a target="_blank" class="text-white ml-2" href="https://www.instagram.com/bddkresmi"><i class="fab fa-instagram fa-2x"></i></a>
+                        <a target="_blank" class="text-white ml-2" href="https://www.linkedin.com/company/bddkresmi"><i class="fab fa-linkedin fa-2x"></i></a>
+                    </p>
+                    <table>
+                        <tr><td colspan="2" class="lead" style="font-size:12pt">Bankacılık Düzenleme ve Denetleme Kurumu</td></tr>
+                        <tr><td class="text-left" style="font-size:10pt"><strong>Telefon:</strong></td><td style="font-size:10pt">(212) 214 50 00</td></tr>
+                        <tr><td class="text-left" style="font-size:10pt"><strong>Çağrı Merkezi:</strong></td><td style="font-size:10pt">0850 222 23 35</td></tr>
+                        <tr>
+                            <td class="text-left" style="font-size:10pt"><strong>Adres:</strong></td>
+                            <td style="font-size:10pt">
+                                Finanskent Mahallesi Finans Caddesi No:42/1
+                                34760 Ümraniye/İSTANBUL
+                            </td>
+                        </tr>
+                    </table>
+                    
+
+                    <!--<p class="text-left">
+                        Kurumumuzun internet adresi "www.bddk.org.tr" ve "www.bddk.gov.tr"dir. Kurumumuzun mobil uygulaması bulunmamaktadır.
+                        Kurumumuz hiçbir şekilde telefon, e-posta, internet sitesi veya başka ortamlarda kişisel bilgi talep etmemektedir!
+                    </p>
+                    <button type="button" class="btn btn-light" data-toggle="modal" data-target=".modalKullanimSartlari">Kullanım Şartları</button>-->
+                    <!-- Modal Kullanım Şartları (Begin) -->
+                    <!--<div class="modal fade modalKullanimSartlari" tabindex="-1" role="dialog" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h4 class="modal-title text-center">Kullanım Şartları</h4>
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="text-center font-weight-bold">
+                                        BDDK web sitesine hoş geldiniz.<br />
+                                        Bu siteyi kullandığınız takdirde aşağıdaki koşulları kabul etmiş sayılacaksınız.
+                                    </p>
+                                    <p class="text-justify">
+                                        BDDK web sitesinin yayınlanması, hiçbir kişi ve/veya kuruluşa herhangi bir konuda herhangi bir taahhüdü içermemektedir.
+                                        Sitede yer alan bilgiler, kişi ve kuruluşlara yönelik talimat verilmesi, hukuken onların herhangi bir doğrultuya yönlendirmesi amaçlarını
+                                        ve tebligat niteliğini taşımamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Web sitemizde yayınlanan çalışmalardan, kaynak gösterilmek suretiyle kısmen alıntı yapılabilir ancak bu bilgilerin ticari amaçlarla kullanımı BDDK'nın yazılı iznine tabidir.
+                                    </p>
+                                    <p class="text-justify">
+                                        BDDK, web sitesinde yayınlanan bilgilerin güncel ve doğru bilgilerle yayınlanmasını temin etmek amacıyla elinden gelen çabayı
+                                        göstermekle birlikte, BDDK'nın bu bilgilerin doğruluğu ve tamlığı konusunda açık veya zımni şekilde kefalet veya garanti verdiği yolunda hiçbir taahhüdü bulunmamaktadır.
+                                        Kullanıcılar sisteme girmeleri ile birlikte; BDDK tarafından yayınlanan bilgilerin kullanımı sonucunda doğrudan veya dolaylı bir kayıp veya zarar doğması halinde,
+                                        bu durumun BDDK'na hiçbir borç, sorumluluk veya mükellefiyet yüklemeyeceğini açık olarak kabul etmiş sayılırlar.
+                                    </p>
+                                    <p class="text-justify">
+                                        Sitede yer alan bütün metinler ve/veya hizmetler, önceden kullanıcılara bildirimde bulunmaksızın BDDK tarafından değiştirilebilir.
+                                        BDDK web sitesi ön bilgi verilmeden kullanım dışı bırakılabilir. BDDK web sitesinde yayınlanmış bilgiler, ya da bilgilere dayanılarak
+                                        yapılan işlemlerden veya siteye ulaşılamamasından doğan veya doğacak zarar ve/veya kayıplardan dolayı sorumluluk kabul etmez.
+                                    </p>
+                                    <p class="text-justify">
+                                        Site özenle hazırlanılmış olmasına rağmen, site ziyaretçileri; sitedeki bilgilerin, konuyla ilgili profesyonel danışmanlığın yerini alacağını düşünmemelidirler.
+                                        Bu nedenle, sitede yer alan bilgileri herhangi bir şekil ve surette kullanmadan önce, konuyla ilgili profesyonel danışmanınızla görüşmenizi tavsiye ederiz.
+                                    </p>
+                                    <p class="text-justify">
+                                        İnsan hataları, teknik veya diğer faktörler nedeniyle hata veya bilgi eksikliği/yanlışlığının veya güncellik yitirmesinin vuku bulabileceği tabiidir.
+                                        BDDK, sistemde yer alan bilgilerdeki hata ve eksikliklerden hiçbir şekilde sorumlu bulunmamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Bu site BDDK'na ait olup site içerisindeki bilgilerin bir kısmı Kurum, bir kısmı da diğer kaynaklardan sağlanarak Kurum tarafından yayınlanmaktadır.
+                                        Sitemizden bağlantı yapılarak ulaşılan diğer sitelerdeki bilgiler, ilgili kuruluşlar tarafından yayınlanmakta olup, BDDK'nu bağlamamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Kurumumuz web sitesi Temmuz 2018 itibarıyla güncellenmiştir. Bu tarihten öncesine ait duyurularda güncel olmayan linkler yer alabilir.
+                                        Bu konuda sorun yaşanması durumunda kullanıcılarımız Kurumumuz ile iletişime geçebilirler.
+                                    </p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Kapat</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>-->
+                </div>
+            </div>
+
+
+            <div class="row">
+                <div class="col-12">
+                    <p class="text-center">
+                        Kurumumuzun internet adresi "www.bddk.gov.tr"dir. ("www.bddk.org.tr" adresi de kullanılmaya devam etmektedir.)
+                        Kurumumuzun mobil uygulaması bulunmamaktadır.<br />
+                        Kurumumuz hiçbir şekilde telefon, e-posta, internet sitesi veya başka ortamlarda kişisel bilgi talep etmemektedir!
+                    </p>
+
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="button" class="btn btn-light d-block mr-2" data-toggle="modal" data-target=".modalKullanimSartlari">Kullanım Şartları</button>
+
+                        <a href="/Content/docs/bddkImages/KVKK_Aydinlatma_Metni.pdf" target="_blank" class="btn btn-light d-block">
+                            Kişisel Verilerin İşlenmesi ve Korunması
+                        </a>
+                    </div>
+
+
+
+
+
+                    <!-- Modal Kullanım Şartları (Begin) -->
+                    <div class="modal fade modalKullanimSartlari" tabindex="-1" role="dialog" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h4 class="modal-title text-center">Kullanım Şartları</h4>
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="text-center font-weight-bold">
+                                        BDDK web sitesine hoş geldiniz.<br />
+                                        Bu siteyi kullandığınız takdirde aşağıdaki koşulları kabul etmiş sayılacaksınız.
+                                    </p>
+                                    <p class="text-justify">
+                                        BDDK web sitesinin yayınlanması, hiçbir kişi ve/veya kuruluşa herhangi bir konuda herhangi bir taahhüdü içermemektedir.
+                                        Sitede yer alan bilgiler, kişi ve kuruluşlara yönelik talimat verilmesi, hukuken onların herhangi bir doğrultuya yönlendirmesi amaçlarını
+                                        ve tebligat niteliğini taşımamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Web sitemizde yayınlanan çalışmalardan, kaynak gösterilmek suretiyle kısmen alıntı yapılabilir ancak bu bilgilerin ticari amaçlarla kullanımı BDDK'nın yazılı iznine tabidir.
+                                    </p>
+                                    <p class="text-justify">
+                                        BDDK, web sitesinde yayınlanan bilgilerin güncel ve doğru bilgilerle yayınlanmasını temin etmek amacıyla elinden gelen çabayı
+                                        göstermekle birlikte, BDDK'nın bu bilgilerin doğruluğu ve tamlığı konusunda açık veya zımni şekilde kefalet veya garanti verdiği yolunda hiçbir taahhüdü bulunmamaktadır.
+                                        Kullanıcılar sisteme girmeleri ile birlikte; BDDK tarafından yayınlanan bilgilerin kullanımı sonucunda doğrudan veya dolaylı bir kayıp veya zarar doğması halinde,
+                                        bu durumun BDDK'na hiçbir borç, sorumluluk veya mükellefiyet yüklemeyeceğini açık olarak kabul etmiş sayılırlar.
+                                    </p>
+                                    <p class="text-justify">
+                                        Sitede yer alan bütün metinler ve/veya hizmetler, önceden kullanıcılara bildirimde bulunmaksızın BDDK tarafından değiştirilebilir.
+                                        BDDK web sitesi ön bilgi verilmeden kullanım dışı bırakılabilir. BDDK web sitesinde yayınlanmış bilgiler, ya da bilgilere dayanılarak
+                                        yapılan işlemlerden veya siteye ulaşılamamasından doğan veya doğacak zarar ve/veya kayıplardan dolayı sorumluluk kabul etmez.
+                                    </p>
+                                    <p class="text-justify">
+                                        Site özenle hazırlanılmış olmasına rağmen, site ziyaretçileri; sitedeki bilgilerin, konuyla ilgili profesyonel danışmanlığın yerini alacağını düşünmemelidirler.
+                                        Bu nedenle, sitede yer alan bilgileri herhangi bir şekil ve surette kullanmadan önce, konuyla ilgili profesyonel danışmanınızla görüşmenizi tavsiye ederiz.
+                                    </p>
+                                    <p class="text-justify">
+                                        İnsan hataları, teknik veya diğer faktörler nedeniyle hata veya bilgi eksikliği/yanlışlığının veya güncellik yitirmesinin vuku bulabileceği tabiidir.
+                                        BDDK, sistemde yer alan bilgilerdeki hata ve eksikliklerden hiçbir şekilde sorumlu bulunmamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Bu site BDDK'na ait olup site içerisindeki bilgilerin bir kısmı Kurum, bir kısmı da diğer kaynaklardan sağlanarak Kurum tarafından yayınlanmaktadır.
+                                        Sitemizden bağlantı yapılarak ulaşılan diğer sitelerdeki bilgiler, ilgili kuruluşlar tarafından yayınlanmakta olup, BDDK'nu bağlamamaktadır.
+                                    </p>
+                                    <p class="text-justify">
+                                        Kurumumuz web sitesi Temmuz 2018 itibarıyla güncellenmiştir. Bu tarihten öncesine ait duyurularda güncel olmayan linkler yer alabilir.
+                                        Bu konuda sorun yaşanması durumunda kullanıcılarımız Kurumumuz ile iletişime geçebilirler.
+                                    </p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Kapat</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+        </div>
+        
+    </footer>
+
+
+
+
+</body>
+</html>

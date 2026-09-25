@@ -16,14 +16,15 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.base import ChannelContext, ChannelResult, FetchedDocument, ItemRef
 from app.collectors.config import ChannelConfig, SourceConfig
-from app.collectors.http import FetchError, Fetcher
+from app.collectors.http import Fetcher, FetchError
+from app.collectors.resolvers import resolve
 from app.collectors.strategies import get_strategy
 from app.collectors.strategies._html import absolutize, parse_html
 from app.db import FetchRun, RawDocument, Source, latest_documents
@@ -42,6 +43,7 @@ class ChannelReport:
     changed: int = 0
     unchanged: int = 0
     deferred: int = 0
+    refreshed: int = 0
     signature: str = ""
     structure_changed: bool = False
     empty_listing: bool = False
@@ -72,7 +74,24 @@ def list_channel(source: SourceConfig, channel: ChannelConfig, fetcher: Fetcher,
                  now: datetime | None = None, since: datetime | None = None) -> ChannelResult:
     ctx = ChannelContext(source=source, channel=channel, fetcher=fetcher, now=now or datetime.now(timezone.utc),
                          since=since)
-    return get_strategy(channel.strategy).list_items(ctx)
+    result = get_strategy(channel.strategy).list_items(ctx)
+    result.items = _normalize_external(result.items)
+    return result
+
+
+def _normalize_external(items: list[ItemRef]) -> list[ItemRef]:
+    """Bilinen dış belge sitelerine giden bağlantılara kanonik kimlik/adres verir; aynı belgeyi tekilleştirir."""
+    out: list[ItemRef] = []
+    seen: set[str] = set()
+    for ref in items:
+        if (res := resolve(ref.url)) is not None:
+            ref.external_id, ref.url = res.canonical_id, res.public_url
+            ref.extra = {**res.meta, **ref.extra}
+            if ref.external_id in seen:
+                continue
+            seen.add(ref.external_id)
+        out.append(ref)
+    return out
 
 
 def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, fetcher: Fetcher,
@@ -88,7 +107,8 @@ def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, 
         main = FetchedDocument(ref.url, ref.url, ref.inline_content, ref.inline_content_type or "text/html", now,
                                title=ref.title)
     else:
-        resp = fetcher.get(ref.url)
+        res = resolve(ref.url)
+        resp = fetcher.get(res.content_url if res else ref.url)
         main = FetchedDocument(ref.url, resp.final_url, resp.content, resp.content_type, now, title=ref.title)
     docs = [main]
     if channel.attachment_pattern and main.content_type == "text/html":
@@ -155,7 +175,7 @@ class SourceCollector:
                 rep.empty_listing = rep.items < self.source.expected.min_items_per_run
                 rep.structure_changed = bool(prev.get("signature") and rep.signature
                                              and prev["signature"] != rep.signature)
-                budget = self._store_items(session, run, channel, result.items, rep, budget, rep.baseline)
+                budget = self._store_items(session, run, channel, result.items, rep, budget, rep.baseline, now)
                 # Mevcut içeriğin tamamı arşive alındığında (ertelenen kalmadıysa) kanal normal moda geçer
                 rep.baseline_complete = rep.baseline_complete or rep.deferred == 0
 
@@ -175,14 +195,22 @@ class SourceCollector:
     # ------------------------------------------------------------------ yardımcılar
 
     def _store_items(self, session: Session, run: FetchRun, channel: ChannelConfig, items: list[ItemRef],
-                     rep: ChannelReport, budget: int, baseline: bool = False) -> int:
+                     rep: ChannelReport, budget: int, baseline: bool = False,
+                     now: datetime | None = None) -> int:
         existing = latest_documents(session, self.source.code, [i.external_id for i in items])
+        refresh_budget = channel.refresh_max_per_run if channel.refresh_after_days else 0
+        now = now or datetime.now(timezone.utc)
         for ref in items:
             prev = existing.get(ref.external_id)
             listing_hash = ref.listing_hash()
+            refreshing = False
             if prev is not None and prev.listing_hash == listing_hash:
-                rep.unchanged += 1
-                continue
+                if refresh_budget <= 0 or budget <= 0 or not self._refresh_due(prev, channel, now):
+                    rep.unchanged += 1
+                    continue
+                refresh_budget -= 1
+                refreshing = True
+                rep.refreshed += 1
             if budget <= 0:
                 rep.deferred += 1
                 continue
@@ -196,8 +224,12 @@ class SourceCollector:
             key, sha = self.storage.put(main.content)
             if prev is not None and prev.content_sha256 == sha:
                 prev.listing_hash, prev.version_key, prev.title = listing_hash, ref.version_key, ref.title
+                prev.extra = {**(prev.extra or {}), "checked_at": now.isoformat()}  # JSON alanı yeniden atanmalı
                 rep.unchanged += 1
+                session.commit()
                 continue
+            if refreshing:
+                log.info("%s: içerik yerinde güncellenmiş: %s", self.source.code, ref.url)
             version = 1
             if prev is not None:
                 prev.is_latest = False
@@ -213,9 +245,20 @@ class SourceCollector:
                 akey, asha = self.storage.put(att.content)
                 att_ref = ItemRef(ref.source, ref.channel, f"{ref.external_id}#{asha[:12]}", att.url,
                                   att.title or ref.title, ref.published_at, ref.category)
-                self._add_doc(session, run, channel, att_ref, att, akey, asha, version, None, parent_id=parent.id)
+                row = self._add_doc(session, run, channel, att_ref, att, akey, asha, version, None,
+                                    parent_id=parent.id)
+                row.processing_status = parent.processing_status   # BASELINE ana belgenin ekleri de BASELINE
             session.commit()
         return budget
+
+    @staticmethod
+    def _refresh_due(prev: RawDocument, channel: ChannelConfig, now: datetime) -> bool:
+        last = prev.fetched_at
+        if checked := (prev.extra or {}).get("checked_at"):
+            last = datetime.fromisoformat(checked)
+        if last.tzinfo is None:  # SQLite tz bilgisini saklamaz
+            last = last.replace(tzinfo=timezone.utc)
+        return now - last >= timedelta(days=channel.refresh_after_days or 0)
 
     def _add_doc(self, session, run, channel, ref, doc: FetchedDocument, key, sha, version, listing_hash,
                  parent_id=None) -> RawDocument:

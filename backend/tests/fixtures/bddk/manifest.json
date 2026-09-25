@@ -1,0 +1,116 @@
+{
+ "https://www.bddk.org.tr/Duyuru/Liste/39": {
+  "file": "de531e980ea11794.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Liste/39",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/Detay/3303": {
+  "file": "e6c8fb02ae922ad3.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Detay/3303",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/EkGetir/3303?ekId=936": {
+  "file": "cc5ae9d74e384c9d.pdf",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/EkGetir/3303?ekId=936",
+  "content_type": "application/pdf"
+ },
+ "https://www.bddk.org.tr/Duyuru/Liste/40": {
+  "file": "9733713bab645f80.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Liste/40",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/Detay/2066": {
+  "file": "e8c0aaaa413f4566.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Detay/2066",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/Liste/48": {
+  "file": "7a5110771927eeb6.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Liste/48",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/Detay/3304": {
+  "file": "d3a8833dc074b8c1.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/Detay/3304",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Duyuru/EkGetir/3304?ekId=937": {
+  "file": "f6bfc6374781f4ff.pdf",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Duyuru/EkGetir/3304?ekId=937",
+  "content_type": "application/pdf"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/55": {
+  "file": "5d51733ae343fd5f.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/55",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1347": {
+  "file": "7489564636fa5f98.pdf",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1347",
+  "content_type": "application/pdf"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/56": {
+  "file": "93555d271d6ba19b.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/56",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1346": {
+  "file": "b8166e1fa5a123ab.pdf",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1346",
+  "content_type": "application/pdf"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/58": {
+  "file": "3f4d4e14aafe40ec.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/58",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1342": {
+  "file": "7d78a5dc47d9bdee.pdf",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/DokumanGetir/1342",
+  "content_type": "application/pdf"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/49": {
+  "file": "58dd787a0c897d18.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/49",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/50": {
+  "file": "03954812f8d8d6d6.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/50",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/51": {
+  "file": "95925f56ab8f9cd7.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/51",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.bddk.org.tr/Mevzuat/Liste/52": {
+  "file": "752e2ca353d9bf71.html",
+  "status": 200,
+  "final_url": "https://www.bddk.org.tr/Mevzuat/Liste/52",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=40520&MevzuatTertip=5": {
+  "file": "2ae1ca8c9462a0a8.html",
+  "status": 200,
+  "final_url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=40520&MevzuatTertip=5",
+  "content_type": "text/html; charset=utf-8"
+ }
+}
