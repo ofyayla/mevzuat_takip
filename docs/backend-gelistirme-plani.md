@@ -560,6 +560,10 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
 | **Çapraz kontrol** | RG fihristinde BDDK/SPK/KVKK/MASAK/TCMB/Rekabet/Ticaret adına yayımlanmış bir düzenleme 48 saat içinde ilgili kurumun adaptöründe görülmezse (veya tersi) | `cross_check_miss` alarmı |
 | **YZ hattı** | `AI_FAILED` kayıt sayısı > 0 veya vLLM erişilemiyor | Sistem alarmı |
 
+- **Uygulama notu (26.09.2026):** Çapraz kontrol varsayılan olarak BDDK, SPK, KVKK, MASAK ve TCMB için açık; Rekabet ve
+  Ticaret'in RG yayınları izlenen kanallarda bulunmadığından yanlış alarm üretmemesi için listede değil. Sessizlik
+  hesabında "yeni öğe" ilk taramadaki eski içerik (BASELINE) hariç tutularak sayılır. Sağlık sonucu Redis'te
+  önbelleğe alınmıyor; 9 kaynak için canlı hesap yeterince hızlı.
 - Portal gösterimi, sunumdaki **asimetrik** tasarıma uygun olarak `overall` (`healthy`/`delayed`/`down`) ve `banner_text` alanlarıyla backend'den hazır gelir.
 - **Alarm iletimi (Faz 1):** Alarmlar portalda ve yapılandırılmış log'da görünür. E-posta ile alarm Faz 2 Outlook entegrasyonuyla birlikte ele alınabilir. İsteğe bağlı olarak `ALERT_WEBHOOK_URL` (kurum içi izleme sistemi, ör. Zabbix/Prometheus Alertmanager) desteklenir. *Bu açık karardır, bkz. §13.*
 - **Veri kaybı olmaması:** Ham içerik asla silinmez. Adaptör düzeltildikten sonra `POST /admin/reprocess` ve adaptörün `backfill(from, to)` yöntemi ile kaçırılan dönem yeniden toplanır. RG için tarih bazlı URL deseni sayesinde geçmiş günler doğrudan taranabilir.

@@ -6,7 +6,8 @@ aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması
 LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve özet (İK-4)**: her ifadesi kaynak
 metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi; **birim eşleştirme önerisi (İK-5)**: görev
 tanımlarına dayalı, gerekçeli birim önerileri; **Portal API (İK-6)**: liste/detay, onay/red, birim değiştirme,
-denetim izi, Keycloak ile çevrimdışı JWT doğrulaması ve API'ye bağlı portal. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+denetim izi, Keycloak ile çevrimdışı JWT doğrulaması ve API'ye bağlı portal; **sürdürülebilirlik ve izleme (İK-7)**:
+kaynak sağlığı, sessizlik/hacim/yapı alarmları, kaynaklar arası çapraz kontrol, geriye dönük toplama ve yeniden işleme. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -36,6 +37,7 @@ celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS
 celery -A app.worker worker -Q process -c 2    # İK-2 metin çıkarma + tekilleştirme
 celery -A app.worker worker -Q ai -c 2         # İK-3 LLM (GPU yükü: düşük eşzamanlılık)
 uvicorn app.api.main:app --port 8000          # İK-6 Portal API + portal (http://localhost:8000/)
+celery -A app.worker worker -Q monitor -c 1    # İK-7 izleme (Beat: 10 dakikada bir)
 celery -A app.worker beat                      # sources.yaml'daki cron pencereleri
 ```
 
@@ -288,6 +290,42 @@ detay açılınca `views` çağrılır; tarihler `tr-TR` biçiminde. Demo sürü
 görünmemesi hatası düzeltildi. Keycloak için sayfa, token döndüren `window.MTP_TOKEN_PROVIDER` (async) tanımlar
 (`keycloak-js` entegrasyonu kurum realm bilgisi gelince eklenecek); `window.MTP_API_BASE` API adresini değiştirir.
 
+## Sürdürülebilirlik ve izleme (İK-7)
+
+```bash
+mevzuat-monitor check [--dry-run]                                  # kontroller + alarm senkronu
+mevzuat-monitor alerts [--all]
+mevzuat-monitor backfill RESMI_GAZETE --from 2026-09-01 --to 2026-09-10   # kaçırılan dönemi gün gün topla
+mevzuat-monitor reprocess summarize --from 2026-09-01 --to 2026-09-30 [--source BDDK]
+```
+
+Yönetim API'si: `GET /api/v1/admin/alerts?status=open|closed|all`, `POST /admin/monitor/run`,
+`POST /admin/reprocess {stage, from, to, source?}`, `POST /admin/sources/{kod}/backfill {from, to}` (≤62 gün).
+
+**Kontroller** (`app/monitoring/checks.py`; kaynağın durumu bulguların en ağırından: down > delayed > ok):
+
+| Kontrol | Mantık | Durum |
+|---|---|---|
+| Erişim hatası | Son 3 tarama başarısız → down; yalnızca son tarama başarısız → delayed | down / delayed |
+| Sessizlik | Son **yeni** içerikten (ilk taramadaki eski içerik sayılmaz) beri geçen süre > tolerans. İş günü kaynaklarında hafta sonu, sabit resmî tatiller ve `config/holidays.yaml`'daki dini bayramlar sayılmaz. Tolerans önce `sources.yaml`'dan, 28 gün ve ≥8 yayın aralığı biriktikten sonra tarihsel aralıkların p95'inden (en az 12 saat) | delayed |
+| Hacim | Son 7 gün < geçmiş 8 haftanın ortalamasının %20'si → düşük; > ortalama + 3σ → yüksek (uyarı) | delayed / uyarı |
+| Yapı | Son taramada 200 dönen liste boş (sessiz bozulma) → delayed; yapı imzası değişti → erken uyarı | delayed / uyarı |
+| Çapraz kontrol | RG'de BDDK/SPK/KVKK/MASAK/TCMB adına yayımlanan yönetmelik/tebliğ/karar 48 saatte kurumun kaynağında görülmezse; ya da kurum belgesi "…Resmî Gazete'de yayımlanmıştır" dediği halde RG kopyası yoksa | uyarı |
+| YZ hattı | Deneme hakkını tüketmiş `AI_FAILED` kayıt | uyarı |
+
+Rekabet ve Ticaret çapraz kontrol listesinde değil (`CROSS_CHECK_ISSUERS`): RG yayınları (ör. ithalat tebliğleri)
+izlenen kanallarda yer almadığı için sürekli yanlış alarm üretir.
+
+**Alarmlar** (`alert` tablosu): anahtarla tekilleşir; koşul sürdükçe güncellenir, kalkınca kapanır, tekrar oluşursa
+yeni kayıt açılır. Açılış/kapanış yapılandırılmış log olarak yazılır; `ALERT_WEBHOOK_URL` tanımlıysa JSON POST edilir.
+Portal durum çubuğu ve uyarı şeridi (`/sources/health`) aynı hesaptan beslenir.
+
+**Veri kaybı olmaması:** ham içerik silinmez. Resmî Gazete fihristi tarih bazlı olduğu için `backfill` geçmiş günleri
+doğrudan tarar (asıl + mükerrer); diğer kaynakların listeleri güncel içeriği gösterdiğinden onlarda backfill normal
+taramadır. Kanalın ilk taraması tamamlandıysa backfill ile gelen içerik "yeni" sayılır ve YZ hattına girer.
+`reprocess` seçilen aşamayı (extract, classify, summarize, match) yayım tarihine göre bir aralıkta yeniden çalıştırır
+ve portal kayıtlarının denetim izine "Yeniden işlendi" yazar.
+
 ## Testler
 
 ```bash
@@ -315,6 +353,8 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 - LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
   `mevzuat-process review` ile listelenir.
 - Portal–Keycloak girişi (`keycloak-js`) henüz eklenmedi; backend doğrulaması hazır, realm/istemci bilgisi bekleniyor.
+- İzleme sonucu önbelleğe alınmıyor (plan Redis önbelleği öngörüyordu); 9 kaynak için canlı hesap yeterince hızlı.
+  Dini bayram tarihleri her yıl `config/holidays.yaml`'a girilmeli (2027 tarihleri teyit edilmedi).
 - Arama SQLite/PostgreSQL `ILIKE` ile yapılıyor; Türkçe büyük/küçük harf duyarsız tam metin arama (tsvector) üretim
   PostgreSQL'inde eklenecek.
 - Birim görev tanımları taslaktır (organizasyon şemasından türetildi). KVKK uyum programının Mevzuat ve Uyum

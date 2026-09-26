@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request
@@ -246,6 +247,93 @@ def _regenerate(sf: sessionmaker[Session], settings: Settings, reg_id: int, acto
         add_event(s, reg_id, "summary_regenerated", actor=actor,
                   note="Özet ve birim önerileri yeniden üretildi." if rep.summarized else "Yeniden üretim başarısız.")
         s.commit()
+
+
+class ReprocessIn(BaseModel):
+    stage: Literal["extract", "classify", "summarize", "match"]
+    date_from: date = Field(alias="from")
+    date_to: date = Field(alias="to")
+    source: str | None = None
+
+
+class BackfillIn(BaseModel):
+    date_from: date = Field(alias="from")
+    date_to: date = Field(alias="to")
+
+
+@admin.get("/alerts")
+def admin_alerts(session: SessionDep, actor: ActorDep, status: Literal["open", "closed", "all"] = "open",
+                 limit: Annotated[int, Query(ge=1, le=500)] = 100):
+    from app.db import Alert
+
+    require(actor, ROLE_ADMIN)
+    q = select(Alert).order_by(Alert.opened_at.desc()).limit(limit)
+    if status == "open":
+        q = q.where(Alert.resolved_at.is_(None))
+    elif status == "closed":
+        q = q.where(Alert.resolved_at.is_not(None))
+    return [{"id": a.id, "key": a.key, "type": a.alert_type, "severity": a.severity, "source": a.source_code,
+             "message": a.message, "details": a.details, "openedAt": _iso_dt(a.opened_at),
+             "lastSeenAt": _iso_dt(a.last_seen_at), "resolvedAt": _iso_dt(a.resolved_at)} for a in session.scalars(q)]
+
+
+def _iso_dt(dt):
+    from app.services.regulations import _iso
+
+    return _iso(dt)
+
+
+@admin.post("/monitor/run")
+def admin_monitor_run(session: SessionDep, settings: SettingsDep, actor: ActorDep):
+    from app.monitoring.service import run_monitor
+
+    require(actor, ROLE_ADMIN)
+    res = run_monitor(session, settings)
+    session.commit()
+    return {"statuses": {s.code: s.status for s in res.statuses}, "opened": len(res.sync.opened),
+            "resolved": len(res.sync.resolved)}
+
+
+@admin.post("/reprocess", status_code=202)
+def admin_reprocess(body: ReprocessIn, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep,
+                    request: Request):
+    require(actor, ROLE_ADMIN)
+    if body.date_to < body.date_from:
+        raise ApiError(400, "invalid_range", "from ≤ to olmalı")
+    if body.stage != "extract" and settings.llm_provider in ("", "none", None):
+        raise ApiError(400, "llm_required", "bu aşama için LLM yapılandırılmalı")
+    background.add_task(_reprocess_bg, request.app.state.session_factory, settings, body, actor)
+    return {"status": "queued", "stage": body.stage}
+
+
+def _reprocess_bg(sf, settings: Settings, body: "ReprocessIn", actor: Actor) -> None:
+    from app.ai.llm_client import get_llm
+    from app.monitoring.reprocess import reprocess
+
+    log.info("reprocess: %s", reprocess(sf, settings, body.stage, body.date_from, body.date_to, source=body.source,
+                                         llm=get_llm(settings), actor=actor))
+
+
+@admin.post("/sources/{code}/backfill", status_code=202)
+def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep,
+                   request: Request):
+    from app.collectors.config import load_sources
+
+    require(actor, ROLE_ADMIN)
+    try:
+        load_sources(settings.sources_file).get(code)
+    except KeyError as e:
+        raise ApiError(404, "not_found", str(e)) from e
+    if body.date_to < body.date_from or (body.date_to - body.date_from).days > 62:
+        raise ApiError(400, "invalid_range", "from ≤ to ve en fazla 62 gün")
+    background.add_task(_backfill_bg, request.app.state.session_factory, settings, code, body)
+    return {"status": "queued", "days": (body.date_to - body.date_from).days + 1}
+
+
+def _backfill_bg(sf, settings: Settings, code: str, body: "BackfillIn") -> None:
+    from app.monitoring.reprocess import backfill
+
+    log.info("backfill %s: %s", code, backfill(sf, settings, code, body.date_from, body.date_to).runs)
 
 
 @admin.post("/sources/{code}/run", status_code=202)

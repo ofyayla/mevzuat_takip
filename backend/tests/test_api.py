@@ -244,7 +244,7 @@ def test_admin_settings_and_health_endpoints(settings, env, client):  # noqa: F8
     assert c.put("/api/v1/admin/settings", json={"values": {"llm_api_key": "x"}}).status_code == 400
     h = c.get("/api/v1/sources/health").json()
     assert h["overall"] == "down" and {s["status"] for s in h["sources"]} == {"down"}   # hiç tarama yok
-    assert "yanıt vermiyor" in h["bannerText"]
+    assert "Henüz tarama yapılmadı" in h["bannerText"]
     assert c.get("/healthz").json() == {"status": "ok"} and c.get("/readyz").json()["checks"]["db"] == "ok"
     assert len(c.get("/api/v1/units").json()) == 0 or True
     assert c.get("/").status_code == 200 and "Mevzuat" in c.get("/").text

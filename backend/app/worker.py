@@ -7,6 +7,7 @@ işleme görevleri ``process`` kuyruğunda çalışır (DMZ'de ayrı worker olar
   celery -A app.worker worker -Q collect -c 4
   celery -A app.worker worker -Q process -c 2      # İK-2: metin çıkarma + tekilleştirme
   celery -A app.worker worker -Q ai -c 2           # İK-3: LLM (GPU yükü nedeniyle düşük eşzamanlılık)
+  celery -A app.worker worker -Q monitor -c 1      # İK-7: kaynak sağlığı ve alarmlar (10 dakikada bir)
   celery -A app.worker beat
 """
 from __future__ import annotations
@@ -19,14 +20,14 @@ from app.settings import get_settings
 
 settings = get_settings()
 
-app = Celery("mevzuat", broker=settings.redis_url or "memory://", backend=None, include=["app.tasks.collect", "app.tasks.process", "app.tasks.ai"])
+app = Celery("mevzuat", broker=settings.redis_url or "memory://", backend=None, include=["app.tasks.collect", "app.tasks.process", "app.tasks.ai", "app.tasks.monitor"])
 app.conf.update(
     timezone=settings.timezone,
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_routes={"app.tasks.collect.*": {"queue": "collect"}, "app.tasks.process.*": {"queue": "process"},
-                 "app.tasks.ai.*": {"queue": "ai"}},
+                 "app.tasks.ai.*": {"queue": "ai"}, "app.tasks.monitor.*": {"queue": "monitor"}},
     task_default_queue="default",
 )
 
@@ -54,6 +55,8 @@ def build_beat_schedule() -> dict:
                                     "options": {"expires": 1800}}
     schedule["summarize-pending"] = {"task": "app.tasks.ai.summarize_regulations",
                                      "schedule": _crontab("17,47 * * * *"), "options": {"expires": 1800}}
+    schedule["monitor"] = {"task": "app.tasks.monitor.run_monitor", "schedule": _crontab("*/10 * * * *"),
+                           "options": {"expires": 600}}
     schedule["match-pending"] = {"task": "app.tasks.ai.match_units", "schedule": _crontab("27,57 * * * *"),
                                  "options": {"expires": 1800}}
     return schedule

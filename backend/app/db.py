@@ -270,6 +270,25 @@ class AuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
+class Alert(Base):
+    """İK-7 alarmları (plan §5.3). ``key`` ile tekilleşir: koşul sürdükçe aynı alarm güncellenir (last_seen_at), koşul
+    ortadan kalkınca kapanır (resolved_at). Tekrar oluşursa yeni kayıt açılır."""
+
+    __tablename__ = "alert"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(200), index=True)       # ör. silence:SPK, cross_check_miss:reg:42
+    source_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    # silence | volume_low | volume_high | structure_change | fetch_error | cross_check_miss | ai_failure
+    alert_type: Mapped[str] = mapped_column(String(32))
+    severity: Mapped[str] = mapped_column(String(16))                # down | delayed | warning
+    message: Mapped[str] = mapped_column(Text)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class Outbox(Base):
     """Domain olayları (record.approved / record.rejected). Faz 1'de dinleyen yok; Faz 2 Outlook bildirimi okuyacak."""
 

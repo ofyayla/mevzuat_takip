@@ -109,6 +109,20 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8080"
     portal_dir: Path = BACKEND_DIR.parent     # Mevzuat Takip Portali.dc.html + support.js
 
+    # İK-7: izleme ve alarmlar
+    monitor_failed_runs_down: int = 3        # son N tarama başarısızsa "down"
+    silence_learn_min_days: int = 28         # bu kadar veri birikince tolerans tarihsel aralıkların p95'inden
+    silence_learn_min_gaps: int = 8
+    volume_history_weeks: int = 8
+    volume_low_ratio: float = 0.20           # son 7 gün < geçmiş ortalamanın %20'si → volume_low
+    volume_high_sigma: float = 3.0
+    cross_check_hours: int = 48
+    cross_check_lookback_days: int = 30
+    # Çapraz kontrol yapılan kurumlar. Rekabet ve Ticaret'in RG yayınları (ör. ithalat tebliğleri) izlenen kanallarda
+    # yer almadığı için varsayılan listede değil (sürekli yanlış alarm üretir).
+    cross_check_issuers: str = "BDDK,SPK,KVKK,MASAK,TCMB"
+    alert_webhook_url: str | None = None     # isteğe bağlı: kurum izleme sistemi (Zabbix/Alertmanager vb.)
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):
