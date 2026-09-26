@@ -5,7 +5,8 @@ tespiti, ham arşiv ve kaynak bazlı sağlık verisi; **belge işleme ve tekille
 aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması; **mevzuat tespiti ve önceliklendirme (İK-3)**:
 LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve özet (İK-4)**: her ifadesi kaynak
 metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi; **birim eşleştirme önerisi (İK-5)**: görev
-tanımlarına dayalı, gerekçeli birim önerileri. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+tanımlarına dayalı, gerekçeli birim önerileri; **Portal API (İK-6)**: liste/detay, onay/red, birim değiştirme,
+denetim izi, Keycloak ile çevrimdışı JWT doğrulaması ve API'ye bağlı portal. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -34,6 +35,7 @@ mevzuat-collect ca-fetch www.bddk.org.tr       # sunucu TLS ara sertifikasını 
 celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS_URL gerekir)
 celery -A app.worker worker -Q process -c 2    # İK-2 metin çıkarma + tekilleştirme
 celery -A app.worker worker -Q ai -c 2         # İK-3 LLM (GPU yükü: düşük eşzamanlılık)
+uvicorn app.api.main:app --port 8000          # İK-6 Portal API + portal (http://localhost:8000/)
 celery -A app.worker beat                      # sources.yaml'daki cron pencereleri
 ```
 
@@ -245,6 +247,47 @@ kuruluşların izin kararları ve metni olmayan kayıtlar), hata yok. Alan kontr
 birkaçı İK-3 konu listesi dar kaldığı için elenen meşru öneri (ör. Yeşil Varlık Oranı → Yatırımcı İlişkileri ve
 Sürdürülebilirlik).
 
+## Portal API (İK-6)
+
+```bash
+uvicorn app.api.main:app --port 8000      # portal: http://localhost:8000/   API belgesi: /docs
+```
+
+| Metot | Yol | Açıklama |
+|---|---|---|
+| GET | `/api/v1/regulations` | Liste: `source`, `severity`, `status`, `unit`, `date_range` (7/30), `q`, `metric` (`pending`, `critical_high`, `today`, `upcoming`), `page`, `page_size` (≤100). Sıra: önem ↓, yayım tarihi ↓ |
+| GET | `/api/v1/regulations/stats` | Metrik kartları (filtrelerden bağımsız) |
+| GET | `/api/v1/regulations/{id}` | Detay: özet, kanıtlar, kaldırılan ifadeler, birim önerileri, güven, kaynak bağlantıları, denetim izi, YZ alanları; `ETag` |
+| POST | `/api/v1/regulations/{id}/views` | "İncelemeye alındı" (kullanıcı başına bir kez) |
+| POST | `/api/v1/regulations/{id}/decision` | `{"decision": "approve"\|"reject", "note"?}`; yalnızca `Bekliyor` (aksi 409); `If-Match` (aksi 412) |
+| PUT | `/api/v1/regulations/{id}/units` | `{"unit_codes": [...], "note"?}`; YZ gerekçesi korunur, yeni birim "Uzman tarafından manuel olarak atandı." |
+| GET | `/api/v1/units`, `/sources`, `/sources/health`, `/me` | Seçenekler, kaynak sağlığı (durum çubuğu + uyarı şeridi), kullanıcı |
+| GET/PUT | `/api/v1/admin/settings` | Çalışma zamanı eşikleri (admin) |
+| POST | `/api/v1/admin/regulations/{id}/regenerate`, `/split`, `/admin/sources/{code}/run` | Yeniden üretim, tekilleştirme geri alma, anında tarama (admin) |
+| GET | `/healthz`, `/readyz` | Canlılık / hazır olma (DB, LLM, OCR) |
+
+Hata biçimi `{"error": {"code", "message", "details"}}`. Yanıt alanları portalın veri sözleşmesiyle aynı adlardadır
+(camelCase). Portalda YZ'nin ilgili bulduğu tüm kayıtlar görünür; analizi tamamlanmamış olanlar (özet/OCR bekleyen,
+YZ hatası) da `analysisStatus` ile gösterilir — takılan bir kayıt Başkanlıktan gizlenmez.
+
+**İş kuralları:** Karar verilmiş kayıtta birim değişikliği yapılmaz (409). Onayda aktif birim önerileri
+`is_final` olarak dondurulur (Faz 2 yönlendirmesi), birim kararı İK-5 örnek havuzuna yazılır (değişiklik yapılmışsa
+düzeltme ağırlığı 2 ile zaten yazılmıştır), `outbox`'a `record.approved`/`record.rejected` olayı düşer. Denetim izi
+(`audit_event`) yalnızca eklemeye açıktır (ORM güncelleme/silmeyi reddeder; üretimde DB yetkisiyle de korunmalı).
+
+**Kimlik doğrulama** (plan §8): `AUTH_MODE=disabled` (demo) — kullanıcı `X-Demo-User` başlığından (URL kodlamalı;
+HTTP başlıkları Türkçe karakter taşıyamaz) veya `DEMO_USER_NAME`'den, tüm roller açık. `AUTH_MODE=keycloak` —
+`Authorization: Bearer <JWT>`; imza `KEYCLOAK_PUBLIC_KEYS_DIR/*.pem` realm açık anahtar(lar)ıyla çevrimdışı doğrulanır
+(JWKS çağrısı yok; anahtar rotasyonu için birden fazla `.pem`, token başlığındaki `kid` dosya adıyla eşleşir), `iss`,
+`aud`/`azp`, `exp` (±60 sn). Roller: `mevzuat_viewer` (okuma), `mevzuat_expert` (karar, birim), `mevzuat_admin`.
+
+**Portal** (`../Mevzuat Takip Portali.dc.html`): demo verisi (`RAW_RECORDS`, `SOURCE_SCENARIOS`) kaldırıldı; liste,
+metrikler, filtre seçenekleri, kaynak sağlığı, detay, onay/red ve birim değiştirme API'ye bağlı. Filtreleme ve
+sayfalama sunucu tarafında; arama 300 ms gecikmeyle, eski yanıtlar yok sayılır. Onay/red diyaloğuna not alanı eklendi;
+detay açılınca `views` çağrılır; tarihler `tr-TR` biçiminde. Demo sürümündeki "karar verildi" bilgisinin hiç
+görünmemesi hatası düzeltildi. Keycloak için sayfa, token döndüren `window.MTP_TOKEN_PROVIDER` (async) tanımlar
+(`keycloak-js` entegrasyonu kurum realm bilgisi gelince eklenecek); `window.MTP_API_BASE` API adresini değiştirir.
+
 ## Testler
 
 ```bash
@@ -271,6 +314,9 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
   oluşturulmalı). Üretim kurulumundan önce migrasyon altyapısı eklenmeli.
 - LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
   `mevzuat-process review` ile listelenir.
+- Portal–Keycloak girişi (`keycloak-js`) henüz eklenmedi; backend doğrulaması hazır, realm/istemci bilgisi bekleniyor.
+- Arama SQLite/PostgreSQL `ILIKE` ile yapılıyor; Türkçe büyük/küçük harf duyarsız tam metin arama (tsvector) üretim
+  PostgreSQL'inde eklenecek.
 - Birim görev tanımları taslaktır (organizasyon şemasından türetildi). KVKK uyum programının Mevzuat ve Uyum
   Başkanlığında olduğu bir varsayımdır; şemada KVKK'ya açıkça sahip birim yok.
 - Taksonomi, etiketleme kılavuzu ve değerlendirme etiketleri çalıştay öncesi taslaktır. Kurum içi vLLM/Qwen ile henüz

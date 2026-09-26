@@ -98,6 +98,17 @@ class Settings(BaseSettings):
     unit_responsibility_threshold: int = 80   # matched_responsibility ↔ görev tanımı maddesi (rapidfuzz)
     unit_fewshot_count: int = 4
 
+    # İK-6: Portal API ve kimlik doğrulama (plan §8)
+    auth_mode: str = "disabled"               # disabled (demo) | keycloak
+    demo_user_name: str = "Demo Kullanıcı"
+    demo_user_title: str = "Uyum Uzmanı"
+    keycloak_issuer: str | None = None
+    keycloak_client_id: str = "mevzuat-portal"
+    keycloak_public_keys_dir: Path = BACKEND_DIR / "config" / "keycloak_keys"
+    keycloak_leeway_s: int = 60
+    cors_origins: str = "http://localhost:8080"
+    portal_dir: Path = BACKEND_DIR.parent     # Mevzuat Takip Portali.dc.html + support.js
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):

@@ -128,13 +128,9 @@
           <i data-lucide="sliders-horizontal" style="width:15px; height:15px; color:var(--muted-foreground); flex:0 0 auto;"></i>
           <select class="mtp-select" value="{{ filters.source }}" onChange="{{ setFilterSource }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
             <option value="all">Tüm kaynaklar</option>
-            <option value="BDDK">BDDK</option>
-            <option value="TCMB">TCMB</option>
-            <option value="MASAK">MASAK</option>
-            <option value="SPK">SPK</option>
-            <option value="KVKK">KVKK</option>
-            <option value="Hazine ve Maliye Bakanlığı">Hazine ve Maliye Bakanlığı</option>
-            <option value="Resmi Gazete">Resmi Gazete</option>
+            <sc-for list="{{ sourceOptions }}" as="so" hint-placeholder-count="9">
+              <option value="{{ so.code }}">{{ so.name }}</option>
+            </sc-for>
           </select>
           <select class="mtp-select" value="{{ filters.severity }}" onChange="{{ setFilterSeverity }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
             <option value="all">Tüm önem dereceleri</option>
@@ -152,7 +148,7 @@
           <select class="mtp-select" value="{{ filters.unit }}" onChange="{{ setFilterUnit }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
             <option value="all">Tüm birimler</option>
             <sc-for list="{{ unitOptions }}" as="u" hint-placeholder-count="8">
-              <option value="{{ u }}">{{ u }}</option>
+              <option value="{{ u.code }}">{{ u.name }}</option>
             </sc-for>
           </select>
           <select class="mtp-select" value="{{ filters.date }}" onChange="{{ setFilterDate }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--card); color:var(--foreground); font-family:var(--font-sans);">
@@ -408,7 +404,7 @@
                   </button>
                 </sc-if>
 
-                <sc-if value="{{ isPending }}" hint-placeholder-val="{{ false }}">
+                <sc-if value="{{ isDecided }}" hint-placeholder-val="{{ false }}">
                   <div style="font-size:13px; color:var(--muted-foreground); line-height:1.5; background:var(--muted); padding:12px; border-radius:var(--radius-md);">
                     Bu kayıt için karar verildi: <strong style="color:var(--foreground);">{{ selected.status }}</strong><br/>{{ selected.decidedBy }}
                   </div>
@@ -431,6 +427,7 @@
           <h3 style="font-size:16px; font-weight:600; margin:0; color:var(--foreground);">{{ confirmTitle }}</h3>
         </div>
         <p style="font-size:13.5px; color:var(--muted-foreground); line-height:1.55; margin:0 0 8px;">{{ confirmBody }} Bu işlem geri alınamaz.</p>
+        <textarea placeholder="Not (isteğe bağlı) — denetim izine yazılır" value="{{ confirmNote }}" onChange="{{ setConfirmNote }}" rows="3" style="width:100%; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground); resize:vertical;"></textarea>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
           <button onClick="{{ closeConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Vazgeç</button>
           <button onClick="{{ doConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:{{ confirmBtnBg }}; color:white; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">{{ confirmBtnLabel }}</button>
@@ -474,15 +471,48 @@
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;sourceHealthState&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;healthy&quot;, &quot;options&quot;: [&quot;healthy&quot;, &quot;delayed&quot;, &quot;down&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Kaynak sağlığı (demo)&quot;}}">
-const SOURCES = ['BDDK', 'TCMB', 'MASAK', 'SPK', 'KVKK', 'Hazine ve Maliye Bakanlığı', 'Resmi Gazete', 'TBB'];
-const SOURCE_SCENARIOS = {
-  healthy: SOURCES.map(s => ({ name: s, status: 'ok', lastFetch: '2 dakika önce' })),
-  delayed: SOURCES.map((s, i) => ({ name: s, status: i === 0 ? 'delayed' : 'ok', lastFetch: i === 0 ? '6 saat önce' : '3 dakika önce' })),
-  down: SOURCES.map((s, i) => ({ name: s, status: i === 0 ? 'delayed' : (i === 6 || i === 7) ? 'down' : 'ok', lastFetch: i === 0 ? '6 saat önce' : (i === 6 || i === 7) ? '2 gün önce' : '4 dakika önce' }))
-};
+<script type="text/x-dc" data-dc-script>
+// Mevzuat Takip Portalı — Portal API (İK-6) bağlantısı. Veri /api/v1 uç noktalarından gelir; filtreleme ve sayfalama
+// sunucu tarafındadır. Keycloak kullanılırken sayfa, token döndüren window.MTP_TOKEN_PROVIDER (async) işlevini tanımlar.
+const API_BASE = window.MTP_API_BASE || '/api/v1';
+const METRIC_PARAM = { pending: 'pending', criticalHigh: 'critical_high', today: 'today', upcoming: 'upcoming' };
+const FMT_DATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+const FMT_DATETIME = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-const UNITS = ["Hukuk İşleri","İç Kontrol","Risk Yönetimi","Bilgi Teknolojileri","Operasyon","Krediler","Perakende Bankacılık","Kurumsal Bankacılık","Hazine","İnsan Kaynakları","Ödeme Sistemleri","Mali Kontrol"];
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return FMT_DATE.format(new Date(iso.length === 10 ? iso + 'T00:00:00' : iso));
+}
+function fmtDateTime(iso) { return iso ? FMT_DATETIME.format(new Date(iso)) : ''; }
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ Accept: 'application/json' }, opts.body ? { 'Content-Type': 'application/json' } : {}, opts.headers || {});
+  const token = window.MTP_TOKEN_PROVIDER ? await window.MTP_TOKEN_PROVIDER() : null;
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+    err.status = res.status; err.code = data.error && data.error.code;
+    throw err;
+  }
+  return { data, etag: res.headers.get('ETag') };
+}
+
+function toRecord(r) {
+  const decided = r.decidedBy
+    ? `${r.decidedBy.name}${r.decidedBy.title ? ' (' + r.decidedBy.title + ')' : ''} tarafından ${r.decidedBy.decision === 'Onaylandı' ? 'onaylandı' : 'reddedildi'} · ${fmtDateTime(r.decidedBy.at)}`
+    : '';
+  return Object.assign({}, r, {
+    issuer: r.issuer || '—', type: r.type || '—', severity: r.severity || '—', confidence: r.confidence || 'Düşük',
+    publishDateIso: r.publishDate, publishDate: fmtDate(r.publishDate),
+    effectiveDate: r.effectiveDate ? fmtDate(r.effectiveDate) : '—',
+    summary: r.summary || ('Özet henüz hazır değil (' + (r.analysisStatus || 'analiz sürüyor') + ').'),
+    topics: r.topics || [], suggestedUnits: r.suggestedUnits || [], decidedBy: decided,
+    sourceUrl: r.sourceUrl || '#',
+    auditTrail: (r.auditTrail || []).map(ev => Object.assign({}, ev, { timestamp: fmtDateTime(ev.timestamp) }))
+  });
+}
 
 function sevMeta(sev) {
   if (sev === 'Kritik') return { bg: 'color-mix(in oklch, var(--destructive) 12%, white)', color: 'var(--destructive)' };
@@ -501,226 +531,166 @@ function confMeta(c) {
   return { dots: '● ○ ○', color: 'var(--muted-foreground)' };
 }
 
-const RAW_RECORDS = [
-  { id: 1, title: 'Bankaların Sermaye Yeterliliğinin Ölçülmesine İlişkin Yönetmelikte Değişiklik', issuer: 'BDDK', type: 'Yönetmelik', publishDate: '18 Ağu 2026', effectiveDate: '15 Eyl 2026', effectiveSoon: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/18',
-    summary: 'Değişiklik, konsolide sermaye yeterliliği rasyosu hesaplamasında kullanılan risk ağırlıklarını güncelliyor ve geçiş süresi için bankalara altı aylık uyum takvimi tanıyor.',
-    topics: ['Sermaye yeterliliği', 'Risk ağırlıkları', 'Konsolide raporlama'],
-    suggestedUnits: [{ unit: 'Risk Yönetimi', reason: 'Sermaye yeterliliği rasyosu hesaplamaları ve risk ağırlıklandırma metodolojisi doğrudan bu birimin sorumluluğunda.' }, { unit: 'Mali Kontrol', reason: 'Konsolide raporlama süreçlerinde rasyo hesaplamasının finansal tablolara etkisi değerlendirilmeli.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '18 Ağu 2026, 09:14', icon: 'bot', note: null }] },
-  { id: 2, title: 'Kredi Kartı İşlemlerinde Azami Faiz Oranlarına İlişkin Tebliğ', issuer: 'TCMB', type: 'Tebliğ', publishDate: '15 Ağu 2026', effectiveDate: '20 Eyl 2026', effectiveSoon: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/tebligler/15',
-    summary: 'Kredi kartı nakit avans ve taksitli işlemlerde uygulanacak azami akdi ve gecikme faiz oranları yeniden belirlendi; yeni oranlar bir ay sonra yürürlüğe girecek.',
-    topics: ['Kredi kartı faiz oranları', 'Tüketici bankacılığı', 'Fiyatlandırma'],
-    suggestedUnits: [{ unit: 'Perakende Bankacılık', reason: 'Kredi kartı ürün faiz parametrelerinin sistemlere yansıtılması bu birimin sorumluluğunda.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '15 Ağu 2026, 08:02', icon: 'bot', note: null }] },
-  { id: 3, title: 'Suç Gelirlerinin Aklanmasının Önlenmesine Dair Tedbirler Yönetmeliğinde Değişiklik', issuer: 'MASAK', type: 'Yönetmelik', publishDate: '21 Ağu 2026', effectiveDate: '5 Eyl 2026', effectiveSoon: true, isToday: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.masak.gov.tr/mevzuat/2026/21',
-    summary: 'Şüpheli işlem bildirim eşikleri düşürüldü ve müşterini tanı sürecinde nihai faydalanıcı tespitine ilişkin ek belge yükümlülükleri getirildi.',
-    topics: ['Şüpheli işlem bildirimi', 'Müşterini tanı', 'Nihai faydalanıcı tespiti'],
-    suggestedUnits: [{ unit: 'İç Kontrol', reason: 'Şüpheli işlem bildirim eşiklerindeki değişiklik izleme kurallarının güncellenmesini gerektiriyor.' }, { unit: 'Hukuk İşleri', reason: 'Yeni belge yükümlülüklerinin müşteri sözleşmelerine ve prosedürlere yansıtılması gerekiyor.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '21 Ağu 2026, 07:40', icon: 'bot', note: null }] },
-  { id: 4, title: 'Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Tebliği', issuer: 'KVKK', type: 'Tebliğ', publishDate: '9 Ağu 2026', effectiveDate: '9 Kas 2026', severity: 'Yüksek', status: 'Onaylandı', confidence: 'Orta',
-    sourceUrl: 'https://www.kvkk.gov.tr/mevzuat/2026/9',
-    summary: 'Yurt dışındaki bulut hizmet sağlayıcılarına veri aktarımında kullanılacak standart sözleşme hükümleri ve bildirim süreleri netleştirildi.',
-    topics: ['Sınır ötesi veri aktarımı', 'Bulut hizmetleri', 'Standart sözleşme hükümleri'],
-    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Bulut altyapısı üzerinden yürüyen veri aktarım süreçlerinin gözden geçirilmesi gerekiyor.' }, { unit: 'Hukuk İşleri', reason: 'Tedarikçi sözleşmelerine standart sözleşme hükümlerinin eklenmesi gerekiyor.' }],
-    decidedBy: 'Elif Demir tarafından onaylandı · 11 Ağu 2026, 10:22',
-    auditTrail: [
-      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '9 Ağu 2026, 08:15', icon: 'bot', note: null },
-      { action: 'İncelemeye alındı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '10 Ağu 2026, 14:02', icon: 'eye', note: null },
-      { action: 'Onaylandı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '11 Ağu 2026, 10:22', icon: 'check-circle-2', note: 'Bilgi Teknolojileri ve Hukuk İşleri birimlerine yönlendirildi.' }
-    ] },
-  { id: 5, title: 'Bankaların Likidite Karşılama Oranı Hesaplamasına İlişkin Genelge', issuer: 'BDDK', type: 'Genelge', publishDate: '6 Ağu 2026', effectiveDate: '6 Eki 2026', severity: 'Orta', status: 'Bekliyor', confidence: 'Orta',
-    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/genelge/6',
-    summary: 'Likidite karşılama oranı hesaplamasında yüksek kaliteli likit varlık sınıflandırmasına ilişkin uygulama örnekleri ve raporlama şablonu güncellendi.',
-    topics: ['Likidite karşılama oranı', 'Likit varlık sınıflandırması'],
-    suggestedUnits: [{ unit: 'Hazine', reason: 'Likit varlık portföyünün sınıflandırılması ve raporlanması Hazine biriminin sorumluluğunda.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '6 Ağu 2026, 09:30', icon: 'bot', note: null }] },
-  { id: 6, title: 'Ödeme Hizmetleri ve Elektronik Para İhracına İlişkin Yönetmelikte Değişiklik', issuer: 'TCMB', type: 'Yönetmelik', publishDate: '12 Ağu 2026', effectiveDate: '12 Kas 2026', severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/yonetmelik/12',
-    summary: 'Açık bankacılık arayüzlerinde üçüncü taraf ödeme hizmeti sağlayıcılarına erişim standartları ve güvenli kimlik doğrulama koşulları güncellendi.',
-    topics: ['Açık bankacılık', 'Üçüncü taraf erişimi', 'Güvenli kimlik doğrulama'],
-    suggestedUnits: [{ unit: 'Ödeme Sistemleri', reason: 'Açık bankacılık API standartlarının uygulanması bu birimin doğrudan sorumluluğunda.' }, { unit: 'Bilgi Teknolojileri', reason: 'Kimlik doğrulama altyapısında teknik uyum çalışması gerekiyor.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '12 Ağu 2026, 11:05', icon: 'bot', note: null }] },
-  { id: 7, title: 'Finansal Tüketicilerin Korunmasına İlişkin Tebliğ Güncellemesi', issuer: 'Hazine ve Maliye Bakanlığı', type: 'Tebliğ', publishDate: '3 Ağu 2026', effectiveDate: '3 Eki 2026', severity: 'Orta', status: 'Reddedildi', confidence: 'Orta',
-    sourceUrl: 'https://www.hmb.gov.tr/mevzuat/2026/3',
-    summary: 'Tüketici kredisi sözleşmelerinde erken ödeme indirimi hesaplama yöntemine açıklık getirildi; mevcut uygulamada değişiklik gerektirmiyor.',
-    topics: ['Tüketici kredisi', 'Erken ödeme indirimi'],
-    suggestedUnits: [{ unit: 'Krediler', reason: 'Erken ödeme indirimi hesaplama yönteminin kredi sistemlerindeki uygulamayla karşılaştırılması önerildi.' }],
-    decidedBy: 'Ahmet Yılmaz tarafından reddedildi · 4 Ağu 2026, 16:40',
-    auditTrail: [
-      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '3 Ağu 2026, 10:00', icon: 'bot', note: null },
-      { action: 'Reddedildi', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: '4 Ağu 2026, 16:40', icon: 'x-circle', note: 'Mevcut hesaplama yöntemi zaten tebliğle uyumlu, aksiyon gerekmiyor.' }
-    ] },
-  { id: 8, title: 'Sermaye Piyasası Araçlarının Kredili Alım Satımına İlişkin Tebliğ', issuer: 'SPK', type: 'Tebliğ', publishDate: '28 Tem 2026', effectiveDate: '28 Eyl 2026', severity: 'Düşük', status: 'Onaylandı', confidence: 'Düşük',
-    sourceUrl: 'https://www.spk.gov.tr/mevzuat/2026/28',
-    summary: 'Kredili menkul kıymet işlemlerinde teminat oranlarına ilişkin küçük bir terminoloji güncellemesi yapıldı; işlem esasları değişmedi.',
-    topics: ['Kredili menkul kıymet işlemleri', 'Teminat oranları'],
-    suggestedUnits: [{ unit: 'Kurumsal Bankacılık', reason: 'Aracılık faaliyetleri kapsamında bilgilendirme amaçlı takip önerildi.' }],
-    decidedBy: 'Ahmet Yılmaz tarafından onaylandı · 29 Tem 2026, 09:12',
-    auditTrail: [
-      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '28 Tem 2026, 08:50', icon: 'bot', note: null },
-      { action: 'Onaylandı', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: '29 Tem 2026, 09:12', icon: 'check-circle-2', note: 'Bilgilendirme amaçlı Kurumsal Bankacılık\'a iletildi.' }
-    ] },
-  { id: 9, title: 'Bankalarca Kullanılacak Uzaktan Kimlik Doğrulama Yöntemlerine İlişkin Rehber', issuer: 'BDDK', type: 'Rehber', publishDate: '20 Ağu 2026', effectiveDate: '25 Eyl 2026', effectiveSoon: true, isToday: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/rehber/20',
-    summary: 'Video görüşme yoluyla uzaktan müşteri ediniminde kimlik doğrulama adımları ve kayıt saklama sürelerine ilişkin asgari standartlar yayımlandı.',
-    topics: ['Uzaktan müşteri edinimi', 'Kimlik doğrulama', 'Kayıt saklama'],
-    suggestedUnits: [{ unit: 'Operasyon', reason: 'Uzaktan müşteri edinimi süreçlerinin yürütülmesi Operasyon biriminin sorumluluğunda.' }, { unit: 'Bilgi Teknolojileri', reason: 'Video kimlik doğrulama altyapısında güncelleme gerekebilir.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '20 Ağu 2026, 09:45', icon: 'bot', note: null }] },
-  { id: 10, title: 'Rekabetin Korunması Hakkında Kanunda Değişiklik – Finansal Hizmetler Kapsamı', issuer: 'Resmi Gazete', type: 'Kanun', publishDate: '30 Tem 2026', effectiveDate: '30 Kas 2026', severity: 'Orta', status: 'Bekliyor', confidence: 'Orta',
-    sourceUrl: 'https://www.resmigazete.gov.tr/2026/07/30',
-    summary: 'Finansal hizmet sağlayıcıları arasındaki veri paylaşımı anlaşmalarının rekabet hukuku kapsamında değerlendirilmesine ilişkin yeni hükümler getirildi.',
-    topics: ['Rekabet hukuku', 'Veri paylaşımı anlaşmaları'],
-    suggestedUnits: [{ unit: 'Hukuk İşleri', reason: 'Mevcut veri paylaşımı anlaşmalarının yeni hükümler karşısında gözden geçirilmesi gerekiyor.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '30 Tem 2026, 13:20', icon: 'bot', note: null }] },
-  { id: 11, title: 'Bankacılık İşlemlerinde Siber Olay Bildirim Süreçlerine İlişkin Genelge', issuer: 'BDDK', type: 'Genelge', publishDate: '22 Ağu 2026', effectiveDate: '22 Kas 2026', isToday: true, severity: 'Kritik', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/genelge/22',
-    summary: 'Önemli siber güvenlik olaylarının BDDK\'ya bildirim süresi 72 saatten 24 saate indirildi ve bildirim şablonuna yeni alanlar eklendi.',
-    topics: ['Siber olay bildirimi', 'Bilgi güvenliği', 'Regülatör raporlama'],
-    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Siber olay tespit ve müdahale süreçlerinin bildirim süresine uyumlu hale getirilmesi gerekiyor.' }, { unit: 'İç Kontrol', reason: 'Yeni bildirim şablonunun süreç dokümantasyonuna işlenmesi gerekiyor.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '22 Ağu 2026, 08:05', icon: 'bot', note: null }] },
-  { id: 12, title: 'Döviz Pozisyonu ve Yurt Dışı Kredi Kullanımına İlişkin Tebliğ', issuer: 'TCMB', type: 'Tebliğ', publishDate: '25 Tem 2026', effectiveDate: '25 Eki 2026', severity: 'Orta', status: 'Onaylandı', confidence: 'Yüksek',
-    sourceUrl: 'https://www.tcmb.gov.tr/mevzuat/2026/tebligler/25',
-    summary: 'Bankaların yurt dışından sağladığı kredilerin döviz pozisyonu limiti hesaplamasına dahil edilme yöntemi güncellendi.',
-    topics: ['Döviz pozisyonu', 'Yurt dışı kredi kullanımı'],
-    suggestedUnits: [{ unit: 'Hazine', reason: 'Döviz pozisyonu limit hesaplamalarının güncellenmesi gerekiyor.' }],
-    decidedBy: 'Elif Demir tarafından onaylandı · 27 Tem 2026, 11:00',
-    auditTrail: [
-      { action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '25 Tem 2026, 09:00', icon: 'bot', note: null },
-      { action: 'Onaylandı', actor: 'Elif Demir · Uyum Uzmanı', timestamp: '27 Tem 2026, 11:00', icon: 'check-circle-2', note: 'Hazine birimine yönlendirildi, limit hesaplama güncellemesi talep edildi.' }
-    ] },
-  { id: 13, title: 'Bireysel Emeklilik Sisteminde Otomatik Katılıma İlişkin Yönetmelik Değişikliği', issuer: 'SPK', type: 'Yönetmelik', publishDate: '14 Ağu 2026', effectiveDate: '14 Ara 2026', severity: 'Düşük', status: 'Bekliyor', confidence: 'Düşük',
-    sourceUrl: 'https://www.spk.gov.tr/mevzuat/2026/14',
-    summary: 'Otomatik katılım sisteminden çıkış talebinde bulunan çalışanlara ilişkin bildirim süreleri kısaltıldı.',
-    topics: ['Otomatik katılım', 'Bireysel emeklilik'],
-    suggestedUnits: [{ unit: 'İnsan Kaynakları', reason: 'Çalışanların otomatik katılım bildirim süreçleri İK tarafından yürütülüyor.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '14 Ağu 2026, 10:30', icon: 'bot', note: null }] },
-  { id: 14, title: 'Bankaların Bilgi Sistemleri Yönetimine İlişkin Tebliğ Güncellemesi', issuer: 'BDDK', type: 'Tebliğ', publishDate: '11 Ağu 2026', effectiveDate: '11 Ara 2026', isToday: true, severity: 'Yüksek', status: 'Bekliyor', confidence: 'Yüksek',
-    sourceUrl: 'https://www.bddk.org.tr/mevzuat/2026/tebligler/11',
-    summary: 'Kritik bilgi sistemlerinin bulut ortamına taşınmasında izlenecek risk değerlendirme sürecine ve BDDK bildirim yükümlülüğüne ilişkin usul netleştirildi.',
-    topics: ['Bilgi sistemleri yönetimi', 'Bulut geçişi', 'Risk değerlendirmesi'],
-    suggestedUnits: [{ unit: 'Bilgi Teknolojileri', reason: 'Bulut geçiş projelerinin risk değerlendirme sürecine dahil edilmesi gerekiyor.' }, { unit: 'İç Kontrol', reason: 'BDDK bildirim yükümlülüğünün süreçlere işlenmesi takip edilmeli.' }],
-    auditTrail: [{ action: 'YZ tarafından tespit edildi', actor: 'Mevzuat Takip Motoru', timestamp: '11 Ağu 2026, 08:20', icon: 'bot', note: null }] }
-];
+const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
 
 class Component extends DCLogic {
   state = {
     view: 'list',
     selectedId: null,
+    detail: null,
+    detailEtag: null,
     detailTab: 'ozet',
-    filters: { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' },
+    filters: Object.assign({}, EMPTY_FILTERS),
     activeMetric: null,
     page: 1,
     pageSize: 10,
     sourceHealthOpen: false,
     confirmType: null,
+    confirmNote: '',
     unitModalOpen: false,
     unitModalSelected: [],
     unitSearch: '',
     toast: null,
-    records: RAW_RECORDS.map(r => ({ ...r, suggestedUnits: r.suggestedUnits.slice() }))
+    records: [],
+    total: 0,
+    stats: { pending: 0, criticalHighPending: 0, today: 0, upcoming: 0 },
+    sources: [],
+    units: [],
+    health: { sources: [], overall: 'healthy', bannerText: '' },
+    me: null,
+    busy: false
   };
 
-  componentDidMount() { this.renderIcons(); }
+  componentDidMount() {
+    this.renderIcons();
+    this.loadMeta();
+    this.loadList();
+  }
   componentDidUpdate() { this.renderIcons(); }
   renderIcons() { if (window.lucide) window.lucide.createIcons(); }
 
-  goToList = () => this.setState({ view: 'list', unitModalOpen: false });
-  openDetail = (id) => this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false });
+  // ------------------------------------------------------------------ veri yükleme
+  fail = (e) => this.showToast('Hata: ' + e.message);
+
+  loadMeta = () => {
+    Promise.all([api('/sources'), api('/units'), api('/sources/health'), api('/me')])
+      .then(([s, u, h, me]) => this.setState({ sources: s.data, units: u.data, health: h.data, me: me.data }))
+      .catch(this.fail);
+    this.loadStats();
+  };
+  loadStats = () => api('/regulations/stats').then(r => this.setState({ stats: r.data })).catch(this.fail);
+
+  loadList = (over = {}) => {
+    const st = Object.assign({}, this.state, over);
+    const f = st.filters, p = new URLSearchParams();
+    if (f.source !== 'all') p.set('source', f.source);
+    if (f.severity !== 'all') p.set('severity', f.severity);
+    if (f.status !== 'all') p.set('status', f.status);
+    if (f.unit !== 'all') p.set('unit', f.unit);
+    if (f.date !== 'all') p.set('date_range', f.date);
+    if (f.search) p.set('q', f.search);
+    if (st.activeMetric) p.set('metric', METRIC_PARAM[st.activeMetric]);
+    p.set('page', st.page); p.set('page_size', st.pageSize);
+    const seq = (this._listSeq = (this._listSeq || 0) + 1);   // sırasız gelen eski yanıtı yok say
+    return api('/regulations?' + p.toString())
+      .then(r => { if (seq === this._listSeq) this.setState({ records: r.data.items.map(toRecord), total: r.data.total }); })
+      .catch(this.fail);
+  };
+
+  update = (patch) => { this.setState(patch); this.loadList(patch); };
+
+  // ------------------------------------------------------------------ gezinme ve filtreler
+  goToList = () => { this.setState({ view: 'list', unitModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
+  openDetail = (id) => {
+    this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, detail: null });
+    api('/regulations/' + id).then(r => this.setState({ detail: toRecord(r.data), detailEtag: r.etag })).catch(this.fail);
+    api('/regulations/' + id + '/views', { method: 'POST' }).catch(() => {});
+  };
   setTabOzet = () => this.setState({ detailTab: 'ozet' });
   setTabAudit = () => this.setState({ detailTab: 'audit' });
 
-  setSearch = (e) => this.setState({ filters: { ...this.state.filters, search: e.target.value }, page: 1 });
-  setFilterSource = (e) => this.setState({ filters: { ...this.state.filters, source: e.target.value }, page: 1 });
-  setFilterSeverity = (e) => this.setState({ filters: { ...this.state.filters, severity: e.target.value }, page: 1 });
-  setFilterStatus = (e) => this.setState({ filters: { ...this.state.filters, status: e.target.value }, page: 1 });
-  setFilterUnit = (e) => this.setState({ filters: { ...this.state.filters, unit: e.target.value }, page: 1 });
-  setFilterDate = (e) => this.setState({ filters: { ...this.state.filters, date: e.target.value }, page: 1 });
-  clearFilters = () => this.setState({ filters: { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' }, page: 1 });
-  toggleMetric = (key) => this.setState({ activeMetric: this.state.activeMetric === key ? null : key, page: 1 });
-  setPage = (p) => this.setState({ page: p });
-  setPageSize = (e) => this.setState({ pageSize: parseInt(e.target.value, 10), page: 1 });
+  setFilter = (key, value) => this.update({ filters: Object.assign({}, this.state.filters, { [key]: value }), page: 1 });
+  setSearch = (e) => {
+    // her tuşta state güncellenir (kontrollü kutu), istek 300 ms durulunca atılır
+    const filters = Object.assign({}, this.state.filters, { search: e.target.value });
+    this.setState({ filters, page: 1 });
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(() => this.loadList({ filters, page: 1 }), 300);
+  };
+  setFilterSource = (e) => this.setFilter('source', e.target.value);
+  setFilterSeverity = (e) => this.setFilter('severity', e.target.value);
+  setFilterStatus = (e) => this.setFilter('status', e.target.value);
+  setFilterUnit = (e) => this.setFilter('unit', e.target.value);
+  setFilterDate = (e) => this.setFilter('date', e.target.value);
+  clearFilters = () => this.update({ filters: Object.assign({}, EMPTY_FILTERS), page: 1 });
+  toggleMetric = (key) => this.update({ activeMetric: this.state.activeMetric === key ? null : key, page: 1 });
+  setPage = (p) => this.update({ page: p });
+  setPageSize = (e) => this.update({ pageSize: parseInt(e.target.value, 10), page: 1 });
   toggleSourceHealth = () => this.setState({ sourceHealthOpen: !this.state.sourceHealthOpen });
 
-  openApprove = () => this.setState({ confirmType: 'approve' });
-  openReject = () => this.setState({ confirmType: 'reject' });
+  // ------------------------------------------------------------------ karar
+  openApprove = () => this.setState({ confirmType: 'approve', confirmNote: '' });
+  openReject = () => this.setState({ confirmType: 'reject', confirmNote: '' });
   closeConfirm = () => this.setState({ confirmType: null });
+  setConfirmNote = (e) => this.setState({ confirmNote: e.target.value });
   stopProp = (e) => e.stopPropagation();
 
   showToast = (msg) => {
     this.setState({ toast: msg });
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 3000);
+    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 3500);
+  };
+
+  afterWrite = (r, msg) => {
+    this.setState({ detail: toRecord(r.data), detailEtag: r.etag, confirmType: null, unitModalOpen: false, busy: false });
+    this.showToast(msg);
+    this.loadStats(); this.loadList();
+  };
+  writeFailed = (e) => {
+    this.setState({ busy: false, confirmType: null, unitModalOpen: false });
+    this.showToast(e.status === 409 || e.status === 412 ? e.message + ' Kayıt yenilendi.' : 'Hata: ' + e.message);
+    if (this.state.selectedId) this.openDetail(this.state.selectedId);
   };
 
   doConfirm = () => {
-    const { confirmType, selectedId, records } = this.state;
-    const rec = records.find(r => r.id === selectedId);
-    if (!rec) return;
-    const newStatus = confirmType === 'approve' ? 'Onaylandı' : 'Reddedildi';
-    const now = 'az önce';
-    rec.status = newStatus;
-    rec.decidedBy = `Ahmet Yılmaz tarafından ${newStatus === 'Onaylandı' ? 'onaylandı' : 'reddedildi'} · ${now}`;
-    rec.auditTrail = [...rec.auditTrail, {
-      action: newStatus, actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: now,
-      icon: newStatus === 'Onaylandı' ? 'check-circle-2' : 'x-circle',
-      note: newStatus === 'Onaylandı' ? `${rec.suggestedUnits.map(s => s.unit).join(', ')} birimine yönlendirildi.` : 'Kayıt reddedildi, aksiyon alınmayacak.'
-    }];
-    this.setState({ records: [...records], confirmType: null });
-    this.showToast(newStatus === 'Onaylandı' ? 'Kayıt onaylandı.' : 'Kayıt reddedildi.');
+    const { confirmType, selectedId, detailEtag, confirmNote, busy } = this.state;
+    if (!selectedId || busy) return;
+    this.setState({ busy: true });
+    api('/regulations/' + selectedId + '/decision', {
+      method: 'POST', headers: detailEtag ? { 'If-Match': detailEtag } : {},
+      body: { decision: confirmType, note: confirmNote || null }
+    }).then(r => this.afterWrite(r, confirmType === 'approve' ? 'Kayıt onaylandı.' : 'Kayıt reddedildi.'))
+      .catch(this.writeFailed);
   };
 
+  // ------------------------------------------------------------------ birim değişikliği
   setUnitSearch = (e) => this.setState({ unitSearch: e.target.value });
-
   openUnitModal = () => {
-    const rec = this.state.records.find(r => r.id === this.state.selectedId);
-    this.setState({ unitModalOpen: true, unitModalSelected: rec ? rec.suggestedUnits.map(s => s.unit) : [], unitSearch: '' });
+    const d = this.state.detail;
+    this.setState({ unitModalOpen: true, unitModalSelected: d ? d.suggestedUnits.map(s => s.code) : [], unitSearch: '' });
   };
   closeUnitModal = () => this.setState({ unitModalOpen: false });
-  toggleUnitSelected = (name) => {
+  toggleUnitSelected = (code) => {
     const sel = this.state.unitModalSelected;
-    this.setState({ unitModalSelected: sel.includes(name) ? sel.filter(u => u !== name) : [...sel, name] });
+    this.setState({ unitModalSelected: sel.includes(code) ? sel.filter(u => u !== code) : [...sel, code] });
   };
   saveUnitChange = () => {
-    const { selectedId, records, unitModalSelected } = this.state;
-    const rec = records.find(r => r.id === selectedId);
-    if (!rec || unitModalSelected.length === 0) return;
-    const old = rec.suggestedUnits.map(s => s.unit).join(', ');
-    rec.suggestedUnits = unitModalSelected.map(name => {
-      const existing = rec.suggestedUnits.find(s => s.unit === name);
-      return existing || { unit: name, reason: 'Uzman tarafından manuel olarak atandı.' };
-    });
-    const updated = unitModalSelected.join(', ');
-    rec.auditTrail = [...rec.auditTrail, { action: 'Birim değiştirildi', actor: 'Ahmet Yılmaz · Uyum Uzmanı', timestamp: 'az önce', icon: 'shuffle', note: `Önerilen birim "${old}" iken "${updated}" olarak güncellendi.` }];
-    this.setState({ records: [...records], unitModalOpen: false });
-    this.showToast('Birim güncellendi.');
+    const { selectedId, unitModalSelected, detailEtag, busy } = this.state;
+    if (!selectedId || unitModalSelected.length === 0 || busy) return;
+    this.setState({ busy: true });
+    api('/regulations/' + selectedId + '/units', {
+      method: 'PUT', headers: detailEtag ? { 'If-Match': detailEtag } : {}, body: { unit_codes: unitModalSelected }
+    }).then(r => this.afterWrite(r, 'Birim güncellendi.')).catch(this.writeFailed);
   };
 
-  matchesFilters(r) {
-    const f = this.state.filters;
-    if (f.source !== 'all' && r.issuer !== f.source) return false;
-    if (f.severity !== 'all' && r.severity !== f.severity) return false;
-    if (f.status !== 'all' && r.status !== f.status) return false;
-    if (f.unit !== 'all' && !r.suggestedUnits.some(s => s.unit === f.unit)) return false;
-    if (f.search && !r.title.toLowerCase().includes(f.search.toLowerCase())) return false;
-    const m = this.state.activeMetric;
-    if (m === 'pending' && r.status !== 'Bekliyor') return false;
-    if (m === 'criticalHigh' && !(r.status === 'Bekliyor' && (r.severity === 'Kritik' || r.severity === 'Yüksek'))) return false;
-    if (m === 'today' && !r.isToday) return false;
-    if (m === 'upcoming' && !r.effectiveSoon) return false;
-    return true;
-  }
-
   renderVals() {
-    const { records, view, selectedId, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, toast, sourceHealthOpen, page, pageSize } = this.state;
-    const filtered = records.filter(r => this.matchesFilters(r));
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const { records, total, stats: apiStats, detail, units, sources, health, confirmNote, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, toast, sourceHealthOpen, page, pageSize } = this.state;
+    // Filtreleme ve sayfalama sunucu tarafında: records yalnızca geçerli sayfadır
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
     const pageStart = (safePage - 1) * pageSize;
-    const pagedFiltered = filtered.slice(pageStart, pageStart + pageSize);
-    const rangeLabel = filtered.length === 0 ? '0 kayıt' : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} / ${filtered.length} kayıt`;
+    const pagedFiltered = records;
+    const rangeLabel = total === 0 ? '0 kayıt' : `${pageStart + 1}–${Math.min(pageStart + pageSize, total)} / ${total} kayıt`;
     const rawItems = [];
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) rawItems.push({ isPage: true, n: i });
@@ -743,19 +713,18 @@ class Component extends DCLogic {
     const visibleRecords = pagedFiltered.map(r => {
       const sm = sevMeta(r.severity), stm = statusMeta(r.status);
       return { ...r, sevBg: sm.bg, sevColor: sm.color, statusBg: stm.bg, statusColor: stm.color,
-        unitsLabel: r.suggestedUnits.map(s => s.unit).join(', '),
+        unitsLabel: r.suggestedUnits.map(s => s.unit).join(', ') || 'Birim önerilemedi',
         effBg: r.effectiveSoon ? 'color-mix(in oklch, var(--primary) 12%, white)' : 'transparent',
         effColor: r.effectiveSoon ? 'var(--primary)' : 'var(--muted-foreground)',
         effWeight: r.effectiveSoon ? 600 : 400,
         openFn: () => this.openDetail(r.id) };
     });
 
-    const pending = records.filter(r => r.status === 'Bekliyor');
-    const stats = { pending: pending.length, criticalPending: pending.filter(r => r.severity === 'Kritik').length };
-    const pendingCount = pending.length;
-    const criticalHighCount = pending.filter(r => r.severity === 'Kritik' || r.severity === 'Yüksek').length;
-    const todayCount = records.filter(r => r.isToday).length;
-    const upcomingCount = records.filter(r => r.effectiveSoon).length;
+    const stats = { pending: apiStats.pending, criticalPending: apiStats.criticalHighPending };
+    const pendingCount = apiStats.pending;
+    const criticalHighCount = apiStats.criticalHighPending;
+    const todayCount = apiStats.today;
+    const upcomingCount = apiStats.upcoming;
 
     const neutralCard = (key, count, zeroText) => {
       const isActive = activeMetric === key, isZero = count === 0;
@@ -782,24 +751,19 @@ class Component extends DCLogic {
       valueColor: critZero ? 'var(--foreground)' : 'color-mix(in oklch, var(--warning) 55%, black)'
     };
 
-    const scenarioKey = this.props.sourceHealthState || 'healthy';
-    const rawSourceList = SOURCE_SCENARIOS[scenarioKey] || SOURCE_SCENARIOS.healthy;
-    const sourceList = rawSourceList.map(s => ({ ...s, dotColor: s.status === 'down' ? 'var(--destructive)' : s.status === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)' }));
+    const sourceList = (health.sources || []).map(s => ({ ...s, dotColor: s.status === 'down' ? 'var(--destructive)' : s.status === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)' }));
     const delayedSources = sourceList.filter(s => s.status === 'delayed');
     const downSources = sourceList.filter(s => s.status === 'down');
-    const overallStatus = downSources.length > 0 ? 'down' : (delayedSources.length > 0 ? 'delayed' : 'healthy');
+    const overallStatus = health.overall || 'healthy';
     const healthMeta = {
       healthy: { text: `${sourceList.length} kaynak aktif`, dotSize: '6px', dotColor: 'var(--success)', dotOpacity: 0.55, bg: 'transparent', border: 'none', textColor: 'var(--muted-foreground)' },
       delayed: { text: `${delayedSources.length} kaynak gecikmeli`, dotSize: '8px', dotColor: 'var(--warning)', dotOpacity: 1, bg: 'color-mix(in oklch, var(--warning) 18%, white)', border: 'none', textColor: 'color-mix(in oklch, var(--warning) 55%, black)' },
       down: { text: `${downSources.length} kaynak yanıt vermiyor`, dotSize: '9px', dotColor: 'var(--destructive)', dotOpacity: 1, bg: 'color-mix(in oklch, var(--destructive) 14%, white)', border: '1px solid color-mix(in oklch, var(--destructive) 35%, white)', textColor: 'var(--destructive)' }
     };
     const hm = healthMeta[overallStatus];
-    const bannerParts = [];
-    delayedSources.forEach(s => bannerParts.push(`${s.name} ${s.lastFetch.replace(' önce', '')} önce içerik getirmedi (gecikmeli)`));
-    downSources.forEach(s => bannerParts.push(`${s.name} ${s.lastFetch.replace(' önce', '')} önce yanıt vermiyor`));
-    const bannerText = bannerParts.join(' · ');
+    const bannerText = health.bannerText || '';
 
-    const selRaw = records.find(r => r.id === selectedId);
+    const selRaw = detail;
     let selected = null;
     if (selRaw) {
       const sm = sevMeta(selRaw.severity), stm = statusMeta(selRaw.status), cm = confMeta(selRaw.confidence);
@@ -807,9 +771,9 @@ class Component extends DCLogic {
       selected = { ...selRaw, sevBg: sm.bg, sevColor: sm.color, statusBg: stm.bg, statusColor: stm.color, confDots: cm.dots, confColor: cm.color, auditTrail: trail, decidedBy: selRaw.decidedBy || '' };
     }
 
-    const filteredUnitOptions = UNITS.filter(u => u.toLowerCase().includes(unitSearch.toLowerCase())).map(u => {
-      const isChecked = unitModalSelected.includes(u);
-      return { name: u, isChecked, toggleFn: () => this.toggleUnitSelected(u),
+    const filteredUnitOptions = units.filter(u => u.name.toLocaleLowerCase('tr').includes(unitSearch.toLocaleLowerCase('tr'))).map(u => {
+      const isChecked = unitModalSelected.includes(u.code);
+      return { name: u.name, isChecked, toggleFn: () => this.toggleUnitSelected(u.code),
         bg: isChecked ? 'color-mix(in oklch, var(--primary) 10%, white)' : 'transparent',
         checkBg: isChecked ? 'var(--primary)' : 'var(--background)',
         checkBorder: isChecked ? 'var(--primary)' : 'var(--border)' };
@@ -825,17 +789,17 @@ class Component extends DCLogic {
 
     return {
       isListView: view === 'list', isDetailView: view === 'detail',
-      filters, unitOptions: UNITS, hasActiveFilters,
+      filters, unitOptions: units, sourceOptions: sources, hasActiveFilters,
       setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,
       setFilterStatus: this.setFilterStatus, setFilterUnit: this.setFilterUnit, setFilterDate: this.setFilterDate, clearFilters: this.clearFilters,
-      visibleRecords, hasResults: filtered.length > 0, noResults: filtered.length === 0,
+      visibleRecords, hasResults: total > 0, noResults: total === 0,
       resultCountLabel: rangeLabel, pageSize, setPageSize: this.setPageSize,
       totalPages, currentPage: safePage, pageNumbers,
       prevDisabled: safePage <= 1, nextDisabled: safePage >= totalPages,
       prevOpacity: safePage <= 1 ? 0.4 : 1, nextOpacity: safePage >= totalPages ? 0.4 : 1,
       goPrev: safePage <= 1 ? (() => {}) : (() => this.setPage(safePage - 1)),
       goNext: safePage >= totalPages ? (() => {}) : (() => this.setPage(safePage + 1)),
-      showPagination: filtered.length > pageSize,
+      showPagination: total > pageSize,
       stats, goToList: this.goToList,
       pendingCount, pendingIsZero: pendingCount === 0, pendingNotZero: pendingCount > 0, criticalHighCount, todayCount, upcomingCount,
       cardPending, cardCritical, cardToday, cardUpcoming,
@@ -843,7 +807,8 @@ class Component extends DCLogic {
       healthBg: hm.bg, healthBorder: hm.border, healthTextColor: hm.textColor,
       showHealthBanner: overallStatus !== 'healthy', bannerText,
       sourceHealthOpen, toggleSourceHealth: this.toggleSourceHealth, sourceList,
-      selected, isPending: !!selected && selected.status === 'Bekliyor',
+      selected, isPending: !!selected && selected.status === 'Bekliyor', isDecided: !!selected && selected.status !== 'Bekliyor',
+      confirmNote, setConfirmNote: this.setConfirmNote,
       isTabOzet: detailTab === 'ozet', isTabAudit: detailTab === 'audit',
       setTabOzet: this.setTabOzet, setTabAudit: this.setTabAudit,
       tabOzetBg: detailTab === 'ozet' ? 'var(--card)' : 'transparent', tabOzetColor: detailTab === 'ozet' ? 'var(--foreground)' : 'var(--muted-foreground)',

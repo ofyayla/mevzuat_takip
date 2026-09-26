@@ -57,6 +57,11 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
         cls["severity"] = {"llm": sev.llm_severity, "rules": sev.applied_rules}
     reg.classification = cls
     reg.processing_status = "RELEVANT" if rel.is_relevant else "IRRELEVANT"
+    if rel.is_relevant:
+        from app.services.audit import ensure_detected
+
+        session.flush()
+        ensure_detected(session, reg)
     reg.classified_at = utcnow()
     reg.extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
 

@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -124,7 +125,12 @@ class Regulation(Base):
     canonical_key: Mapped[str] = mapped_column(String(600))
     # NEW → (İK-3) CLASSIFIED … ; BASELINE: yalnızca ilk taramada görülen eski içerikten oluştu, YZ'ye gitmez
     processing_status: Mapped[str] = mapped_column(String(24), default="NEW", index=True)
-    review_status: Mapped[str] = mapped_column(String(16), default="Bekliyor")
+    review_status: Mapped[str] = mapped_column(String(16), default="Bekliyor", index=True)
+    decided_by: Mapped[str | None] = mapped_column(String(200))
+    decided_by_title: Mapped[str | None] = mapped_column(String(200))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(Text)
+    row_version: Mapped[int] = mapped_column(Integer, default=1)       # iyimser kilit (If-Match / ETag)
     needs_dedupe_review: Mapped[bool] = mapped_column(Boolean, default=False)  # belirsiz bant (0.70–0.90)
     # İK-3: ilgililik ve önem (YZ)
     is_relevant: Mapped[bool | None] = mapped_column(Boolean, index=True)
@@ -241,6 +247,46 @@ class FewshotExample(Base):
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuditEvent(Base):
+    """Denetim izi — yalnızca ekleme (plan §5.2). ORM düzeyinde güncelleme/silme engellenir; üretimde ayrıca DB
+    yetkisiyle (UPDATE/DELETE izni verilmez) korunur."""
+
+    __tablename__ = "audit_event"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    # detected | viewed | approved | rejected | units_changed | summary_regenerated | reprocessed
+    event_type: Mapped[str] = mapped_column(String(32))
+    actor_type: Mapped[str] = mapped_column(String(8))            # system | user
+    actor_id: Mapped[str | None] = mapped_column(String(200))
+    actor_name: Mapped[str | None] = mapped_column(String(200))
+    actor_title: Mapped[str | None] = mapped_column(String(200))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str | None] = mapped_column(Text)
+    client_ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class Outbox(Base):
+    """Domain olayları (record.approved / record.rejected). Faz 1'de dinleyen yok; Faz 2 Outlook bildirimi okuyacak."""
+
+    __tablename__ = "outbox"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    aggregate_id: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+@event.listens_for(AuditEvent, "before_update")
+@event.listens_for(AuditEvent, "before_delete")
+def _audit_is_append_only(mapper, connection, target):
+    raise PermissionError("audit_event yalnızca eklemeye açıktır")
 
 
 class LlmCall(Base):
