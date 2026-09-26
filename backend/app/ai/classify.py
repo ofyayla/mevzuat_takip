@@ -8,6 +8,7 @@ BASELINE ve MERGED kayıtlar sınıflandırılmaz.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.ai import relevance, severity
 from app.ai.common import effective_settings, knowledge, regulation_context
 from app.ai.llm_client import LLM, LLMError
+from app.collectors.dates import tr_lower
 from app.db import Regulation, utcnow
 from app.settings import Settings
 
@@ -42,6 +44,8 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
     rel = relevance.assess(llm, ctx, kn, s, session=session, force=force)
     reg.is_relevant, reg.relevance_score, reg.confidence_band = rel.is_relevant, rel.score, rel.band
     reg.ai_reg_type = rel.reg_type
+    if re.search(r"\btaslağı?\b", tr_lower(" ".join([reg.title, *(ctx.alt_titles or [])]))):
+        reg.ai_reg_type = "Düzenleme Taslağı"   # yürürlükte değil, görüşe açık (LLM "Tebliğ" diyebiliyor)
     cls = {"relevance": {"topics": rel.topics, "criteria": rel.criteria, "rationale": rel.rationale,
                          "uncertain": rel.uncertain, **rel.components},
            "knowledge_version": kn.version}
@@ -54,7 +58,7 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
     reg.classification = cls
     reg.processing_status = "RELEVANT" if rel.is_relevant else "IRRELEVANT"
     reg.classified_at = utcnow()
-    reg.extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error")}
+    reg.extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
 
 
 def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,
@@ -78,8 +82,9 @@ def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings:
             if reg.processing_status == "MERGED" or (reg.processing_status == "BASELINE" and not force
                                                          and not include_baseline):
                 continue
-            if reg.processing_status == "AI_FAILED" and (reg.extra or {}).get("ai_attempts", 0) >= AI_MAX_ATTEMPTS \
-                    and not force:
+            if reg.processing_status == "AI_FAILED" and not force and (
+                    (reg.extra or {}).get("ai_stage", "relevance") != "relevance"      # özet aşaması kendi dener
+                    or (reg.extra or {}).get("ai_attempts", 0) >= AI_MAX_ATTEMPTS):
                 continue
             report.processed += 1
             try:
@@ -91,6 +96,7 @@ def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings:
                 extra = dict(reg.extra or {})
                 extra["ai_attempts"] = extra.get("ai_attempts", 0) + 1
                 extra["ai_error"] = str(e)[:500]
+                extra["ai_stage"] = "relevance"
                 reg.extra, reg.processing_status = extra, "AI_FAILED"
                 session.commit()
                 report.failed += 1

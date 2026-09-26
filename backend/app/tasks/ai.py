@@ -22,5 +22,19 @@ def classify_regulations(ids: list[int] | None = None, limit: int = 100) -> dict
     if llm is None:
         return {"status": "skipped", "reason": "LLM_PROVIDER=none"}
     rep = classify_pending(_session_factory(), llm, s, ids=ids, limit=limit)
-    # İK-4: rep.relevant_ids özet kuyruğuna verilecek
+    if rep.relevant_ids:
+        summarize_regulations.delay(ids=rep.relevant_ids)
+    return {k: v for k, v in rep.__dict__.items() if k != "errors"} | {"errors": rep.errors[:20]}
+
+
+@app.task(name="app.tasks.ai.summarize_regulations")
+def summarize_regulations(ids: list[int] | None = None, limit: int = 50) -> dict:
+    from app.ai.summary import summarize_pending
+
+    s = get_settings()
+    llm = get_llm(s)
+    if llm is None:
+        return {"status": "skipped", "reason": "LLM_PROVIDER=none"}
+    rep = summarize_pending(_session_factory(), llm, s, ids=ids, limit=limit)
+    # İK-5: rep.ids birim eşleştirme kuyruğuna verilecek
     return {k: v for k, v in rep.__dict__.items() if k != "errors"} | {"errors": rep.errors[:20]}

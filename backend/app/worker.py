@@ -52,6 +52,8 @@ def build_beat_schedule() -> dict:
                                    "options": {"expires": 900}}
     schedule["classify-pending"] = {"task": "app.tasks.ai.classify_regulations", "schedule": _crontab("7,37 * * * *"),
                                     "options": {"expires": 1800}}
+    schedule["summarize-pending"] = {"task": "app.tasks.ai.summarize_regulations",
+                                     "schedule": _crontab("17,47 * * * *"), "options": {"expires": 1800}}
     return schedule
 
 

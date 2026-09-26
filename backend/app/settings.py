@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     confidence_medium: float = 0.45
     relevance_max_input_chars: int = 18000   # ~6.000 token
 
+    # İK-4: özet ve kaynağa dayandırma
+    summary_max_input_chars: int = 36000     # tek çağrı sınırı; üstü map-reduce
+    summary_chunk_chars: int = 14000         # map-reduce bölüm boyu
+    grounding_fuzzy_threshold: int = 90      # rapidfuzz partial_ratio alt sınırı
+    summary_max_regenerations: int = 1
+    effective_soon_days: int = 30
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):

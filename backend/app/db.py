@@ -135,6 +135,9 @@ class Regulation(Base):
     ai_reg_type: Mapped[str | None] = mapped_column(String(64))
     classification: Mapped[dict] = mapped_column(JSON, default=dict)   # oylar, bileşenler, gerekçe, kriterler
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # İK-4: yürürlük tarihi (YZ çıkarımı, kaynak alıntısıyla ve deterministik kontrolle doğrulanmış)
+    effective_date: Mapped[date | None] = mapped_column(Date, index=True)
+    effective_date_text: Mapped[str | None] = mapped_column(Text)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -163,6 +166,29 @@ class RegulationSourceLink(Base):
     match_method: Mapped[str] = mapped_column(String(24))
     match_score: Mapped[float | None] = mapped_column(Float)
     matched_key: Mapped[str | None] = mapped_column(String(600))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RegulationSummary(Base):
+    """İK-4 yapılandırılmış özet (plan §5.2). Sürümlüdür: yeniden üretimde eski sürüm is_current=False kalır."""
+
+    __tablename__ = "regulation_summary"
+    __table_args__ = (UniqueConstraint("regulation_id", "version", name="uq_summary_version"),)
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    short_content: Mapped[str] = mapped_column(Text)               # doğrulanmış cümlelerden oluşan paragraf
+    short_content_evidence: Mapped[list] = mapped_column(JSON, default=list)  # [{sentence, evidence:[…]}]
+    relevant_topics: Mapped[list] = mapped_column(JSON, default=list)          # [{text, evidence:[…]}]
+    effective_date_evidence: Mapped[dict | None] = mapped_column(JSON)
+    grounding_score: Mapped[float] = mapped_column(Float)          # doğrulanan ifade oranı (kaldırılanlar dahil)
+    unverified_claims: Mapped[list] = mapped_column(JSON, default=list)  # kaldırılan / doğrulanamayan ifadeler
+    source_links: Mapped[list] = mapped_column(JSON, default=list)       # [{label, url}]
+    method: Mapped[str] = mapped_column(String(16))                 # single | map_reduce
+    prompt_version: Mapped[str] = mapped_column(String(64))
+    llm_call_ids: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -2,7 +2,8 @@
 
   mevzuat-ai llm-check                         # LLM bağlantı ve şemalı çıktı testi
   mevzuat-ai classify [--id N ...] [--limit N] [--force]   # NEW düzenlemeleri sınıflandır
-  mevzuat-ai show REG_ID                        # ilgililik/önem kararı ve bileşenleri
+  mevzuat-ai summarize [--id N ...] [--limit N] [--force] # İK-4: RELEVANT düzenlemelerin özeti
+  mevzuat-ai show REG_ID                        # ilgililik/önem kararı, bileşenler ve güncel özet
   mevzuat-ai calls [--limit N]                  # son LLM çağrıları (gecikme, token, durum)
   mevzuat-ai setting [KEY VALUE]                # çalışma zamanı eşikleri (app_setting)
   mevzuat-ai eval DOSYA.jsonl [--samples N]     # değerlendirme seti: recall / precision / önem isabeti
@@ -20,7 +21,7 @@ from sqlalchemy import func, select
 from app.ai.classify import classify_pending
 from app.ai.common import RUNTIME_KEYS, effective_settings, set_runtime_setting
 from app.ai.llm_client import LLMError, get_llm
-from app.db import LlmCall, Regulation, make_sessionmaker
+from app.db import LlmCall, Regulation, RegulationSummary, make_sessionmaker
 from app.settings import get_settings
 
 
@@ -64,6 +65,19 @@ def cmd_classify(args) -> int:
     return 1 if rep.failed else 0
 
 
+def cmd_summarize(args) -> int:
+    from app.ai.summary import summarize_pending
+
+    s = get_settings()
+    rep = summarize_pending(make_sessionmaker(s.database_url), _llm_or_exit(s), s, ids=args.id, limit=args.limit,
+                            force=args.force)
+    print(f"işlenen={rep.processed} özetlenen={rep.summarized} hata={rep.failed} metin bekleyen={rep.awaiting_text} "
+          f"ort. dayandırma={rep.avg_grounding} kaldırılan ifade={rep.removed_claims}")
+    for e in rep.errors[:20]:
+        print(f"  HATA {e}")
+    return 1 if rep.failed else 0
+
+
 def cmd_show(args) -> int:
     s = get_settings()
     with make_sessionmaker(s.database_url)() as ses:
@@ -75,6 +89,21 @@ def cmd_show(args) -> int:
               f"önem={reg.severity} tür={reg.ai_reg_type or reg.reg_type}")
         print(f"  önem gerekçesi: {reg.severity_rationale}")
         print(json.dumps(reg.classification, ensure_ascii=False, indent=2))
+        summ = ses.scalars(select(RegulationSummary).where(RegulationSummary.regulation_id == reg.id,
+                                                           RegulationSummary.is_current.is_(True))).first()
+        if summ:
+            print(f"\n--- Özet v{summ.version} ({summ.method}, dayandırma {summ.grounding_score}) ---")
+            print(summ.short_content)
+            print("Konular: " + ", ".join(t["text"] for t in summ.relevant_topics))
+            print(f"Yürürlük: {reg.effective_date or '-'} — {reg.effective_date_text or '-'}")
+            for c in summ.short_content_evidence:
+                for e in c["evidence"]:
+                    print(f"  [{e['method']} {e['score']}] raw {e['raw_document_id']} "
+                          f"{e['char_start']}-{e['char_end']}: {e['quote'][:100]}")
+            if summ.unverified_claims:
+                print("Kaldırılan (doğrulanamayan): " + "; ".join(c["text"] for c in summ.unverified_claims))
+            for link in summ.source_links:
+                print(f"  {link['label']}: {link['url']}")
     return 0
 
 
@@ -127,6 +156,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--include-baseline", action="store_true",
                    help="ilk taramadaki eski (BASELINE) kayıtları da sınıflandır (geriye dönük)")
     p.set_defaults(fn=cmd_classify)
+    p = sub.add_parser("summarize")
+    p.add_argument("--id", type=int, action="append")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--force", action="store_true", help="özeti yeniden üret (yeni sürüm)")
+    p.set_defaults(fn=cmd_summarize)
     p = sub.add_parser("show")
     p.add_argument("reg_id", type=int)
     p.set_defaults(fn=cmd_show)

@@ -1,0 +1,13 @@
+- Başlık: {{ title }}
+{% if alt_titles %}- Diğer kaynaklardaki başlıkları: {{ alt_titles | join(" | ") }}
+{% endif %}- Yayımlayan: {{ issuer or "bilinmiyor" }}
+- Tür: {{ reg_type or "bilinmiyor" }}
+- Yayım tarihi: {{ publish_date or "bilinmiyor" }}
+- İlgililik değerlendirmesi: {{ relevance_rationale or "-" }} (konular: {{ topics | join(", ") or "-" }})
+{% if feedback %}
+ÖNCEKİ DENEMEDE DOĞRULANAMAYAN İFADELER — alıntıları kaynak metinden birebir kopyalayarak düzelt ya da ifadeyi çıkar:
+{% for f in feedback %}- {{ f }}
+{% endfor %}{% endif %}
+<kaynak_metin>
+{{ text }}
+</kaynak_metin>

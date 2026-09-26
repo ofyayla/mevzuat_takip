@@ -3,7 +3,8 @@
 Hazır olanlar: **kaynak toplama altyapısı (İK-1)**: 9 resmi kaynağın (KEP hariç) taranması, yeni/değişen içeriğin
 tespiti, ham arşiv ve kaynak bazlı sağlık verisi; **belge işleme ve tekilleştirme (İK-2)**: metin çıkarma, OCR,
 aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması; **mevzuat tespiti ve önceliklendirme (İK-3)**:
-LLM ile ilgililik, göreli güven skoru ve önem derecesi. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve özet (İK-4)**: her ifadesi kaynak
+metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -163,6 +164,47 @@ değişkenliği), önem ±1 isabeti 1.0. Aynı penceredeki 212 düzenlemenin tam
 maddesinden 11'i ilgili.
 Küçük ve yalnızca açık vakalardan oluşan bu set bir kalibrasyon değil, hattın doğru çalıştığının kanıtıdır; eşik
 paralel çalışmada Başkanlık etiketleriyle ayarlanacak (İK-8).
+
+## İçerik analizi ve özet (İK-4)
+
+```bash
+mevzuat-ai summarize                 # RELEVANT düzenlemeleri özetle (--id N --force: yeni sürüm üret)
+mevzuat-ai show 42                   # özet, konular, yürürlük, her cümlenin kaynak alıntısı ve karakter aralığı
+```
+
+Sınıflandırma ilgili bulduğu düzenlemeler için özet görevini tetikler; Beat saatte iki kez bekleyenleri tarar.
+Akış: `RELEVANT → SUMMARIZED` (ya da `AI_FAILED`, `extra.ai_stage=summary`, 3 deneme). Özetler sürümlüdür
+(`regulation_summary.version`, `is_current`).
+
+**Çıktı** (portal alanları): `short_content` (2–4 cümle), `relevant_topics` (2–5 kısa konu), yürürlük tarihi
+(`regulation.effective_date` + ifade), `source_links` (Resmî Gazete / yayım sayfası / belge dosyası / ekler ayrı
+etiketlerle), `grounding_score` (doğrulanan ifade oranı), `unverified_claims` (özetten kaldırılan ifadeler — portal
+"doğrulanamayan ifade kaldırıldı" gösterir).
+
+**Kaynağa dayandırma** (`app/ai/grounding.py`): LLM her cümle ve konu için kaynaktan birebir alıntı verir. Alıntı
+tüm bağlı belgelerde (RG kopyası, kurum sayfası, ek PDF'ler) aranır: tam eşleşme → kelime dizisi eşleşmesi
+(noktalama/boşluk farkı yok sayılır) → bulanık (`partial_ratio ≥ 90`) → atlamalı (alıntının tüm kelimeleri aynı
+sırayla, dar bir pencerede; LLM "…" koymadan bent atladığında). Kaynakta olmayan kelime hiçbir yolda kabul
+edilmez. Bulunan alıntının orijinal metindeki karakter aralığı kaydedilir. Doğrulanamayan ifade için bir kez geri
+bildirimle yeniden üretim yapılır, yine doğrulanamazsa özetten çıkarılır. Hiçbir cümle doğrulanamazsa özet
+yayımlanmaz (`AI_FAILED`).
+
+**Yürürlük tarihi:** Kanıt olarak yalnızca yürürlük/uygulama hükmü kabul edilir ("… yürürlüğe girer", "…
+uygulanır"); karar veya toplantı tarihi yürürlük sayılmaz. Tarih ifadeden deterministik hesaplanır: açık tarih,
+"yayımı tarihinde", "yayımından N gün/ay/yıl sonra" (yayım tarihi RG tarihidir). LLM'in verdiği tarih ifadeyle
+tutarsızsa ifade kazanır. LLM hükmü bulamazsa metindeki "…yürürlüğe girer" cümlesi aranır.
+
+**Uzun belgeler:** metin 36.000 karakteri aşarsa map-reduce: ~14.000 karakterlik bölümlerden alıntılı notlar
+(alıntıları doğrulanmayan not atılır) → notlardan birleşik özet (alıntılar notlardan kopyalanır, yeniden doğrulanır).
+
+Düzenleme taslakları ("… Taslağı") türü deterministik olarak "Düzenleme Taslağı" olur (önem tavanı "Yüksek").
+Kaynak metni 200 karakterden kısa olan (OCR bekleyen taranmış belge vb.) kayıt için LLM çağrılmaz: kayıt `RELEVANT`
+kalır, `extra.summary_blocked=metin_yok` işaretlenir ve metin geldiğinde özetlenir.
+
+**Canlı ölçüm** (gpt-4.1-mini, 18–25.09.2026 penceresi, 120 ilgili düzenleme): 105 özet, 14 metin bekliyor, 1
+başarısız. Tek parça özet (89) ortalama dayandırma 0.996; map-reduce (16 uzun belge) 0.851 — birleşik özet adımı
+zayıf nokta. 857 alıntının %89'u tam, %7'si bulanık, %3'ü kelime dizisi, %0.7'si atlamalı eşleşme. 20 kayıtta
+doğrulanmış yürürlük tarihi; 7 kayıtta LLM'in önerdiği tarih ifadeyle doğrulanamadığı için boş bırakıldı.
 
 ## Testler
 

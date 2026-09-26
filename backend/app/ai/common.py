@@ -26,6 +26,9 @@ REG_TYPES = ["Kanun", "Cumhurbaşkanı Kararı", "Cumhurbaşkanlığı Kararname
 SEVERITIES = ["Kritik", "Yüksek", "Orta", "Düşük"]
 _env = Environment(loader=FileSystemLoader(PROMPTS_DIR), undefined=StrictUndefined, keep_trailing_newline=False,
                    trim_blocks=False, autoescape=False)
+# tojson varsayılan olarak Türkçe karakterleri \u011f biçiminde kaçırır; model alıntıları bu kaçış dizileriyle kopyalayıp
+# bozuyor (canlı ölçüm: map-reduce'ta "Tebli\u001fin" gibi alıntılar). Prompt'a düz UTF-8 JSON verilir.
+_env.policies["json.dumps_kwargs"] = {"ensure_ascii": False, "sort_keys": False}
 
 
 @dataclass(frozen=True)
