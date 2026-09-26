@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     # Veritabanı / kuyruk
     database_url: str = f"sqlite:///{BACKEND_DIR / 'data' / 'mevzuat.db'}"
+    # True: tablolar açılışta create_all ile oluşturulur (yerel geliştirme/test). Üretimde False: şemayı yalnızca
+    # "alembic upgrade head" (migrate servisi) kurar/günceller; create_all mevcut tabloya sütun eklemez.
+    db_auto_create: bool = True
     redis_url: str | None = None
 
     # Depolama
@@ -107,7 +110,7 @@ class Settings(BaseSettings):
     keycloak_public_keys_dir: Path = BACKEND_DIR / "config" / "keycloak_keys"
     keycloak_leeway_s: int = 60
     cors_origins: str = "http://localhost:8080"
-    portal_dir: Path = BACKEND_DIR.parent     # Mevzuat Takip Portali.dc.html + support.js
+    portal_dir: Path = BACKEND_DIR.parent     # Mevzuat Takip Portali.dc.html + support.js (imajda /app/portal)
 
     # İK-7: izleme ve alarmlar
     monitor_failed_runs_down: int = 3        # son N tarama başarısızsa "down"

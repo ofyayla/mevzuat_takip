@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -283,6 +283,15 @@ def _iso_dt(dt):
     return _iso(dt)
 
 
+@admin.get("/audit/verify")
+def admin_audit_verify(session: SessionDep, actor: ActorDep, regulation_id: int | None = None):
+    from app.services.audit import verify_chain
+
+    require(actor, ROLE_ADMIN)
+    problems = verify_chain(session, regulation_id)
+    return {"ok": not any(p["problem"] != "hash yok (zincir öncesi)" for p in problems), "problems": problems}
+
+
 @admin.post("/monitor/run")
 def admin_monitor_run(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     from app.monitoring.service import run_monitor
@@ -360,6 +369,88 @@ def _run_source_inline(settings: Settings, code: str) -> None:
     collect_main(["run", code])
 
 
+# ------------------------------------------------------------------------------------------------ paralel çalışma (İK-8)
+
+evaluation = APIRouter(prefix="/api/v1/evaluation")
+
+
+class ManualDetectionIn(BaseModel):
+    title: str = Field(min_length=3, max_length=1000)
+    issuer: str | None = None
+    publish_date: date | None = None
+    url: str | None = None
+    severity: Literal["Kritik", "Yüksek", "Orta", "Düşük"] | None = None
+    unit_codes: list[str] = Field(default_factory=list)
+    note: str | None = None
+
+
+def _md_out(md) -> dict:
+    return {"id": md.id, "title": md.title, "issuer": md.issuer,
+            "publishDate": md.publish_date.isoformat() if md.publish_date else None, "url": md.url,
+            "matchedRegulationId": md.matched_regulation_id, "matchMethod": md.match_method,
+            "matchScore": md.match_score}
+
+
+@evaluation.post("/manual-detections", status_code=201)
+def manual_detection(body: ManualDetectionIn, session: SessionDep, actor: ActorDep):
+    from app.evaluation.parallel import add_detection
+
+    require(actor, ROLE_EXPERT)
+    md = add_detection(session, body.model_dump(), actor.name)
+    session.commit()
+    return _md_out(md)
+
+
+@evaluation.post("/manual-detections/upload", status_code=201)
+async def manual_detection_upload(session: SessionDep, actor: ActorDep, file: UploadFile):
+    from app.evaluation.parallel import add_detection, normalize_row, parse_rows
+
+    require(actor, ROLE_EXPERT)
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise ApiError(413, "too_large", "dosya en fazla 5 MB olabilir")
+    if not (file.filename or "").lower().endswith((".csv", ".txt", ".xlsx", ".xlsm")):
+        raise ApiError(400, "unsupported_file", "CSV veya Excel (.xlsx) yükleyin")
+    try:
+        rows = [normalize_row(r) for r in parse_rows(file.filename, content)]
+    except Exception as e:  # noqa: BLE001 — bozuk dosya
+        raise ApiError(400, "invalid_file", f"dosya okunamadı: {e}") from e
+    added = [add_detection(session, r, actor.name) for r in rows]
+    session.commit()
+    return {"added": len(added), "matched": sum(1 for m in added if m.matched_regulation_id),
+            "items": [_md_out(m) for m in added]}
+
+
+@evaluation.get("/manual-detections")
+def manual_detections(session: SessionDep, actor: ActorDep, date_from: Annotated[date | None, Query(alias="from")] = None,
+                      date_to: Annotated[date | None, Query(alias="to")] = None):
+    from app.db import ManualDetection
+
+    require(actor, ROLE_VIEWER)
+    q = select(ManualDetection).order_by(ManualDetection.publish_date.desc())
+    if date_from and date_to:
+        q = q.where(ManualDetection.publish_date.between(date_from, date_to))
+    return [_md_out(m) for m in session.scalars(q.limit(1000))]
+
+
+@evaluation.get("/report")
+def evaluation_report(session: SessionDep, actor: ActorDep, date_from: Annotated[date, Query(alias="from")],
+                      date_to: Annotated[date, Query(alias="to")]):
+    from app.evaluation.parallel import report
+
+    require(actor, ROLE_VIEWER)
+    return report(session, date_from, date_to)
+
+
+@evaluation.get("/filtered-out")
+def evaluation_filtered_out(session: SessionDep, actor: ActorDep, date_from: Annotated[date, Query(alias="from")],
+                            date_to: Annotated[date, Query(alias="to")]):
+    from app.evaluation.parallel import filtered_out
+
+    require(actor, ROLE_VIEWER)
+    return filtered_out(session, date_from, date_to)
+
+
 # ------------------------------------------------------------------------------------------------ uygulama
 
 
@@ -404,6 +495,7 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
 
     app.include_router(api)
     app.include_router(admin)
+    app.include_router(evaluation)
 
     @app.get("/", include_in_schema=False)
     def portal():

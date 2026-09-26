@@ -1,0 +1,57 @@
+# Mevzuat Takip — Docker Compose (plan §11). Depo kökünden:
+#   docker compose -f backend/docker/docker-compose.yml --profile dev up -d      # yerel: redis dahil
+#   docker compose -f backend/docker/docker-compose.yml up -d                    # kurum: REDIS_URL kurum Redis'ini gösterir
+# Şema yalnızca "migrate" tek seferlik servisiyle kurulur/güncellenir (API açılışta migrasyon çalıştırmaz).
+x-app: &app
+  image: mevzuat-backend:latest
+  build: {context: ../.., dockerfile: backend/docker/Dockerfile}
+  env_file: [../.env]
+  environment: &env
+    DATABASE_URL: postgresql+psycopg://mevzuat:${POSTGRES_PASSWORD:-mevzuat}@db:5432/mevzuat
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    DB_AUTO_CREATE: "false"
+    TZ: Europe/Istanbul
+  volumes: [rawdata:/data]
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16
+    environment: {POSTGRES_DB: mevzuat, POSTGRES_USER: mevzuat, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-mevzuat}", TZ: Europe/Istanbul}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U mevzuat"], interval: 5s, retries: 20}
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    profiles: [dev]
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    depends_on: {db: {condition: service_healthy}}
+    restart: "no"
+
+  api:
+    <<: *app
+    ports: ["${API_PORT:-8000}:8000"]
+
+  worker-collect:           # DMZ ayrımı gerekirse bu servis DMZ'deki ayrı VM'de çalıştırılır (plan §2.1)
+    <<: *app
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "collect", "-c", "4", "-n", "collect@%h"]
+  worker-process:           # PDF/OCR CPU yoğun
+    <<: *app
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "process", "-c", "2", "-n", "process@%h"]
+  worker-ai:                # vLLM eşzamanlılığıyla uyumlu tutulur
+    <<: *app
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "ai", "-c", "2", "-n", "ai@%h"]
+  worker-monitor:
+    <<: *app
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "monitor", "-c", "1", "-n", "monitor@%h"]
+  beat:                     # TEK örnek çalışmalı
+    <<: *app
+    command: ["celery", "-A", "app.worker", "beat", "--schedule", "/data/celerybeat-schedule"]
+
+volumes: {pgdata: {}, rawdata: {}}

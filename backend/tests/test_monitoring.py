@@ -40,6 +40,7 @@ def add_run(sf, code, started, status="success", channels=None, errors=None, ite
     with sf() as s:
         if s.get(Source, code) is None:
             s.add(Source(code=code, name=code))
+            s.flush()   # ilişki tanımı yok: üst kayıt önce yazılmalı (yabancı anahtar denetimi açık)
         run = FetchRun(source_code=code, started_at=started, finished_at=started, status=status,
                        channels=channels or {"k": {"items": 5}}, errors=errors or [])
         s.add(run)

@@ -4,6 +4,7 @@
   mevzuat-monitor alerts [--all]                        # açık (veya tüm) alarmlar
   mevzuat-monitor backfill KOD --from YYYY-MM-DD --to YYYY-MM-DD   # geçmiş dönemi yeniden topla (RG: gün gün)
   mevzuat-monitor reprocess STAGE --from … --to … [--source KOD]   # extract | classify | summarize | match
+  mevzuat-monitor audit-verify [--id REG_ID]            # denetim izi hash zinciri bütünlük kontrolü
 """
 from __future__ import annotations
 
@@ -73,6 +74,18 @@ def cmd_reprocess(args) -> int:
     return 0
 
 
+def cmd_audit_verify(args) -> int:
+    from app.services.audit import verify_chain
+
+    s = get_settings()
+    with make_sessionmaker(s.database_url)() as ses:
+        problems = verify_chain(ses, args.id)
+    for p in problems:
+        print(f"SORUN olay {p['id']} (düzenleme {p['regulation_id']}): {p['problem']}")
+    print("Denetim izi bütünlüğü tamam" if not problems else f"{len(problems)} sorunlu olay")
+    return 1 if any(p["problem"] != "hash yok (zincir öncesi)" for p in problems) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="mevzuat-monitor", description="Kaynak izleme ve geriye dönük işleme (İK-7)")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -94,6 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--to", dest="date_to", required=True)
     p.add_argument("--source")
     p.set_defaults(fn=cmd_reprocess)
+    p = sub.add_parser("audit-verify")
+    p.add_argument("--id", type=int)
+    p.set_defaults(fn=cmd_audit_verify)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

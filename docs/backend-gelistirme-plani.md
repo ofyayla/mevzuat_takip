@@ -577,6 +577,12 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
   - Önem derecesi uyumu, birim önerisi isabeti (onaylanan birimler ile ilk YZ önerisi arasında top-1 ve herhangi-eşleşme oranı), ortalama tespit gecikmesi (yayım → tespit).
 - **Eşik ayarı:** Rapor, farklı eşik değerleri için kaçırma/gereksiz bildirim eğrisini (eşik taraması) hesaplar. Başkanlıkla seçilen eşik `app_setting` üzerinden uygulanır.
 - **Değerlendirme seti (İK-3 kalemi):** Geçmiş 3–6 aylık RG + kurum yayınlarından, Başkanlıkla birlikte etiketlenmiş ~300–500 kayıt `tests/eval/` altında tutulur. Her prompt değişikliğinde `make eval` çalıştırılır ve recall/precision/birim isabeti raporlanır (LLM regresyon testi).
+- **Uygulama notu (26.09.2026):** Manuel tespit tekil/CSV/Excel girişi, kaçırma nedeni ayrımı (hiç toplanmadı, işlenmedi,
+  taban çizgisi, eşik altı, tekilleştirmede kayboldu), eşik taraması ve `mevzuat-ai setting` ile çalışma zamanı eşik
+  değişikliği uygulandı. Devreye alma için eklenenler: Alembic (0001–0003), denetim izine hash zinciri ve
+  `audit-verify`, Docker imajı + Compose, uçtan uca test, 1 yıllık hacimle yük testi (SQLite ve PostgreSQL 16) ve
+  `docs/runbook.md`. Yük testi iki indeks eksiğini ortaya çıkardı (birim filtresi, özet araması; migrasyon 0003).
+  Kalan: kurum ortamına kurulum, Keycloak realm bilgileri, gerçek paralel çalışma verisi ve UAT.
 
 ---
 

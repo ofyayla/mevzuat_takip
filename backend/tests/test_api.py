@@ -248,3 +248,22 @@ def test_admin_settings_and_health_endpoints(settings, env, client):  # noqa: F8
     assert c.get("/healthz").json() == {"status": "ok"} and c.get("/readyz").json()["checks"]["db"] == "ok"
     assert len(c.get("/api/v1/units").json()) == 0 or True
     assert c.get("/").status_code == 200 and "Mevzuat" in c.get("/").text
+
+
+def test_audit_hash_chain_detects_tampering(settings, env, client):  # noqa: F811
+    from sqlalchemy import text
+
+    reg_id = _ready(settings, env)
+    c, sf = client
+    c.post(f"/api/v1/regulations/{reg_id}/views")
+    c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "approve", "note": "ilk not"})
+    assert c.get("/api/v1/admin/audit/verify").json() == {"ok": True, "problems": []}
+    with sf() as s:   # ORM korumasını atlayan doğrudan veritabanı değişikliği
+        s.execute(text("UPDATE audit_event SET note = 'değiştirildi' WHERE event_type = 'approved'"))
+        s.commit()
+    r = c.get("/api/v1/admin/audit/verify").json()
+    assert r["ok"] is False and r["problems"][0]["problem"] == "içerik değiştirilmiş"
+    with sf() as s:   # araya olay silme → zincir kopar
+        s.execute(text("DELETE FROM audit_event WHERE event_type = 'viewed'"))
+        s.commit()
+    assert "zincir kopuk" in {p["problem"] for p in c.get("/api/v1/admin/audit/verify").json()["problems"]}

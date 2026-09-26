@@ -2,7 +2,7 @@
 (§5.2: regulation, regulation_key, regulation_source_link — İK-2).
 
 Üretimde PostgreSQL, yerel geliştirmede ve testlerde SQLite kullanılır; tipler ikisiyle de uyumludur.
-Alembic migrasyonları sonraki adımda bu modellerden üretilecektir.
+Şema değişikliği: model güncellenir → ``alembic revision --autogenerate`` → migrations/versions (İK-8).
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -179,7 +180,10 @@ class RegulationSummary(Base):
     """İK-4 yapılandırılmış özet (plan §5.2). Sürümlüdür: yeniden üretimde eski sürüm is_current=False kalır."""
 
     __tablename__ = "regulation_summary"
-    __table_args__ = (UniqueConstraint("regulation_id", "version", name="uq_summary_version"),)
+    # (regulation_id, is_current): portal aramasındaki ilişkili alt sorgu için; yalnızca is_current indeksi seçilirse
+    # (neredeyse tüm satırlar True) sorgu fiilen tam taramaya dönüyor (yük testi: 16 ms → 900 ms)
+    __table_args__ = (UniqueConstraint("regulation_id", "version", name="uq_summary_version"),
+                      Index("ix_regulation_summary_current", "regulation_id", "is_current"))
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
@@ -218,6 +222,8 @@ class UnitSuggestion(Base):
     """Düzenleme → birim önerisi. ``origin``: ai | manual. Başkanlık değiştirirse eski öneriler is_active=False."""
 
     __tablename__ = "unit_suggestion"
+    # Portal birim filtresi (unit_code + aktif) — yük testinde bu indeks olmadan 1 yıllık veride ~2 sn sürüyordu
+    __table_args__ = (Index("ix_unit_suggestion_unit_active", "unit_code", "is_active", "regulation_id"),)
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
@@ -268,6 +274,31 @@ class AuditEvent(Base):
     client_ip: Mapped[str | None] = mapped_column(String(64))
     user_agent: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # Hash zinciri (plan §12): kayıt başına; her olay bir öncekinin hash'ini taşır → sonradan değişiklik tespit edilir
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    row_hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class ManualDetection(Base):
+    """İK-8 paralel çalışma: Başkanlığın manuel olarak tespit ettiği düzenleme. Sistem kaydıyla eşleştirilir; karşılaştırma
+    raporu kaçırma oranını ve nedenini bundan hesaplar."""
+
+    __tablename__ = "manual_detection"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(Text)
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    publish_date: Mapped[date | None] = mapped_column(Date, index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    severity: Mapped[str | None] = mapped_column(String(8))            # Başkanlığın verdiği önem (isteğe bağlı)
+    unit_codes: Mapped[list] = mapped_column(JSON, default=list)        # Başkanlığın yönlendirdiği birimler
+    note: Mapped[str | None] = mapped_column(Text)
+    entered_by: Mapped[str | None] = mapped_column(String(200))
+    matched_regulation_id: Mapped[int | None] = mapped_column(ForeignKey("regulation.id"), index=True)
+    matched_raw_document_id: Mapped[int | None] = mapped_column(ForeignKey("raw_document.id"))
+    match_method: Mapped[str | None] = mapped_column(String(24))       # url | exact_key | fuzzy_title | manual
+    match_score: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Alert(Base):
@@ -342,13 +373,24 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
-def make_sessionmaker(database_url: str) -> sessionmaker[Session]:
+def make_sessionmaker(database_url: str, *, auto_create: bool | None = None) -> sessionmaker[Session]:
+    """``auto_create`` verilmezse ``DB_AUTO_CREATE`` ayarı (varsayılan True; üretimde False + alembic)."""
     if database_url.startswith("sqlite:///"):
         from pathlib import Path
 
         Path(database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(database_url, future=True)
-    Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        # SQLite yabancı anahtarları varsayılan olarak denetlemez; PostgreSQL ile aynı davranış için açılır
+        @event.listens_for(engine, "connect")
+        def _fk_on(dbapi_conn, _):
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+    if auto_create is None:
+        from app.settings import get_settings
+
+        auto_create = get_settings().db_auto_create
+    if auto_create:
+        Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 

@@ -7,7 +7,10 @@ LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve 
 metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi; **birim eşleştirme önerisi (İK-5)**: görev
 tanımlarına dayalı, gerekçeli birim önerileri; **Portal API (İK-6)**: liste/detay, onay/red, birim değiştirme,
 denetim izi, Keycloak ile çevrimdışı JWT doğrulaması ve API'ye bağlı portal; **sürdürülebilirlik ve izleme (İK-7)**:
-kaynak sağlığı, sessizlik/hacim/yapı alarmları, kaynaklar arası çapraz kontrol, geriye dönük toplama ve yeniden işleme. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+kaynak sağlığı, sessizlik/hacim/yapı alarmları, kaynaklar arası çapraz kontrol, geriye dönük toplama ve yeniden işleme;
+**test, paralel çalışma ve devreye alma (İK-8)**: manuel tespitlerle karşılaştırma raporu ve eşik taraması, Alembic
+migrasyonları, değiştirilemez denetim izi (hash zinciri), Docker imajı/Compose, uçtan uca ve yük testleri.
+İşletim adımları (kurulum, alarm triyajı, adaptör onarımı, anahtar rotasyonu, yedek) `../docs/runbook.md`'de. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -326,6 +329,72 @@ taramadır. Kanalın ilk taraması tamamlandıysa backfill ile gelen içerik "ye
 `reprocess` seçilen aşamayı (extract, classify, summarize, match) yayım tarihine göre bir aralıkta yeniden çalıştırır
 ve portal kayıtlarının denetim izine "Yeniden işlendi" yazar.
 
+## Test, paralel çalışma ve devreye alma (İK-8)
+
+**Paralel çalışma.** Başkanlık, manuel takiple bulduğu düzenlemeleri girer; sistem bunları kendi kayıtlarıyla eşleştirir
+(kanonik URL → güçlü anahtar (karar/sayı no, mevzuat.gov.tr kimliği) → başlık benzerliği ≥85, yayım tarihi ±7 gün,
+kurum uyumlu; birleştirilmiş kayıt katıldığı kayda kadar izlenir).
+
+```
+POST /api/v1/evaluation/manual-detections          {title, issuer?, publish_date?, url?, severity?, unit_codes?, note?}
+POST /api/v1/evaluation/manual-detections/upload   CSV (UTF-8 / Windows-1254, ; veya ,) veya .xlsx, ≤5 MB
+GET  /api/v1/evaluation/manual-detections?from&to
+GET  /api/v1/evaluation/report?from&to             karşılaştırma raporu
+GET  /api/v1/evaluation/filtered-out?from&to       YZ'nin ilgisiz bulduğu kayıtlar (skora göre)
+```
+
+Dosya sütunları: `Başlık`, `Kurum` (kısaltma da olur: "BDDK", "Hazine ve Maliye Bak."), `Yayım Tarihi`
+(gg.aa.yyyy veya ISO), `Bağlantı`, `Önem`, `Birimler`, `Not`.
+
+Rapor: **kaçırma oranı** ve nedenleri — `not_collected` (hiç toplanmadı, İK-1), `not_processed` (toplandı, işlenmedi,
+İK-2), `baseline` (ilk taramada zaten sitedeydi), `below_threshold` (YZ ilgisiz buldu, İK-3), `dedupe_lost` (portalda
+olmayan bir kayda birleştirildi); **gereksiz bildirim oranı** (reddedilen / karar verilen), önem derecesi uyumu,
+birim önerisi isabeti (ilk YZ önerisi nihai birimlerde mi: top-1 / herhangi), tespit gecikmesi (yayım → tespit,
+medyan/p90 saat) ve **eşik taraması** (0.2–0.6 arası her eşik için portala düşecek kayıt, kaçırma ve reddedilen
+sayısı). Seçilen eşik yeniden dağıtım olmadan uygulanır: `mevzuat-ai setting relevance_threshold 0.35`.
+
+**Şema: Alembic.** `alembic upgrade head` (`make migrate`). Migrasyonlar: `0001` ilk şema, `0002` denetim izi hash
+zinciri, `0003` portal sorgu indeksleri. `DB_AUTO_CREATE=false` (üretim/Docker) iken uygulama tablo oluşturmaz;
+yerel SQLite'ta varsayılan `true`. `tests/test_migrations.py` migrasyon sonucu şemanın modellerle aynı olduğunu
+doğrular. SQLite'ta yabancı anahtar denetimi açıktır (`PRAGMA foreign_keys=ON`), PostgreSQL ile aynı davranış.
+
+**Denetim izi bütünlüğü.** Her olay, aynı düzenlemenin önceki olayının hash'ini içerir (`prev_hash`, `row_hash` = SHA-256; olay türü,
+kayıt, aktör, yük ve zaman damgası üzerinden). ORM düzeyinde olay güncelleme/silme engellidir.
+`mevzuat-monitor audit-verify [--id REG_ID]` veya `GET /api/v1/admin/audit/verify` zinciri yeniden hesaplar;
+veritabanında doğrudan yapılan değişiklik "içerik değiştirilmiş"/"zincir kopuk" olarak raporlanır (test: `test_api`).
+Zincirin **son** olayının silinmesi tek başına fark edilemez (hash zincirlerinin bilinen sınırı); bunun için
+veritabanı yedekleri ve erişim logları esas alınır.
+
+**Docker.** `backend/docker/Dockerfile` (python:3.11-slim, portal sayfası dahil) ve
+`backend/docker/docker-compose.yml`: `db` (PostgreSQL 16), `migrate`, `api`, `worker-collect/process/ai/monitor`,
+`beat`; `dev` profili Redis'i de başlatır (üretimde kurumdaki Redis kullanılır). `make docker-build`, `make compose-up`.
+
+**Testler.** `tests/test_e2e.py` tüm hattı ağsız çalıştırır: gerçek BDDK fixture'larıyla toplama → metin çıkarma →
+tekilleştirme → sahte LLM ile ilgililik/özet/birim → portal API'de onay → denetim izi doğrulaması → manuel tespit
+yükleme ve rapor (kaçırma nedenleri, eşik taraması, Excel ve Windows-1254 CSV).
+
+**Yük testi** (`make load-test`, `scripts/load_test.py --db <SQLite yolu | PostgreSQL URL>`): 1 yıllık hacim —
+9.651 tarama, 26.934 ham belge/düzenleme, 4.017 portal kaydı (her biri özet, 2 birim önerisi, 3 denetim olayı).
+Ölçüm (ms, medyan / p95; Apple M4 dizüstü, API ile veritabanı aynı makinede):
+
+| Uç nokta | SQLite | PostgreSQL 16 (Docker) |
+|---|---|---|
+| Liste (varsayılan) | 11 / 12 | 14 / 17 |
+| Liste + kaynak + önem | 13 / 17 | 15 / 61 |
+| Liste + arama | 16 / 18 | 25 / 27 |
+| Liste + birim | 12 / 13 | 12 / 12 |
+| Liste + metrik (yaklaşan) | 11 / 11 | 11 / 12 |
+| Liste 5. sayfa (50 kayıt) | 39 / 41 | 46 / 52 |
+| İstatistik | 7 | 3 |
+| Detay | 2 | 3 |
+| Kaynak sağlığı | 169 / 183 | 141 / 154 |
+| Paralel çalışma raporu (90 gün) | 146 | 219 |
+
+Yük testinde bulunan ve düzeltilen: birim filtresi 2,1 sn sürüyordu → `unit_suggestion(unit_code, is_active)`
+indeksi; aramada planlayıcı yanlış indeksi seçip 895 ms'ye çıkıyordu → `regulation_summary(regulation_id,
+is_current)` bileşik indeksi (migrasyon `0003`). Yazma uçları (görüntüleme, birim değiştirme, `If-Match` ile onay)
+ve hash zinciri PostgreSQL üzerinde de doğrulandı.
+
 ## Testler
 
 ```bash
@@ -347,9 +416,8 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 
 ## Bilinen kısıtlar
 
-- Alembic migrasyonları henüz yok; tablolar ilk çalıştırmada `create_all` ile oluşturuluyor. `create_all` mevcut
-  tabloya sütun eklemez: İK-1 döneminde oluşturulmuş bir yerel veritabanı İK-2 ile kullanılamaz (silinip yeniden
-  oluşturulmalı). Üretim kurulumundan önce migrasyon altyapısı eklenmeli.
+- İK-1/İK-2 döneminde `create_all` ile oluşturulmuş yerel SQLite veritabanları Alembic geçmişi taşımaz; silinip
+  `alembic upgrade head` ile yeniden oluşturulmalı.
 - LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
   `mevzuat-process review` ile listelenir.
 - Portal–Keycloak girişi (`keycloak-js`) henüz eklenmedi; backend doğrulaması hazır, realm/istemci bilgisi bekleniyor.
