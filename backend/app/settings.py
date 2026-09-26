@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     summary_max_regenerations: int = 1
     effective_soon_days: int = 30
 
+    # İK-5: birim eşleştirme
+    units_file: Path = BACKEND_DIR / "config" / "units.yaml"
+    unit_min_score: float = 0.30
+    unit_max_suggestions: int = 4
+    unit_responsibility_threshold: int = 80   # matched_responsibility ↔ görev tanımı maddesi (rapidfuzz)
+    unit_fewshot_count: int = 4
+
     def resolved_ca_bundle(self) -> str | bool:
         for candidate in (self.ca_bundle, os.environ.get("REQUESTS_CA_BUNDLE"), os.environ.get("SSL_CERT_FILE"),
                           os.environ.get("CURL_CA_BUNDLE")):

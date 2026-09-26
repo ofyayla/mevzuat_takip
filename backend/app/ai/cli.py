@@ -3,7 +3,10 @@
   mevzuat-ai llm-check                         # LLM bağlantı ve şemalı çıktı testi
   mevzuat-ai classify [--id N ...] [--limit N] [--force]   # NEW düzenlemeleri sınıflandır
   mevzuat-ai summarize [--id N ...] [--limit N] [--force] # İK-4: RELEVANT düzenlemelerin özeti
-  mevzuat-ai show REG_ID                        # ilgililik/önem kararı, bileşenler ve güncel özet
+  mevzuat-ai units-load                         # İK-5: config/units.yaml → unit tablosu
+  mevzuat-ai units                              # birimler ve görev maddesi sayıları
+  mevzuat-ai match [--id N ...] [--force]       # İK-5: birim eşleştirme önerisi
+  mevzuat-ai show REG_ID                        # ilgililik/önem kararı, bileşenler, güncel özet, birim önerileri
   mevzuat-ai calls [--limit N]                  # son LLM çağrıları (gecikme, token, durum)
   mevzuat-ai setting [KEY VALUE]                # çalışma zamanı eşikleri (app_setting)
   mevzuat-ai eval DOSYA.jsonl [--samples N]     # değerlendirme seti: recall / precision / önem isabeti
@@ -21,7 +24,7 @@ from sqlalchemy import func, select
 from app.ai.classify import classify_pending
 from app.ai.common import RUNTIME_KEYS, effective_settings, set_runtime_setting
 from app.ai.llm_client import LLMError, get_llm
-from app.db import LlmCall, Regulation, RegulationSummary, make_sessionmaker
+from app.db import LlmCall, Regulation, RegulationSummary, UnitSuggestion, make_sessionmaker
 from app.settings import get_settings
 
 
@@ -78,6 +81,41 @@ def cmd_summarize(args) -> int:
     return 1 if rep.failed else 0
 
 
+def cmd_units_load(args) -> int:
+    from app.ai.unit_matching import sync_units
+
+    s = get_settings()
+    with make_sessionmaker(s.database_url)() as ses:
+        changed, deactivated = sync_units(ses, s)
+        ses.commit()
+    print(f"{changed} birim yüklendi/güncellendi, {deactivated} birim pasifleştirildi ({s.units_file})")
+    return 0
+
+
+def cmd_units(args) -> int:
+    from app.db import Unit
+
+    s = get_settings()
+    with make_sessionmaker(s.database_url)() as ses:
+        for u in ses.scalars(select(Unit).order_by(Unit.group_name, Unit.code)):
+            print(f"{'  ' if u.active else 'x '}{u.code:<26} {u.name:<62} {len(u.responsibilities)} madde  "
+                  f"[{u.group_name}]")
+    return 0
+
+
+def cmd_match(args) -> int:
+    from app.ai.unit_matching import match_pending
+
+    s = get_settings()
+    rep = match_pending(make_sessionmaker(s.database_url), _llm_or_exit(s), s, ids=args.id, limit=args.limit,
+                        force=args.force)
+    print(f"işlenen={rep.processed} öneri üretilen={rep.matched} önerilemedi={rep.no_suggestion} "
+          f"hata={rep.failed} toplam öneri={rep.suggestions}")
+    for e in rep.errors[:20]:
+        print(f"  HATA {e}")
+    return 1 if rep.failed else 0
+
+
 def cmd_show(args) -> int:
     s = get_settings()
     with make_sessionmaker(s.database_url)() as ses:
@@ -104,6 +142,15 @@ def cmd_show(args) -> int:
                 print("Kaldırılan (doğrulanamayan): " + "; ".join(c["text"] for c in summ.unverified_claims))
             for link in summ.source_links:
                 print(f"  {link['label']}: {link['url']}")
+        sugg = ses.scalars(select(UnitSuggestion).where(UnitSuggestion.regulation_id == reg.id,
+                                                        UnitSuggestion.is_active.is_(True))
+                           .order_by(UnitSuggestion.rank)).all()
+        um = (reg.extra or {}).get("unit_match", {})
+        print(f"\n--- Birim önerileri ({um.get('status', '-')}) ---")
+        for sg in sugg:
+            print(f"  {sg.rank}. {sg.unit_code} ({sg.score}) — {sg.reason}\n     görev: {sg.matched_responsibility}")
+        for d in um.get("dropped", []):
+            print(f"  elendi: {d['unit_code']} ({d['why']})")
     return 0
 
 
@@ -161,6 +208,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--force", action="store_true", help="özeti yeniden üret (yeni sürüm)")
     p.set_defaults(fn=cmd_summarize)
+    sub.add_parser("units-load").set_defaults(fn=cmd_units_load)
+    sub.add_parser("units").set_defaults(fn=cmd_units)
+    p = sub.add_parser("match")
+    p.add_argument("--id", type=int, action="append")
+    p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--force", action="store_true", help="mevcut önerileri yenile")
+    p.set_defaults(fn=cmd_match)
     p = sub.add_parser("show")
     p.add_argument("reg_id", type=int)
     p.set_defaults(fn=cmd_show)

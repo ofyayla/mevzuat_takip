@@ -4,7 +4,8 @@ Hazır olanlar: **kaynak toplama altyapısı (İK-1)**: 9 resmi kaynağın (KEP 
 tespiti, ham arşiv ve kaynak bazlı sağlık verisi; **belge işleme ve tekilleştirme (İK-2)**: metin çıkarma, OCR,
 aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması; **mevzuat tespiti ve önceliklendirme (İK-3)**:
 LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve özet (İK-4)**: her ifadesi kaynak
-metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
+metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi; **birim eşleştirme önerisi (İK-5)**: görev
+tanımlarına dayalı, gerekçeli birim önerileri. Kaynak bazlı keşif bulguları `../docs/kaynak-kesif-raporu.md`
 dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 
 ## Kurulum
@@ -206,6 +207,44 @@ başarısız. Tek parça özet (89) ortalama dayandırma 0.996; map-reduce (16 u
 zayıf nokta. 857 alıntının %89'u tam, %7'si bulanık, %3'ü kelime dizisi, %0.7'si atlamalı eşleşme. 20 kayıtta
 doğrulanmış yürürlük tarihi; 7 kayıtta LLM'in önerdiği tarih ifadeyle doğrulanamadığı için boş bırakıldı.
 
+## Birim eşleştirme önerisi (İK-5)
+
+```bash
+mevzuat-ai units-load                # config/units.yaml → unit tablosu (dosyada olmayan birim pasifleşir)
+mevzuat-ai units                     # birimler ve görev maddesi sayıları
+mevzuat-ai match                     # SUMMARIZED (ve metin bekleyen) düzenlemelere öneri (--force: yenile)
+mevzuat-ai show 42                   # öneriler, eşleşen görev maddesi, elenen öneriler ve nedenleri
+```
+
+Özet görevi eşleştirmeyi tetikler; Beat saatte iki kez bekleyenleri tarar. Akış: `SUMMARIZED → READY` (portalda
+"Bekliyor"). Metni olmadığı için özetlenemeyen kayıt da başlık ve ilgililik gerekçesiyle öneri alır, `RELEVANT` kalır.
+
+**Bilgi tabanı** `config/units.yaml` — **v0 TASLAK**: Albaraka Türk organizasyon şemasından (10.08.2026) 44 birim
+(Denetim Komitesine bağlı başkanlıklar, Danışma Komitesine bağlı Katılım Bankacılığı İlkeleri Kontrol ve Uyum
+Başkanlığı, Genel Müdüre bağlı 3 müdürlük, 8 GMY altındaki müdürlükler). Birim adları ve bağlılıklar şemadan,
+görev tanımları birim adlarından türetilmiş taslaktır; kişi isimleri alınmamıştır. Yönetim Kurulu komiteleri öneri
+hedefi değildir. Nihai görev tanımları geldiğinde yalnızca bu dosya güncellenir.
+
+**Eşleştirme** (`app/ai/unit_matching.py`): tüm görev tanımları tek prompt'ta; `unit_code` JSON şemada `enum`
+(kapalı liste). Model her öneri için birimin görev maddelerinden birini aynen kopyalar; madde görev tanımında
+bulunamazsa öneri elenir. Birimin düzenleme alanları (`regulatory_areas`) İK-3'ün bulduğu konu kodlarıyla hiç
+örtüşmüyorsa öneri elenir ("doğru madde, yanlış anlam" hatası). Skoru < 0.30 olan elenir; en fazla 4 öneri.
+Hiç öneri kalmazsa varsayılan birim atanmaz ("Birim önerilemedi"). Anahtar kelime ön eşleşmesi (Türkçe eklere
+dayanıklı kök eşleşmesi) modele yalnızca ipucu olarak verilir.
+
+**Öğrenme döngüsü:** `record_unit_decision()` (İK-6 portal kararı çağırır) Başkanlığın onayını
+(`user_decision`, ağırlık 1) ve düzeltmesini (`user_correction`, ağırlık 2) `fewshot_example`'a yazar; yeni
+düzenleme için başlık/konu benzerliğine göre en yakın örnekler prompt'a girer.
+
+**Görev tanımı yazım kuralı:** Her düzenlemeye uyan genel maddeler ("mevzuat değişikliklerinin takibi", "faaliyetlerin
+mevzuata uyumunun kontrolü", "mevzuat değişikliklerinin süreçlere yansıtılması") o birimi varsayılan hedef yapar;
+canlı denemede Mevzuat ve Uyum ve Süreç İyileştirme birimlerinde görüldü. `tests/test_units.py` bu kalıpları reddeder.
+
+**Canlı ölçüm** (gpt-4.1-mini, 120 ilgili düzenleme): 102'sine öneri (toplam 158), 18'ine önerilemedi (çoğu başka
+kuruluşların izin kararları ve metni olmayan kayıtlar), hata yok. Alan kontrolü 21 öneriyi eledi; çoğu zayıf öneriydi,
+birkaçı İK-3 konu listesi dar kaldığı için elenen meşru öneri (ör. Yeşil Varlık Oranı → Yatırımcı İlişkileri ve
+Sürdürülebilirlik).
+
 ## Testler
 
 ```bash
@@ -232,6 +271,8 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
   oluşturulmalı). Üretim kurulumundan önce migrasyon altyapısı eklenmeli.
 - LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
   `mevzuat-process review` ile listelenir.
+- Birim görev tanımları taslaktır (organizasyon şemasından türetildi). KVKK uyum programının Mevzuat ve Uyum
+  Başkanlığında olduğu bir varsayımdır; şemada KVKK'ya açıkça sahip birim yok.
 - Taksonomi, etiketleme kılavuzu ve değerlendirme etiketleri çalıştay öncesi taslaktır. Kurum içi vLLM/Qwen ile henüz
   denenmedi (geliştirme ortamı kurum ağı dışında); `mevzuat-ai llm-check` ve `eval` kurumda çalıştırılmalı.
 - KEP adaptörü bu kapsamın dışında (erişim yöntemi belirsiz; plan §6 İK-1).

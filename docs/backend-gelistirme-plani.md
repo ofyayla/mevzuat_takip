@@ -501,6 +501,11 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
      "matched_responsibility": "Sermaye yeterliliği hesaplamalarının yapılması",
      "reason": "Sermaye yeterliliği rasyosu hesaplamaları doğrudan bu birimin sorumluluğunda."}]}
   ```
+- **Uygulama notu (26.09.2026):** Birim bilgi tabanı Albaraka Türk organizasyon şemasından (10.08.2026, 44 birim)
+  türetilmiş taslaktır. Canlı denemede iki ek kural gerekti: (1) görev tanımlarında her düzenlemeye uyan genel maddeler
+  (ör. "mevzuat değişikliklerinin takibi") varsayılan birim etkisi yarattığı için yazılmaz; (2) birimin düzenleme
+  alanları İK-3 konu kodlarıyla hiç örtüşmüyorsa öneri elenir (görev maddesi birebir kopyalanıp anlamca ilgisiz birim
+  önerilebiliyor).
 - **Doğrulama:** `unit_code` kapalı listede olmalı (JSON schema `enum`). `matched_responsibility` gerçekten o birimin görev tanımında geçmeli (fuzzy kontrol). En az 1, en fazla 4 öneri üretilir; skor < 0.3 olanlar elenir. Hiç öneri kalmazsa "Hukuk İşleri" gibi varsayılan bir birime atamak yerine öneri **boş** bırakılır ve portalda "Birim önerilemedi" gösterilir. *(Varsayılan birim olup olmayacağı açık karardır, bkz. §13.)*
 - **Öğrenme döngüsü (model eğitimi yapılmadan):**
   - Başkanlık birimi değiştirirse → `fewshot_example(origin=user_correction, weight=2)` kaydı oluşur.

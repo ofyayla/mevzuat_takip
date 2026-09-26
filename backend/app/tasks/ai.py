@@ -36,5 +36,18 @@ def summarize_regulations(ids: list[int] | None = None, limit: int = 50) -> dict
     if llm is None:
         return {"status": "skipped", "reason": "LLM_PROVIDER=none"}
     rep = summarize_pending(_session_factory(), llm, s, ids=ids, limit=limit)
-    # İK-5: rep.ids birim eşleştirme kuyruğuna verilecek
+    if rep.ids or rep.awaiting_text:
+        match_units.delay(ids=rep.ids or None)
+    return {k: v for k, v in rep.__dict__.items() if k != "errors"} | {"errors": rep.errors[:20]}
+
+
+@app.task(name="app.tasks.ai.match_units")
+def match_units(ids: list[int] | None = None, limit: int = 100) -> dict:
+    from app.ai.unit_matching import match_pending
+
+    s = get_settings()
+    llm = get_llm(s)
+    if llm is None:
+        return {"status": "skipped", "reason": "LLM_PROVIDER=none"}
+    rep = match_pending(_session_factory(), llm, s, ids=ids, limit=limit)
     return {k: v for k, v in rep.__dict__.items() if k != "errors"} | {"errors": rep.errors[:20]}

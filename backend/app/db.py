@@ -192,6 +192,57 @@ class RegulationSummary(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Unit(Base):
+    """Birim bilgi tabanı (İK-5): config/units.yaml → `mevzuat-ai units-load`."""
+
+    __tablename__ = "unit"
+
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    group_name: Mapped[str | None] = mapped_column(String(200))
+    responsibilities: Mapped[list] = mapped_column(JSON, default=list)
+    keywords: Mapped[list] = mapped_column(JSON, default=list)
+    regulatory_areas: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source_doc_ref: Mapped[str | None] = mapped_column(String(300))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UnitSuggestion(Base):
+    """Düzenleme → birim önerisi. ``origin``: ai | manual. Başkanlık değiştirirse eski öneriler is_active=False."""
+
+    __tablename__ = "unit_suggestion"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    unit_code: Mapped[str] = mapped_column(ForeignKey("unit.code"))
+    rank: Mapped[int] = mapped_column(Integer)
+    score: Mapped[float | None] = mapped_column(Float)
+    reason: Mapped[str | None] = mapped_column(Text)
+    matched_responsibility: Mapped[str | None] = mapped_column(Text)   # birimin görev tanımındaki madde
+    origin: Mapped[str] = mapped_column(String(8), default="ai")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    is_final: Mapped[bool] = mapped_column(Boolean, default=False)       # onay anında dondurulur (İK-6)
+    llm_call_id: Mapped[int | None] = mapped_column(ForeignKey("llm_call.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class FewshotExample(Base):
+    """Onay/düzeltmelerden oluşan örnek havuzu (plan §5.3). Model eğitimi yapılmadan isabeti artırır."""
+
+    __tablename__ = "fewshot_example"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    task: Mapped[str] = mapped_column(String(32), index=True)          # unit_match | relevance
+    regulation_id: Mapped[int | None] = mapped_column(ForeignKey("regulation.id"))
+    input_text: Mapped[str] = mapped_column(Text)                      # başlık + konular + kısa içerik
+    expected_output: Mapped[dict] = mapped_column(JSON)
+    origin: Mapped[str] = mapped_column(String(24))                    # workshop | user_decision | user_correction
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class LlmCall(Base):
     """Her LLM çağrısının izi (plan §5.3): maliyet, hata ayıklama, denetim ve önbellek (input_hash)."""
 

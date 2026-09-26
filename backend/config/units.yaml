@@ -1,0 +1,476 @@
+# Birim bilgi tabanı — v0 TASLAK
+#
+# KAYNAK: Albaraka Türk Katılım Bankası Organizasyon Şeması (10.08.2026). Birim adları ve bağlılıklar şemadan
+# alınmıştır; görev tanımları (responsibilities) birim adlarından ve katılım bankacılığı mevzuatındaki tipik görev
+# dağılımından TÜRETİLMİŞ TASLAKTIR. Nihai görev tanımları (organizasyon yönetmeliği / İK) alındığında bu dosya
+# güncellenir ve `mevzuat-ai units-load` ile tabloya aktarılır; kod değişmez.
+# Kişi isimleri eşleştirme için gerekmediğinden bilinçli olarak alınmamıştır.
+# Yönetim Kurulu komiteleri (İcra, Danışma, Kredi, Kurumsal Yönetim ve Sürdürülebilirlik, Risk, Ücretlendirme ve Aday
+# Gösterme, Denetim, Risk Takip) öneri hedefi değildir; düzenlemeler birimlere yönlendirilir.
+#
+# Alanlar: code (kararlı kimlik), name, group (bağlı olduğu üst yapı), responsibilities (madde madde görevler —
+# eşleştirme gerekçesi bunlardan birine dayanmalı), keywords, regulatory_areas (config/taxonomy.yaml konu kodları).
+version: "v0.3-taslak-2026-08-10"
+source_doc_ref: "Organizasyon Şeması 10.08.2026 (görüntü); görev tanımları taslak"
+
+units:
+  # ------------------------------------------------------------------ Denetim Komitesine bağlı başkanlıklar
+  - code: RISK_YONETIMI
+    name: Risk Yönetimi Başkanlığı
+    group: Denetim Komitesi (Risk Komitesi ile ilişkili)
+    responsibilities:
+      - Kredi, piyasa, operasyonel, likidite ve faiz oranı risklerinin ölçülmesi, izlenmesi ve raporlanması
+      - Sermaye yeterliliği hesaplamalarının yapılması ve risk ağırlıklı varlıkların hesaplanması
+      - İçsel sermaye yeterliliği değerlendirme süreci (ISEDES) ve stres testlerinin yürütülmesi
+      - Likidite karşılama oranı, net istikrarlı fonlama oranı ve kaldıraç oranının izlenmesi
+      - Risk iştahı, limitler ve risk politikalarının hazırlanması; model riski ve derecelendirme modellerinin yönetimi
+      - İklimle bağlantılı ve çevresel risklerin risk yönetimi çerçevesine dahil edilmesi
+      - Banka ve finansal kuruluş karşı taraf risk limitlerinin belirlenmesi ve izlenmesi
+    keywords: [sermaye yeterliliği, risk ağırlığı, likidite, kaldıraç, stres testi, ISEDES, piyasa riski, operasyonel risk, basel, karşı taraf]
+    regulatory_areas: [SERMAYE_LIKIDITE, RAPORLAMA]
+
+  - code: MEVZUAT_UYUM
+    name: Mevzuat ve Uyum Başkanlığı
+    group: Denetim Komitesi
+    responsibilities:
+      # Not: "mevzuat değişikliklerinin takibi ve birimlere duyurulması" ile "faaliyetlerin mevzuata uyumunun kontrolü"
+      # bu sistemde Başkanlığın kendi rolüdür ve her düzenlemeye uyduğu için eşleştirme gerekçesi olarak kullanılmaz
+      # (canlı denemede varsayılan birim etkisi yarattı). Aynı nedenle diğer birimlerde de "mevzuat değişikliklerini
+      # süreçlere yansıtmak" gibi her düzenlemeye uyan genel maddeler yazılmamalıdır.
+      - AML/terörün finansmanı uyum programı kapsamındaki risk değerlendirmesi ve kontrollerin yürütülmesi
+      - Suç gelirlerinin aklanması ve terörün finansmanının önlenmesine yönelik uyum programının yürütülmesi
+      - Şüpheli işlem bildirimlerinin değerlendirilmesi ve MASAK'a bildirilmesi; uyum görevlisi işlevi
+      - Müşteriyi tanı ilkeleri, yaptırım listeleri taraması ve malvarlığı dondurma kararlarının uygulanması
+      - Yeni ürün ve süreçlere AML ve yaptırım riski açısından görüş verilmesi
+      # VARSAYIM (teyit edilmeli): şemada KVKK uyumuna açıkça sahip bir birim yok; bankalarda yaygın yapı olarak
+      # kişisel verilerin korunması uyum programının koordinasyonu bu başkanlığa verildi.
+      - Kişisel verilerin korunması mevzuatına uyum programının koordinasyonu (veri sorumlusu irtibat kişiliği, VERBİS kayıtları, Kurul kararlarının takibi)
+    keywords: [masak, aklama, terörün finansmanı, şüpheli işlem, müşteriyi tanı, yaptırım, kişisel verilerin korunması, VERBİS, veri sorumlusu]
+    regulatory_areas: [AML, VERI_BT]
+
+  - code: IC_KONTROL
+    name: İç Kontrol Başkanlığı
+    group: Denetim Komitesi
+    responsibilities:
+      - İç kontrol sisteminin tasarlanması, kontrol faaliyetlerinin yürütülmesi ve etkinliğinin izlenmesi
+      - Şube ve genel müdürlük birimlerinde süreç kontrollerinin yapılması
+      - Bilgi sistemleri ve bankacılık süreçlerine ilişkin kontrol noktalarının belirlenmesi
+      - Yönetim beyanı ve iç kontrol raporlamalarının hazırlanması
+    keywords: [iç kontrol, kontrol faaliyeti, yönetim beyanı, süreç kontrolü]
+    regulatory_areas: [KURUMSAL, VERI_BT]
+
+  - code: TEFTIS
+    name: Teftiş Kurulu Başkanlığı
+    group: Denetim Komitesi
+    responsibilities:
+      - Bankanın tüm birim, şube ve süreçlerinin iç denetiminin yapılması
+      - Bilgi sistemleri ve bankacılık süreçleri denetimlerinin yürütülmesi
+      - Suiistimal ve usulsüzlük incelemeleri ile soruşturmaların yapılması
+      - Bağımsız denetim ve düzenleyici kurum denetimlerinde koordinasyon
+    keywords: [iç denetim, teftiş, suiistimal, bağımsız denetim, bilgi sistemleri denetimi]
+    regulatory_areas: [KURUMSAL, RAPORLAMA]
+
+  - code: KATILIM_ILKELERI
+    name: Katılım Bankacılığı İlkeleri Kontrol ve Uyum Başkanlığı
+    group: Danışma Komitesi
+    responsibilities:
+      - Ürün, hizmet ve işlemlerin faizsiz bankacılık ilke ve standartlarına uygunluğunun kontrol edilmesi
+      - Danışma Komitesi kararlarının uygulanmasının izlenmesi ve raporlanması
+      - Faizsiz bankacılık standartlarına (TKBB, AAOIFI) uyum denetimlerinin yapılması
+      - Kâr payı dağıtımı, katılma hesapları ve sukuk işlemlerinin ilkelere uygunluğunun gözetilmesi
+    keywords: [faizsiz bankacılık, danışma komitesi, katılım bankacılığı standartları, TKBB, icara, murabaha, sukuk]
+    regulatory_areas: [KATILIM]
+
+  - code: YK_RAPORTORLUK
+    name: Yönetim Kurulu Raportörlüğü
+    group: Yönetim Kurulu
+    responsibilities:
+      - Yönetim Kurulu ve komite toplantılarının gündem, karar ve yazışmalarının yürütülmesi
+      - Kurumsal yönetim ilkeleri ve genel kurul süreçlerine ilişkin işlemlerin koordinasyonu
+    keywords: [yönetim kurulu, genel kurul, kurumsal yönetim, komite]
+    regulatory_areas: [KURUMSAL]
+
+  # ------------------------------------------------------------------ Genel Müdüre bağlı müdürlükler
+  - code: STRATEJI
+    name: Strateji, Kurumsal Performans ve İletişim Müdürlüğü
+    group: Genel Müdür
+    responsibilities:
+      - Stratejik planın hazırlanması ve kurumsal performans hedeflerinin izlenmesi
+      - Kurumsal iletişim, basın ilişkileri ve kurumsal itibar yönetimi
+      - Reklam ve tanıtım faaliyetlerinin kurumsal iletişim ilkelerine uygunluğunun sağlanması
+    keywords: [strateji, performans, kurumsal iletişim, basın, reklam]
+    regulatory_areas: [KURUMSAL, TUKETICI]
+
+  - code: BT_STRATEJI
+    name: BT Strateji ve Yönetişim Müdürlüğü
+    group: Genel Müdür
+    responsibilities:
+      - Bilgi teknolojileri stratejisinin ve BT yönetişim çerçevesinin oluşturulması
+      - Bilgi sistemleri yönetimine ilişkin düzenlemelere uyumun sağlanması ve BT politikalarının hazırlanması
+      - Dış hizmet (bulut dahil) alımlarının BT risk ve uyum açısından değerlendirilmesi
+      - Bilgi sistemleri bağımsız denetim süreçlerinin koordinasyonu
+    keywords: [bilgi sistemleri yönetimi, BT yönetişimi, dış hizmet, bulut, BT politikası, bağımsız denetim]
+    regulatory_areas: [VERI_BT]
+
+  - code: BILGI_GUVENLIGI
+    name: Bilgi Güvenliği Müdürlüğü
+    group: Genel Müdür
+    responsibilities:
+      - Bilgi güvenliği politikalarının ve siber güvenlik önlemlerinin oluşturulması
+      - Siber olayların tespiti, müdahalesi ve düzenleyici kurumlara bildirilmesi
+      - Kimlik doğrulama, erişim yönetimi ve şifreleme standartlarının belirlenmesi
+      - Kişisel verilerin teknik ve idari güvenlik tedbirlerinin uygulanması
+    keywords: [bilgi güvenliği, siber güvenlik, siber olay, kimlik doğrulama, erişim, şifreleme]
+    regulatory_areas: [VERI_BT]
+
+  # ------------------------------------------------------------------ Dijital ve Bireysel Bankacılık GMY
+  - code: MUSTERI_DENEYIMI
+    name: Müşteri Deneyimi ve CRM Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Müşteri deneyiminin ölçülmesi ve iyileştirilmesi; müşteri şikâyetlerinin yönetimi
+      - CRM sistemleri ve müşteri iletişim izinlerinin (ticari elektronik ileti) yönetimi
+      - Finansal tüketicinin korunmasına ilişkin müşteri bilgilendirme süreçlerinin yürütülmesi
+    keywords: [müşteri deneyimi, şikâyet, CRM, iletişim izni, finansal tüketici]
+    regulatory_areas: [TUKETICI, VERI_BT]
+
+  - code: BIREYSEL_PAZARLAMA
+    name: Bireysel Pazarlama ve Ürün Geliştirme Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Bireysel müşterilere yönelik katılma hesabı, kart ve finansman ürünlerinin geliştirilmesi
+      - Bireysel ürünlerin ücret, komisyon ve kâr payı oranlarının belirlenmesi
+      - Kredi kartı ve bireysel finansman ürünlerinin mevzuata uygun tasarlanması
+      - Bireysel ürünlerin reklam ve kampanyalarının yürütülmesi
+    keywords: [bireysel ürün, kredi kartı, katılma hesabı, ücret, komisyon, kampanya, tüketici finansmanı]
+    regulatory_areas: [KREDI_FON, MEVDUAT_FON, TUKETICI, KATILIM]
+
+  - code: BIREYSEL_SATIS
+    name: Bireysel Satış Yönetimi Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Şube kanalında bireysel ürün satış hedeflerinin ve satış süreçlerinin yönetimi
+      - Satış süreçlerinde müşteri bilgilendirme ve sözleşme kurallarının uygulanması
+    keywords: [bireysel satış, şube satış, satış süreci, tüketici sözleşmesi]
+    regulatory_areas: [TUKETICI, KREDI_FON]
+
+  - code: DIJITAL_SATIS
+    name: Dijital Satış Yönetimi Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Dijital kanallardan uçtan uca ürün satışı ve müşteri edinimi süreçlerinin yönetimi
+      - Uzaktan müşteri edinimi ve elektronik ortamda sözleşme kurulması süreçlerinin yürütülmesi
+    keywords: [dijital satış, uzaktan müşteri edinimi, elektronik sözleşme, uzaktan kimlik tespiti]
+    regulatory_areas: [VERI_BT, TUKETICI]
+
+  - code: DIJITAL_KANALLAR
+    name: Dijital Kanallar Yönetimi Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - İnternet ve mobil bankacılık kanallarının işlevlerinin ve kullanıcı deneyiminin yönetimi
+      - Dijital kanallarda kimlik doğrulama ve işlem güvenliği gereksinimlerinin uygulanması
+      - Açık bankacılık ve üçüncü taraf entegrasyonlarının kanal tarafının yönetimi
+    keywords: [internet bankacılığı, mobil bankacılık, açık bankacılık, dijital kanal, kimlik doğrulama]
+    regulatory_areas: [VERI_BT, ODEME]
+
+  - code: ODEME_SISTEMLERI
+    name: Ödeme Sistemleri Yönetimi Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Kartlı ödeme sistemleri, üye işyeri ve POS iş modelinin yönetimi
+      - FAST, karekod ve anlık ödeme ürünlerinin geliştirilmesi
+      - Ödeme hizmetleri ve elektronik para mevzuatına uyumlu ürün tasarımı
+      - Kart limitleri, temassız ödeme ve işlem limitlerinin uygulanması
+    keywords: [ödeme sistemleri, POS, üye işyeri, FAST, karekod, temassız, kart limiti, elektronik para]
+    regulatory_areas: [ODEME, KREDI_FON]
+
+  - code: OZEL_BANKACILIK
+    name: Özel Bankacılık Yönetimi ve Yurtdışı Şubeler Koordinasyon Müdürlüğü
+    group: Dijital ve Bireysel Bankacılık GMY
+    responsibilities:
+      - Yüksek varlıklı müşterilere özel bankacılık ve yatırım ürünleri hizmetlerinin yönetimi
+      - Yurtdışı şubelerin faaliyetlerinin ve yerel mevzuata uyumunun koordinasyonu
+    keywords: [özel bankacılık, yatırım ürünleri, yurtdışı şube]
+    regulatory_areas: [SERMAYE_PIYASASI, MEVDUAT_FON]
+
+  # ------------------------------------------------------------------ Tüzel Bankacılık GMY
+  - code: KURUMSAL_SATIS
+    name: Kurumsal Satış Yönetimi Müdürlüğü
+    group: Tüzel Bankacılık GMY
+    responsibilities:
+      - Kurumsal müşterilerle ilişki yönetimi ve kurumsal bankacılık satış süreçlerinin yürütülmesi
+      - Kurumsal müşterilere finansman, dış ticaret ve nakit yönetimi ürünlerinin sunulması
+    keywords: [kurumsal müşteri, kurumsal bankacılık, nakit yönetimi]
+    regulatory_areas: [KREDI_FON, KAMBIYO]
+
+  - code: TICARI_KOBI_SATIS
+    name: Ticari ve KOBİ Satış Yönetimi Müdürlüğü
+    group: Tüzel Bankacılık GMY
+    responsibilities:
+      - Ticari ve KOBİ müşteri segmentinde satış ve ilişki yönetimi
+      - KOBİ destek programları ve kamu destekli finansman ürünlerinin satışı
+    keywords: [ticari, KOBİ, KGF, destek programı]
+    regulatory_areas: [KREDI_FON]
+
+  - code: TUZEL_PAZARLAMA
+    name: Tüzel Pazarlama ve Ürün Geliştirme Müdürlüğü
+    group: Tüzel Bankacılık GMY
+    responsibilities:
+      - Tüzel müşterilere yönelik finansman, dış ticaret ve nakit yönetimi ürünlerinin geliştirilmesi
+      - Tüzel ürünlerin ücret ve komisyonlarının belirlenmesi
+      - Yeşil ve sürdürülebilir finansman ürünlerinin geliştirilmesi
+    keywords: [tüzel ürün, dış ticaret, ücret, komisyon, sürdürülebilir finansman, yeşil finansman]
+    regulatory_areas: [KREDI_FON, TUKETICI, KAMBIYO]
+
+  # ------------------------------------------------------------------ Hazine ve Uluslararası Bankacılık GMY
+  - code: HAZINE
+    name: Hazine Müdürlüğü
+    group: Hazine ve Uluslararası Bankacılık GMY
+    responsibilities:
+      - Türk lirası ve döviz likiditesinin yönetimi, para piyasası ve döviz işlemleri
+      - TCMB açık piyasa işlemleri, zorunlu karşılıklar ve likidite araçlarının kullanımı
+      - Kıymetli maden ve altın işlemlerinin yönetimi
+    keywords: [likidite yönetimi, döviz, para piyasası, zorunlu karşılık, açık piyasa, altın, kıymetli maden]
+    regulatory_areas: [KAMBIYO, SERMAYE_LIKIDITE]
+
+  - code: AKTIF_PASIF
+    name: Aktif-Pasif Yönetimi Müdürlüğü
+    group: Hazine ve Uluslararası Bankacılık GMY
+    responsibilities:
+      - Bilanço yapısının, vade uyumsuzluğunun ve kâr payı oranı riskinin yönetimi
+      - Katılma hesapları kâr payı oranlarının ve fon transfer fiyatlamasının belirlenmesi
+      - Likidite ve fonlama planlarının hazırlanması
+    keywords: [aktif pasif, bilanço, kâr payı oranı, fon transfer fiyatlaması, vade uyumsuzluğu]
+    regulatory_areas: [SERMAYE_LIKIDITE, MEVDUAT_FON]
+
+  - code: SERMAYE_PIYASALARI
+    name: Sermaye Piyasaları Fonlama Müdürlüğü
+    group: Hazine ve Uluslararası Bankacılık GMY
+    responsibilities:
+      - Sukuk ve kira sertifikası ihraçlarıyla fon sağlanması
+      - Sermaye piyasası aracı ihraçlarında SPK süreçlerinin yürütülmesi
+      - Borçlanma araçları ve sermaye benzeri kaynak temini
+    keywords: [sukuk, kira sertifikası, ihraç, SPK, borçlanma aracı, sermaye benzeri]
+    regulatory_areas: [SERMAYE_PIYASASI, KATILIM]
+
+  - code: ULUSLARARASI_BANKACILIK
+    name: Uluslararası Bankacılık Müdürlüğü
+    group: Hazine ve Uluslararası Bankacılık GMY
+    responsibilities:
+      - Muhabir bankacılık ilişkilerinin yönetimi
+      - Yurtdışı fonlama (sendikasyon, murabaha sendikasyonu) işlemlerinin yürütülmesi
+      - Dış ticaretin finansmanında yabancı bankalarla işbirliği
+    keywords: [muhabir banka, sendikasyon, yurtdışı fonlama, dış ticaret finansmanı]
+    regulatory_areas: [KAMBIYO, AML]
+
+  # ------------------------------------------------------------------ Krediler GMY
+  - code: KURUMSAL_KREDILER
+    name: Kurumsal Krediler Müdürlüğü
+    group: Krediler GMY
+    responsibilities:
+      - Kurumsal müşterilerin kredi taleplerinin değerlendirilmesi ve tahsis edilmesi
+      - Proje finansmanı ve büyük tutarlı finansman işlemlerinin analiz edilmesi
+    keywords: [kurumsal kredi, kredi tahsis, proje finansmanı, kredi sınırları, risk grubu]
+    regulatory_areas: [KREDI_FON]
+
+  - code: TICARI_KOBI_KREDILER
+    name: Ticari ve KOBİ Krediler Müdürlüğü
+    group: Krediler GMY
+    responsibilities:
+      - Ticari ve KOBİ kredi taleplerinin değerlendirilmesi ve tahsis edilmesi
+      - KOBİ tanımı ve kredi sınıflandırma kriterlerinin tahsis süreçlerinde uygulanması
+    keywords: [ticari kredi, KOBİ kredisi, kredi tahsis, KOBİ tanımı]
+    regulatory_areas: [KREDI_FON]
+
+  - code: PERAKENDE_KREDILER
+    name: Perakende ve Mikro Krediler Müdürlüğü
+    group: Krediler GMY
+    responsibilities:
+      - Bireysel finansman, konut, taşıt ve mikro işletme kredilerinin tahsis süreçlerinin yönetimi
+      - Kredi kartı ve bireysel finansman limitlerinin belirlenmesi
+      - Kredi değer oranı, vade ve taksit sınırlamalarının uygulanması
+    keywords: [bireysel kredi, konut kredisi, taşıt kredisi, kredi kartı limiti, kredi değer oranı, taksit]
+    regulatory_areas: [KREDI_FON]
+
+  - code: KREDI_POLITIKALARI
+    name: Kredi Analitiği, Politikaları ve İstihbarat Müdürlüğü
+    group: Krediler GMY
+    responsibilities:
+      - Kredi politikalarının ve kredi yetki limitlerinin hazırlanması
+      - Kredi skorlama ve analitik modellerin geliştirilmesi
+      - Kredi istihbaratı ve risk merkezi (KKB) sorgularının yönetimi
+      - Kredi işlemlerine ilişkin düzenleyici sınırlamaların politikalara yansıtılması
+    keywords: [kredi politikası, skorlama, istihbarat, risk merkezi, KKB, kredi yönetmeliği]
+    regulatory_areas: [KREDI_FON]
+
+  # ------------------------------------------------------------------ Kredi İzleme ve Hukuki Takip GMY
+  - code: KREDI_IZLEME
+    name: Kredi İzleme ve Raporlama Müdürlüğü
+    group: Kredi İzleme ve Hukuki Takip GMY
+    responsibilities:
+      - Kredi portföyünün izlenmesi ve erken uyarı sinyallerinin takibi
+      - Kredilerin sınıflandırılması ve karşılık hesaplamalarına ilişkin raporlamaların yapılması
+      - Yeniden yapılandırma işlemlerinin izlenmesi
+    keywords: [kredi izleme, erken uyarı, kredi sınıflandırma, karşılık, yeniden yapılandırma]
+    regulatory_areas: [KREDI_FON, SERMAYE_LIKIDITE]
+
+  - code: SORUNLU_ALACAK
+    name: Sorunlu Alacak Yönetimi ve Tahsilat Müdürlüğü
+    group: Kredi İzleme ve Hukuki Takip GMY
+    responsibilities:
+      - Sorunlu alacakların yönetimi, yeniden yapılandırılması ve tahsilat süreçlerinin yürütülmesi
+      - Takipteki alacakların varlık yönetim şirketlerine satış süreçlerinin yürütülmesi
+    keywords: [sorunlu alacak, tahsilat, yeniden yapılandırma, varlık yönetim şirketi, takipteki alacak]
+    regulatory_areas: [KREDI_FON]
+
+  - code: HUKUKI_TAKIP
+    name: Hukuki Takip Müdürlüğü
+    group: Kredi İzleme ve Hukuki Takip GMY
+    responsibilities:
+      - Alacakların icra ve iflas yoluyla hukuki takibinin yürütülmesi
+      - Teminatların paraya çevrilmesi süreçlerinin yönetimi
+    keywords: [icra, iflas, hukuki takip, teminat paraya çevirme]
+    regulatory_areas: [KREDI_FON]
+
+  - code: HUKUKI_DANISMANLIK
+    name: Hukuki Danışmanlık Hizmetleri Müdürlüğü
+    group: Kredi İzleme ve Hukuki Takip GMY
+    responsibilities:
+      - Bankanın işlem, sözleşme ve ürünlerine hukuki görüş verilmesi
+      - Müşteri ve tedarikçi sözleşme şablonlarının hazırlanması ve güncellenmesi
+      - Dava ve idari işlemlerde bankanın temsili
+    keywords: [hukuki görüş, sözleşme, dava, hukuk]
+    regulatory_areas: [KURUMSAL, TUKETICI, REKABET_TICARET]
+
+  # ------------------------------------------------------------------ BT ve Operasyon GMY
+  - code: DIS_TICARET_HAZINE_OPS
+    name: Dış Ticaret ve Hazine Operasyonları Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - İthalat, ihracat, akreditif ve teminat mektubu operasyonlarının yürütülmesi
+      - Hazine işlemlerinin mutabakat ve operasyonlarının yapılması
+      - Kambiyo mevzuatına uygun döviz transferi ve bildirim işlemlerinin yürütülmesi
+    keywords: [dış ticaret, akreditif, ithalat, ihracat, kambiyo, döviz transferi, hazine operasyonu]
+    regulatory_areas: [KAMBIYO]
+
+  - code: BANKACILIK_OPS
+    name: Bankacılık Hizmetleri Operasyon Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - Hesap açılışı, katılma hesapları ve emanet işlemlerinin operasyonlarının yürütülmesi
+      - Zamanaşımına uğrayan hesapların TMSF'ye devri ve hesap sahipliği işlemleri
+      - Resmi kurumlardan gelen haciz, bilgi talebi ve bloke işlemlerinin yürütülmesi
+    keywords: [hesap açılışı, katılma hesabı, emanet, zamanaşımı, haciz, bloke]
+    regulatory_areas: [MEVDUAT_FON, AML]
+
+  - code: KREDI_OPS_TEMINAT
+    name: Kredi Operasyonları ve Teminat Yönetimi Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - Kredi kullandırım operasyonlarının yürütülmesi
+      - Teminatların (ipotek, rehin, kefalet) tesis ve değerleme süreçlerinin yönetimi
+      - Kredi dosyası ve sözleşme dokümantasyonunun kontrolü
+    keywords: [kredi kullandırım, teminat, ipotek, rehin, değerleme, ekspertiz]
+    regulatory_areas: [KREDI_FON]
+
+  - code: ODEME_OPS_CAGRI
+    name: Ödeme Sistemleri Operasyon ve Çağrı Merkezi Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - EFT, FAST, SWIFT ve kart işlemleri operasyonlarının yürütülmesi
+      - Kart itiraz (chargeback) ve ödeme işlemleri mutabakatlarının yapılması
+      - Çağrı merkezi hizmetlerinin yönetimi ve müşteri taleplerinin karşılanması
+    keywords: [EFT, FAST, SWIFT, kart operasyonu, itiraz, çağrı merkezi]
+    regulatory_areas: [ODEME, TUKETICI]
+
+  - code: BT_ALTYAPI
+    name: BT Altyapı ve Operasyon Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - Sistem, ağ ve veri merkezi altyapısının işletilmesi
+      - İş sürekliliği ve felaket kurtarma altyapısının yönetimi
+      - Birincil ve ikincil sistemlerin yurt içinde bulundurulması gereksinimlerinin karşılanması
+    keywords: [BT altyapı, veri merkezi, iş sürekliliği, felaket kurtarma, sistem]
+    regulatory_areas: [VERI_BT]
+
+  - code: VERI_ANALITIK
+    name: Veri Yönetimi ve Analitik Müdürlüğü
+    group: BT ve Operasyon GMY
+    responsibilities:
+      - Veri yönetişimi, veri kalitesi ve veri ambarının yönetimi
+      - Düzenleyici raporlama için veri altyapısının sağlanması
+      - Kişisel verilerin envanteri, saklanması ve imhasına ilişkin veri süreçlerinin yürütülmesi
+    keywords: [veri yönetimi, veri kalitesi, veri ambarı, analitik, kişisel veri, veri envanteri, imha]
+    regulatory_areas: [VERI_BT, RAPORLAMA]
+
+  # ------------------------------------------------------------------ İnsan ve Kültür GMY
+  - code: IK_CALISAN
+    name: İnsan Kaynakları ve Çalışan Deneyimi Müdürlüğü
+    group: İnsan ve Kültür GMY
+    responsibilities:
+      - İşe alım, ücret, özlük ve çalışan ilişkileri süreçlerinin yönetimi
+      - İş hukuku ve sosyal güvenlik mevzuatına uyumun sağlanması
+      - Çalışanların kişisel verilerinin işlenmesine ilişkin süreçlerin yürütülmesi
+    keywords: [insan kaynakları, işe alım, ücret, özlük, iş hukuku, sosyal güvenlik, çalışan verisi]
+    regulatory_areas: [KURUMSAL, VERI_BT]
+
+  - code: EGITIM_KARIYER
+    name: Eğitim ve Kariyer Yönetimi Müdürlüğü
+    group: İnsan ve Kültür GMY
+    responsibilities:
+      - Çalışanların eğitim ve sertifikasyon ihtiyaçlarının planlanması
+      - Mevzuat gereği zorunlu eğitimlerin (uyum, bilgi güvenliği, sermaye piyasası lisansları) yürütülmesi
+      - Kariyer ve yetenek yönetimi süreçlerinin yürütülmesi
+    keywords: [eğitim, sertifikasyon, zorunlu eğitim, lisans, kariyer]
+    regulatory_areas: [KURUMSAL]
+
+  - code: SUREC_ORGANIZASYON
+    name: Süreç İyileştirme ve Organizasyonel Gelişim Müdürlüğü
+    group: İnsan ve Kültür GMY
+    responsibilities:
+      - İş süreçlerinin tasarlanması, dokümante edilmesi ve iyileştirilmesi
+      - Organizasyon yapısı, görev tanımları ve yetki matrislerinin güncellenmesi
+    keywords: [süreç, prosedür, organizasyon, görev tanımı, yetki matrisi]
+    regulatory_areas: [KURUMSAL]
+
+  - code: IDARI_ISLER
+    name: İdari İşler ve Satın Alma Müdürlüğü
+    group: İnsan ve Kültür GMY
+    responsibilities:
+      - Satın alma ve tedarikçi yönetimi süreçlerinin yürütülmesi
+      - Bina, şube ve fiziksel güvenlik hizmetlerinin yönetimi
+      - Destek hizmeti alımlarına ilişkin sözleşmelerin yönetimi
+    keywords: [satın alma, tedarikçi, destek hizmeti, fiziksel güvenlik, bina]
+    regulatory_areas: [KURUMSAL]
+
+  # ------------------------------------------------------------------ Finans GMY
+  - code: FINANSAL_RAPORLAMA
+    name: Finansal Raporlama ve Bütçe Yönetimi Müdürlüğü
+    group: Finans GMY
+    responsibilities:
+      - Finansal tabloların ve BDDK'ya yapılan yasal raporlamaların hazırlanması
+      - Muhasebe politikalarının ve tekdüzen hesap planı uygulamalarının yönetimi
+      - Bütçe ve finansal planlama süreçlerinin yürütülmesi
+      - Enflasyon muhasebesi ve finansal raporlama standartlarındaki değişikliklerin uygulanması
+    keywords: [finansal tablo, yasal raporlama, muhasebe, tekdüzen hesap planı, bütçe, enflasyon muhasebesi]
+    regulatory_areas: [RAPORLAMA]
+
+  - code: MALI_ISLER
+    name: Mali İşler Müdürlüğü
+    group: Finans GMY
+    responsibilities:
+      - Vergi (BSMV, KKDF, damga vergisi, kurumlar vergisi) yükümlülüklerinin yerine getirilmesi
+      - Tasarruf mevduatı sigorta primi ve yasal fon ödemelerinin yapılması
+      - Muhasebe kayıtlarının kontrolü ve mali işlemlerin yürütülmesi
+    keywords: [vergi, BSMV, KKDF, damga vergisi, kurumlar vergisi, sigorta primi, muhasebe kaydı]
+    regulatory_areas: [VERGI_HARC, MEVDUAT_FON]
+
+  - code: YATIRIMCI_ILISKILERI
+    name: Yatırımcı İlişkileri ve Sürdürülebilirlik Müdürlüğü
+    group: Finans GMY
+    responsibilities:
+      - Kamuyu aydınlatma, özel durum açıklamaları ve yatırımcı ilişkilerinin yürütülmesi
+      - Sürdürülebilirlik raporlaması ve yeşil varlık oranı gibi sürdürülebilirlik göstergelerinin raporlanması
+      - Pay geri alımı ve ortaklık yapısına ilişkin SPK yükümlülüklerinin takibi
+    keywords: [kamuyu aydınlatma, özel durum, yatırımcı ilişkileri, sürdürülebilirlik raporu, yeşil varlık, pay geri alımı]
+    regulatory_areas: [SERMAYE_PIYASASI, RAPORLAMA]
