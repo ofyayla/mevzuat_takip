@@ -1,7 +1,8 @@
 # Birim bilgi tabanı — v0 TASLAK
 #
 # KAYNAK: Albaraka Türk Katılım Bankası Organizasyon Şeması (10.08.2026). Birim adları ve bağlılıklar şemadan
-# alınmıştır; görev tanımları (responsibilities) birim adlarından ve katılım bankacılığı mevzuatındaki tipik görev
+# alınmış ve Başkanlıkça teyit edilmiştir (26.09.2026; Müşteri Deneyimi ve CRM Müdürlüğü Tüzel Bankacılık GMY'ye de
+# raporlar); görev tanımları (responsibilities) birim adlarından ve katılım bankacılığı mevzuatındaki tipik görev
 # dağılımından TÜRETİLMİŞ TASLAKTIR. Nihai görev tanımları (organizasyon yönetmeliği / İK) alındığında bu dosya
 # güncellenir ve `mevzuat-ai units-load` ile tabloya aktarılır; kod değişmez.
 # Kişi isimleri eşleştirme için gerekmediğinden bilinçli olarak alınmamıştır.
@@ -10,7 +11,7 @@
 #
 # Alanlar: code (kararlı kimlik), name, group (bağlı olduğu üst yapı), responsibilities (madde madde görevler —
 # eşleştirme gerekçesi bunlardan birine dayanmalı), keywords, regulatory_areas (config/taxonomy.yaml konu kodları).
-version: "v0.3-taslak-2026-08-10"
+version: "v0.4-taslak-2026-08-10"
 source_doc_ref: "Organizasyon Şeması 10.08.2026 (görüntü); görev tanımları taslak"
 
 units:
@@ -42,8 +43,8 @@ units:
       - Şüpheli işlem bildirimlerinin değerlendirilmesi ve MASAK'a bildirilmesi; uyum görevlisi işlevi
       - Müşteriyi tanı ilkeleri, yaptırım listeleri taraması ve malvarlığı dondurma kararlarının uygulanması
       - Yeni ürün ve süreçlere AML ve yaptırım riski açısından görüş verilmesi
-      # VARSAYIM (teyit edilmeli): şemada KVKK uyumuna açıkça sahip bir birim yok; bankalarda yaygın yapı olarak
-      # kişisel verilerin korunması uyum programının koordinasyonu bu başkanlığa verildi.
+      # VARSAYIM (26.09.2026 itibarıyla Başkanlık da henüz bilmiyor): şemada KVKK uyumuna açıkça sahip bir birim yok;
+      # bankalarda yaygın yapı olarak kişisel verilerin korunması uyum programının koordinasyonu bu başkanlığa verildi.
       - Kişisel verilerin korunması mevzuatına uyum programının koordinasyonu (veri sorumlusu irtibat kişiliği, VERBİS kayıtları, Kurul kararlarının takibi)
     keywords: [masak, aklama, terörün finansmanı, şüpheli işlem, müşteriyi tanı, yaptırım, kişisel verilerin korunması, VERBİS, veri sorumlusu]
     regulatory_areas: [AML, VERI_BT]
@@ -126,9 +127,9 @@ units:
   # ------------------------------------------------------------------ Dijital ve Bireysel Bankacılık GMY
   - code: MUSTERI_DENEYIMI
     name: Müşteri Deneyimi ve CRM Müdürlüğü
-    group: Dijital ve Bireysel Bankacılık GMY
+    group: Dijital ve Bireysel Bankacılık GMY (Tüzel Bankacılık GMY'ye de raporlar)
     responsibilities:
-      - Müşteri deneyiminin ölçülmesi ve iyileştirilmesi; müşteri şikâyetlerinin yönetimi
+      - Bireysel ve tüzel müşteri deneyiminin ölçülmesi ve iyileştirilmesi; müşteri şikâyetlerinin yönetimi
       - CRM sistemleri ve müşteri iletişim izinlerinin (ticari elektronik ileti) yönetimi
       - Finansal tüketicinin korunmasına ilişkin müşteri bilgilendirme süreçlerinin yürütülmesi
     keywords: [müşteri deneyimi, şikâyet, CRM, iletişim izni, finansal tüketici]
