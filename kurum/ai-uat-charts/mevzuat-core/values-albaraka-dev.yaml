@@ -1,0 +1,168 @@
+deployment:
+  name: mevzuat-core-dev
+  autoscaling:
+    enabled: false
+  replicaCount: 1
+  labels:
+    app: mevzuat-core-dev
+  podLabels:
+    framework: "python"
+    app: "mevzuat-core-dev"
+  image:
+    registry: "10.54.62.31:9099"
+    repository: "com.albaraka.ai/mevzuat-core"
+    tag: "dev"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+      ephemeral-storage: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
+  containerPort: 5000
+  # Gizli değerler (DATABASE_URL, MONGO_URL, LLM_API_KEY, OCR_API_KEY) → Secret; bu dosyaya parola YAZILMAZ.
+  # Örnek: mevzuat-core reposunda deploy/secret.example.yaml
+  envVarsSecret: mevzuat-core-dev-secrets
+  envVars:
+    - name: APP_ENV
+      value: "dev"
+
+    - name: TZ
+      value: "Europe/Istanbul"
+
+    - name: LOG_LEVEL
+      value: "DEBUG"
+
+    - name: DB_AUTO_CREATE
+      value: "false"
+
+    # DMZ crawler MongoDB'ye yazar; ana servis Mongo → PostgreSQL aktarır, ham içeriği GridFS'ten okur
+    - name: CRAWL_MODE
+      value: "remote"
+
+    - name: RAW_STORAGE
+      value: "gridfs"
+
+    - name: MONGO_DB
+      value: "mevzuat_crawl_dev"
+
+    - name: CRAWLER_STALE_MINUTES
+      value: "30"
+
+    # Cluster Redis'i paylaşımlı: Celery anahtarları çakışmasın diye ayrı DB numarası (TEYİT: platform ekibi)
+    - name: REDIS_URL
+      value: "redis://redis-master.artint.svc:6379/6"
+
+    - name: CELERY_VISIBILITY_TIMEOUT_S
+      value: "14400"
+
+    - name: CELERY_TASK_TIME_LIMIT_S
+      value: "10800"
+
+    - name: LLM_PROVIDER
+      value: "vllm"
+
+    - name: LLM_BASE_URL
+      value: "http://10.144.100.204:8806/v1"
+
+    - name: LLM_MODEL
+      value: "Qwen/Qwen3.6-35B-A3B-FP8"
+
+    - name: LLM_MAX_CONCURRENCY
+      value: "2"
+
+    - name: OCR_PROVIDER
+      value: "azure_di"
+
+    # TEYİT: kurum Azure Document Intelligence adresi
+    - name: OCR_ENDPOINT
+      value: "https://docintel.kurum.local"
+
+    - name: AUTH_MODE
+      value: "keycloak"
+
+    - name: KEYCLOAK_ISSUER
+      value: "https://keycloak.alb.albarakatech.com/realms/narui"
+
+    # TEYİT: IAM ekibi
+    - name: KEYCLOAK_CLIENT_ID
+      value: "mevzuat-portal"
+
+    - name: CORS_ORIGINS
+      value: "https://mevzuat-takip-dev.artinttest.albarakaturk.local"
+
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http-api
+    periodSeconds: 10
+    timeoutSeconds: 5
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http-api
+    periodSeconds: 30
+    timeoutSeconds: 5
+
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: data
+      emptyDir: {}
+  volumeMounts:
+    - mountPath: /tmp
+      name: tmp
+    - mountPath: /data
+      name: data
+
+service:
+  name: mevzuat-core-dev
+  type: ClusterIP
+  labels:
+    app: mevzuat-core-dev
+  ports:
+  - name: http-api
+    port: 5000
+    targetPort: http-api
+
+# Celery worker: başlangıçta tüm kuyruklar tek worker'da
+worker:
+  name: mevzuat-core-dev-worker
+  replicaCount: 1
+  queues: "ingest,process,ai,monitor,default"
+  concurrency: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "3Gi"
+      ephemeral-storage: "4Gi"
+
+# Yük artınca (ör. KEP, YZ yığılması) kuyruk bazında ayrı worker; o kuyruk worker.queues'tan çıkarılır:
+#   extraWorkers:
+#     - name: mevzuat-core-dev-worker-ai
+#       replicaCount: 1
+#       queues: "ai"
+#       concurrency: 2
+#       resources: {requests: {cpu: "250m", memory: "512Mi"}, limits: {cpu: "1", memory: "1Gi"}}
+extraWorkers: []
+
+# Celery zamanlayıcısı: TEK örnek
+beat:
+  name: mevzuat-core-dev-beat
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "250m"
+      memory: "384Mi"
+
+ingress:
+  host: mevzuat-takip-dev.artinttest.albarakaturk.local

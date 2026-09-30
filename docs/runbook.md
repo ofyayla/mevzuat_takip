@@ -7,16 +7,17 @@ Komutlar `backend/` dizininden, ilgili sanal ortam veya konteyner içinde çalı
 ## 1. Bileşenler
 
 Kurum topolojisi: internete çıkan tek bileşen DMZ'deki crawler'dır ve LAN'a yalnızca MongoDB (27017) üzerinden
-erişir. Ana servis LAN'daki Kubernetes cluster'ındadır. Dağıtım dosyaları: `deploy/` (bkz. `deploy/README.md`).
+erişir. Ana servis LAN'daki Kubernetes cluster'ındadır. İki ayrı repo: **mevzuat-core** (bu belgeler, `deploy/`) ve
+**mevzuat-crawler** (`deploy/dmz`); chart'lar kurum chart reposunda `ai-uat-charts/mevzuat-{core,crawler}`.
 
 | Bileşen | Yer | Görev | Ölçek |
 |---|---|---|---|
 | `mevzuat-crawler` | DMZ, 192.168.18.35 (podman) | Kaynak tarama; zamanlama `sources.yaml` cron; LAN tarama talepleri | Tek örnek, paralel 3 kaynak |
 | MongoDB `mevzuat_crawl` | LAN, 10.155.7.195 | DMZ ↔ LAN teslim alanı: meta veri + ham içerik (GridFS) | Kurum Mongo'su |
-| `mevzuat-takip` | K8s (Helm) | Portal (GUI) + Portal API; kullanıcılar ve Albatros 443 ile gelir | 2 replika |
-| `mevzuat-takip-worker` | K8s (Helm) | Celery: ingest (Mongo → PostgreSQL), metin çıkarma/OCR, tekilleştirme, YZ, izleme | 1 replika, tüm kuyruklar |
-| `mevzuat-takip-beat` | K8s (Helm) | Celery zamanlayıcısı (ingest her dakika, işleme/YZ/izleme) | **Tek** örnek (Recreate) |
-| `mevzuat-takip-migrate` | K8s Job (Helm hook) | `alembic upgrade head`, her install/upgrade öncesi | — |
+| `mevzuat-core` | K8s (Helm) | Portal (GUI) + Portal API; kullanıcılar ve Albatros 443 ile gelir | 2 replika |
+| `mevzuat-core-worker` | K8s (Helm) | Celery: ingest (Mongo → PostgreSQL), metin çıkarma/OCR, tekilleştirme, YZ, izleme | 1 replika, tüm kuyruklar |
+| `mevzuat-core-beat` | K8s (Helm) | Celery zamanlayıcısı (ingest her dakika, işleme/YZ/izleme) | **Tek** örnek (Recreate) |
+| `mevzuat-core-migrate` | K8s Job (ArgoCD PreSync) | `alembic upgrade head`, her senkronda pod'lardan önce | — |
 | Redis | K8s (`redis-master.artint.svc`) | Celery tetikleyicisi; paylaşımlı olduğundan ayrı DB numarası. Kalıcılık/yedek gerekmez | — |
 | PostgreSQL 16 | LAN | Tüm iş durumu: kayıtlar, özetler, denetim izi, alarmlar | Tek örnek + günlük yedek |
 
@@ -24,38 +25,37 @@ Ham içerik GridFS'te tutulur ve **silinmez** (yeniden işleme ve denetim bunun 
 kullanıcısının silme yetkisi yoktur.
 
 **Ölçekleme (ör. KEP, yeni kaynaklar):** yük hangi kuyrukta birikiyorsa values dosyasında `extraWorkers` ile
-o kuyruğa ayrılmış worker eklenir (ör. `{name: mevzuat-takip-worker-ai, queues: ai, …}`) ve kuyruk `worker.queues`
+o kuyruğa ayrılmış worker eklenir (ör. `{name: mevzuat-core-worker-ai, queues: ai, …}`) ve kuyruk `worker.queues`
 listesinden çıkarılır; kod değişmez. YZ kuyruğunda darboğaz vLLM eşzamanlılığıdır (`LLM_MAX_CONCURRENCY`); worker sayısını artırmak tek başına
 hızlandırmaz. Yeni site yalnızca `config/sources.yaml` + crawler imajı güncellemesiyle eklenir.
 
 ## 2. Kurulum
 
-İlk kez kurum ağına taşıma ve devreye alma (GitLab, Jenkins, imaj taşıma, sıra ve kontroller): `kurum-devreye-alma.md`.
+İlk kez kurum ağına taşıma ve devreye alma (repolar, Azure DevOps, ArgoCD, DMZ, sıra ve kontroller): `kurum-devreye-alma.md`.
 
 **MongoDB (bir kez, Mongo yöneticisi):** `deploy/mongo/init-users.js` iki en az yetkili kullanıcı oluşturur:
 `mevzuat_crawler` (yalnızca `mevzuat_crawl`'a yazma, silme yok) ve `mevzuat_core` (okuma, senkron işareti,
 tarama talebi). Parolalar kasaya konur.
 
-**LAN / Kubernetes (ana servis, Helm — kurum chart düzeni):**
+**LAN / Kubernetes (ana servis — chart reposu + ArgoCD):**
 
-1. İmajlar Jenkins'te derlenip Nexus'a gönderilir (`Jenkinsfile`): `com.albaraka.ai/mevzuat-takip-core` ve
-   `com.albaraka.ai/mevzuat-takip-crawler`; `main` → `latest` (UAT), diğer dallar → `dev`.
-2. Gizli değerler: `deploy/helm/secret.example.yaml` → `secret.yaml` (`DATABASE_URL`, `MONGO_URL` = `mevzuat_core`,
+1. İmajlar Azure DevOps pipeline'larında derlenip Nexus'a gönderilir: `com.albaraka.ai/mevzuat-core` ve
+   `com.albaraka.ai/mevzuat-crawler`; `main` → `latest` (UAT), diğer dallar → `dev`.
+2. Gizli değerler: `deploy/secret.example.yaml` → `secret.yaml` (`DATABASE_URL`, `MONGO_URL` = `mevzuat_core`,
    `LLM_API_KEY`, `OCR_API_KEY`); repoya **girmez**, `kubectl -n artint apply -f secret.yaml` veya Vault'tan.
    Gizli değer values dosyalarına yazılmaz.
-3. Ortam değerleri `deploy/helm/mevzuat-takip/values-albaraka-{dev,uat}.yaml` (Redis DB numarası, OCR, Keycloak,
-   ingress host). Kurulum/güncelleme:
-   `helm upgrade --install mevzuat-takip deploy/helm/mevzuat-takip -n artint -f deploy/helm/mevzuat-takip/values-albaraka-uat.yaml`
-   → migrate hook'u şemayı günceller, ardından api/worker/beat yenilenir.
-4. Başlangıç verisi: `kubectl -n artint exec deploy/mevzuat-takip -- mevzuat-ai units-load`.
-5. LLM ve OCR testi: `… exec deploy/mevzuat-takip -- mevzuat-ai llm-check` ve `mevzuat-process ocr-check`.
+3. Chart kurum chart reposunda `ai-uat-charts/mevzuat-core/`; ortam değerleri `values-albaraka-{dev,uat}.yaml`.
+   ArgoCD senkronunda önce migrate Job'ı (PreSync) şemayı günceller, ardından api/worker/beat yenilenir. ArgoCD dışı
+   acil kurulum (chart reposunda): `helm upgrade --install mevzuat-core mevzuat-core -n artint -f mevzuat-core/values-albaraka-uat.yaml`.
+4. Başlangıç verisi: `kubectl -n artint exec deploy/mevzuat-core -- mevzuat-ai units-load`.
+5. LLM ve OCR testi: `… exec deploy/mevzuat-core -- mevzuat-ai llm-check` ve `mevzuat-process ocr-check`.
 
 **DMZ (crawler):**
 
-6. İmaj: Nexus'taki `com.albaraka.ai/mevzuat-takip-crawler`. DMZ'den Nexus'a (9099) erişim yoksa (ağ şemasında
+6. İmaj: Nexus'taki `com.albaraka.ai/mevzuat-crawler`. DMZ'den Nexus'a (9099) erişim yoksa (ağ şemasında
    yalnızca 27017 açık) imaj LAN'da `podman save` ile dosyaya alınıp DMZ'ye kopyalanır ve `podman load` ile yüklenir.
-7. `deploy/dmz/crawler.env.example` → `/etc/mevzuat/crawler.env` (600; `MONGO_URL` = `mevzuat_crawler`,
-   gerekiyorsa `HTTPS_PROXY`/`CA_BUNDLE`). `deploy/dmz/mevzuat-crawler.container` → `/etc/containers/systemd/`,
+7. mevzuat-crawler reposundan: `deploy/dmz/crawler.env.example` → `/etc/mevzuat/crawler.env` (600; `MONGO_URL` =
+   `mevzuat_crawler`, gerekiyorsa `HTTPS_PROXY`/`CA_BUNDLE`). `deploy/dmz/mevzuat-crawler.container` → `/etc/containers/systemd/`,
    `systemctl daemon-reload && systemctl start mevzuat-crawler`.
 8. Erişim testi (DMZ'de): `podman exec mevzuat-crawler mevzuat-collect check-access` → 9 kaynak `ok` (hata → §4.2);
    `podman exec mevzuat-crawler mevzuat-crawler check` → Mongo erişimi ve indeksler.
@@ -169,7 +169,7 @@ müdahale anlamına gelir.
 
 | Ne | Nerede | Adımlar |
 |---|---|---|
-| LLM API anahtarı | `LLM_API_KEY` (kasa) | Yeni anahtarı kasaya/Secret'a yaz → `kubectl -n artint rollout restart deploy/mevzuat-takip-worker deploy/mevzuat-takip` → `mevzuat-ai llm-check` → eski anahtarı sağlayıcıda iptal et |
+| LLM API anahtarı | `LLM_API_KEY` (kasa) | Yeni anahtarı kasaya/Secret'a yaz → `kubectl -n artint rollout restart deploy/mevzuat-core-worker deploy/mevzuat-core` → `mevzuat-ai llm-check` → eski anahtarı sağlayıcıda iptal et |
 | OCR anahtarı | `OCR_API_KEY` | Aynı sıra; kontrol `mevzuat-process ocr-check` |
 | Keycloak imza anahtarı | `KEYCLOAK_PUBLIC_KEYS_DIR` | Keycloak'ta yeni anahtar oluşturulunca açık anahtarı (PEM, dosya adı = `kid`) dizine **eski anahtarı silmeden** ekle (api dosya değişikliğini kendisi algılar); eski anahtarla imzalı tokenlar bittikten sonra (token ömrü) eski PEM'i kaldır. Doğrulama çevrimdışıdır; Keycloak'a çalışma anında bağlanılmaz |
 | Kaynak TLS ara sertifikası | `config/certs/` | §4.2 |
@@ -197,7 +197,7 @@ alembic current               # uygulanmış sürüm
 alembic downgrade -1          # geri alma (önce yedek!)
 ```
 
-Sıra: yedek al → `helm upgrade` (migrate hook'u önce çalışır; başarısız olursa sürüm uygulanmaz) → api/worker/beat
+Sıra: yedek al → ArgoCD senkronu (migrate PreSync Job'ı önce çalışır; başarısız olursa senkron durur) → api/worker/beat
 yeni imajla açılır. Geliştirici yeni model alanı eklediğinde
 `alembic revision --autogenerate -m "…"` ile migrasyon üretir; `tests/test_migrations.py` migrasyon sonucu şemanın
 modellerle aynı olduğunu doğrular.

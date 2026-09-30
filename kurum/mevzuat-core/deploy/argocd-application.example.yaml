@@ -1,0 +1,23 @@
+# ArgoCD Application örneği (DevOps ekibi referansı). Chart kurum chart reposunda ai-uat-charts/mevzuat-core/ altındadır.
+# Gizli değerler (mevzuat-core-secrets) ArgoCD'nin dışında, namespace'e önceden yüklenir; ArgoCD onu yönetmez/silmez.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mevzuat-core-uat
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.albarakaturk.local/<grup>/ai-uat-charts.git     # kurum chart reposu
+    targetRevision: main
+    path: mevzuat-core
+    helm:
+      releaseName: mevzuat-core
+      valueFiles:
+        - values-albaraka-uat.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: artint
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=false]

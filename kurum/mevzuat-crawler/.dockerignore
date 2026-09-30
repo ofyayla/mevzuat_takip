@@ -1,0 +1,9 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+app/tests
+app/data
+app/.env
+deploy
+*.md

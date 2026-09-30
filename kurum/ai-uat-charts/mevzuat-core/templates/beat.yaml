@@ -1,0 +1,39 @@
+{{/* Celery zamanlayıcısı. MUTLAKA tek örnek (Recreate): iki beat aynı görevi iki kez tetikler. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.beat.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.beat.name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Values.beat.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.beat.name }}
+        framework: "python"
+    spec:
+      containers:
+        - name: {{ .Values.beat.name }}
+          image: "{{ .Values.deployment.image.registry }}/{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          command: ["celery", "-A", "app.worker", "beat", "--schedule", "/tmp/celerybeat-schedule"]
+          env:
+            {{- toYaml .Values.deployment.envVars | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.deployment.envVarsSecret }}
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

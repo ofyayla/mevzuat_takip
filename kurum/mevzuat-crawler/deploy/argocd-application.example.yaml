@@ -1,0 +1,24 @@
+# ArgoCD Application örneği (DevOps ekibi referansı). Chart kurum chart reposunda ai-uat-charts/mevzuat-crawler/ altındadır.
+# Gizli değerler (mevzuat-crawler-secrets) ArgoCD'nin dışında, namespace'e önceden yüklenir; ArgoCD onu yönetmez/silmez.
+# Yalnızca crawler internete çıkabilen bir cluster'da çalışacaksa; DMZ podman kurulumunda bu dosya kullanılmaz.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mevzuat-crawler-uat
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.albarakaturk.local/<grup>/ai-uat-charts.git     # kurum chart reposu
+    targetRevision: main
+    path: mevzuat-crawler
+    helm:
+      releaseName: mevzuat-crawler
+      valueFiles:
+        - values-albaraka-uat.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: artint
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=false]

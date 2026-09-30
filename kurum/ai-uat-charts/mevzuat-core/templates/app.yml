@@ -1,0 +1,3 @@
+{{ include "common.service" ( dict "service" .Values.service "context" $) }}
+---
+{{ include "common.deployment" ( dict "deployment" .Values.deployment "context" $) }}

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: mevzuat-core
+description: Mevzuat Takip ana servisi — portal + API, Celery worker/beat, migrasyon (LAN Kubernetes)
+# Kurum ortak kütüphane chart'ı charts/common-1.0.4.tgz olarak gömülüdür; ağdan çekilmez.
+dependencies:
+  - name: common
+    repository: "@albarakatech" #http://atgdevdkrnxs01.alb.albarakatech.com:8080/repository/albarakatech-private-charts/
+    tags:
+      - atg-common
+    version: 1.0.4
+
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

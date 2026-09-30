@@ -3,11 +3,17 @@
 #
 #   [DMZ]  crawler ──27017──▶ mongo ◀── [LAN / K8s] api · worker · beat (+ redis, postgres)
 #
-# Kurum kurulumu bu dosyayla yapılmaz: LAN → deploy/helm (Kubernetes), DMZ → deploy/dmz (podman/compose).
+# Kurum kurulumu bu dosyayla yapılmaz: kurum/export.py → mevzuat-core, mevzuat-crawler repoları ve ai-uat-charts.
 # Şema yalnızca "migrate" tek seferlik servisiyle kurulur/güncellenir (API açılışta migrasyon çalıştırmaz).
+# Kurum ağı dışında derleme: Dockerfile'daki kurum varsayılanları (Nexus imajı, pip aynası, CA) ezilir
+x-local-build-args: &local-args
+  BASE_IMAGE: python:3.12-slim-bullseye
+  PIP_INDEX_URL: https://pypi.org/simple
+  CA_CERT_URLS: ""
+
 x-core: &core
   image: mevzuat-core:latest
-  build: {context: ../.., dockerfile: backend/docker/Dockerfile, target: core}
+  build: {context: ../.., dockerfile: Dockerfile, target: core, args: *local-args}
   env_file: [../.env]
   environment: &env
     DATABASE_URL: postgresql+psycopg://mevzuat:${POSTGRES_PASSWORD:-mevzuat}@db:5432/mevzuat
@@ -46,25 +52,25 @@ services:
     depends_on: {db: {condition: service_healthy}}
     restart: "no"
 
-  api:                      # K8s: mevzuat-takip (portal + /api/v1)
+  api:                      # K8s: mevzuat-core (portal + /api/v1)
     <<: *core
     ports: ["${API_PORT:-8000}:8000"]
 
-  worker:                   # K8s: mevzuat-takip-worker — başlangıçta tüm kuyruklar tek worker'da
+  worker:                   # K8s: mevzuat-core-worker — başlangıçta tüm kuyruklar tek worker'da
     <<: *core
     command: ["celery", "-A", "app.worker", "worker", "-Q", "ingest,process,ai,monitor,default", "-c", "4",
               "-n", "worker@%h"]
     healthcheck: {disable: true}
 
-  beat:                     # K8s: mevzuat-takip-beat — TEK örnek
+  beat:                     # K8s: mevzuat-core-beat — TEK örnek
     <<: *core
     command: ["celery", "-A", "app.worker", "beat", "--schedule", "/tmp/celerybeat-schedule"]
     healthcheck: {disable: true}
 
   crawler:                  # DMZ: mevzuat-crawler (internete çıkan tek bileşen)
     image: mevzuat-crawler:latest
-    build: {context: ../.., dockerfile: backend/docker/Dockerfile, target: crawler}
-    # Geliştirici .env'i verilmez: DMZ'de LLM/OCR/DB ayarı ve anahtarı bulunmaz (bkz. deploy/dmz/crawler.env.example)
+    build: {context: ../.., dockerfile: Dockerfile, target: crawler, args: *local-args}
+    # Geliştirici .env'i verilmez: DMZ'de LLM/OCR/DB ayarı ve anahtarı bulunmaz (bkz. kurum/mevzuat-crawler/deploy/dmz/crawler.env.example)
     environment:
       MONGO_URL: mongodb://mongo:27017
       TZ: Europe/Istanbul

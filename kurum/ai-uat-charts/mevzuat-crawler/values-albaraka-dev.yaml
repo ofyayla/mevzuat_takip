@@ -1,0 +1,61 @@
+# Crawler internete (443, sources.yaml alan adları) ve MongoDB'ye (27017) erişebilen bir cluster/namespace'te çalışır.
+# Kurum ağ şemasında bu erişim yalnızca DMZ sunucusunda var; cluster'da çıkış yoksa crawler DMZ'de podman ile
+# çalıştırılır (mevzuat-crawler reposunda deploy/dmz). Aynı anda yalnızca biri çalışmalıdır.
+deployment:
+  name: mevzuat-crawler-dev
+  labels:
+    app: mevzuat-crawler-dev
+  podLabels:
+    framework: "python"
+    app: "mevzuat-crawler-dev"
+  image:
+    registry: "10.54.62.31:9099"
+    repository: "com.albaraka.ai/mevzuat-crawler"
+    tag: "dev"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+      ephemeral-storage: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
+  # Gizli değer (MONGO_URL: mevzuat_crawler kullanıcısı) → Secret; bu dosyaya parola YAZILMAZ.
+  # Örnek: mevzuat-crawler reposunda deploy/secret.example.yaml
+  envVarsSecret: mevzuat-crawler-dev-secrets
+  envVars:
+    - name: TZ
+      value: "Europe/Istanbul"
+
+    - name: LOG_LEVEL
+      value: "DEBUG"
+
+    - name: MONGO_DB
+      value: "mevzuat_crawl_dev"
+
+    # Aynı anda taranan kaynak sayısı (her kaynak kendi istek aralığını korur)
+    - name: CRAWLER_MAX_PARALLEL
+      value: "3"
+
+    # Zamanlama ve LAN tarama talebi kontrol aralığı (sn)
+    - name: CRAWLER_POLL_S
+      value: "15"
+
+    # Kurum çıkış proxy'si varsa açılır:
+    # - name: HTTPS_PROXY
+    #   value: "http://proxy.kurum.local:8080"
+
+    - name: HTTP_USER_AGENT
+      value: "MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)"
+
+    - name: COLLECT_REQUEST_DELAY_S
+      value: "1.5"
+
+  volumes:
+    - name: data
+      emptyDir: {}
+  volumeMounts:
+    - mountPath: /data
+      name: data

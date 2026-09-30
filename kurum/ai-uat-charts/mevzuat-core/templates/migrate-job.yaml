@@ -1,0 +1,37 @@
+{{/* Şema: "alembic upgrade head", uygulama pod'larından ÖNCE. ArgoCD'de PreSync hook'u (her senkronda çalışır;
+     migrasyon idempotent), düz Helm'de pre-install/pre-upgrade. Başarısız olursa senkron uygulanmaz.
+     Son Job silinmez (loglar incelenebilsin); bir sonraki senkronda yeniden oluşturulur. */}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.deployment.name }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.deployment.name }}-migrate
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.deployment.name }}-migrate
+        framework: "python"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: {{ .Values.deployment.name }}-migrate
+          image: "{{ .Values.deployment.image.registry }}/{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- toYaml .Values.deployment.envVars | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.deployment.envVarsSecret }}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}

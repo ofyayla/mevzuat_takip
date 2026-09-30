@@ -30,6 +30,7 @@ core = [                       # LAN ana servis: işleme, YZ, API, Celery
     "jinja2>=3.1",             # İK-3: sürümlü prompt şablonları
     "fastapi>=0.110",          # İK-6: Portal API
     "uvicorn[standard]>=0.29",
+    "gunicorn>=23",            # kurum düzeni: gunicorn + UvicornWorker (gunicorn_config.py)
     "pyjwt[crypto]>=2.8",      # İK-6: Keycloak token'ının çevrimdışı (RS256) doğrulanması
     "python-multipart>=0.0.9", # İK-8: manuel tespit dosyası yükleme
     "openpyxl>=3.1",           # İK-8: Excel (.xlsx) yükleme

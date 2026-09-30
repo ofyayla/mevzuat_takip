@@ -19,9 +19,11 @@ load-test:      ## 1 yıllık veri hacmiyle yanıt süreleri
 	python scripts/load_test.py
 audit-verify:   ## denetim izi hash zinciri
 	mevzuat-monitor audit-verify
-docker-build:   ## iki imaj: LAN ana servis (core) ve DMZ crawler
-	cd .. && docker build -f backend/docker/Dockerfile --target core -t mevzuat-core . && \
-	docker build -f backend/docker/Dockerfile --target crawler -t mevzuat-crawler .
+LOCAL_BUILD_ARGS = --build-arg BASE_IMAGE=python:3.12-slim-bullseye --build-arg PIP_INDEX_URL=https://pypi.org/simple \
+	--build-arg CA_CERT_URLS=
+docker-build:   ## iki imaj, kurum ağı dışında (kurumda Azure DevOps argümansız derler)
+	cd .. && docker build $(LOCAL_BUILD_ARGS) --target core -t mevzuat-core . && \
+	docker build $(LOCAL_BUILD_ARGS) --target crawler -t mevzuat-crawler .
 compose-up:     ## kurum topolojisinin yerel kopyası (crawler + mongo + api/worker/beat + redis + postgres)
 	cd .. && docker compose -f backend/docker/docker-compose.yml up -d --build
 mongo-test:     ## Mongo entegrasyon testleri için yerel MongoDB (tests/test_crawler_mongo.py)

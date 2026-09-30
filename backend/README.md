@@ -52,7 +52,7 @@ Kurum ağında DMZ'den LAN'a yalnızca MongoDB (27017) açıktır. Bu yüzden si
 - **Celery (ana servis):** Redis yalnızca tetikleyicidir; `acks_late`, `reject_on_worker_lost`, görev süre sınırı,
   `visibility_timeout` ve `max_tasks_per_child` ayarlıdır. Görevler durum makinesi sayesinde idempotenttir.
 - **İmajlar:** `--target crawler` (toplama + pymongo; LLM/OCR/FastAPI/Celery yok) ve `--target core`.
-  Dağıtım dosyaları ve kurulum: `../deploy/`, `../docs/runbook.md` §1–2.
+  Kurum repoları ve chart'lar: `../kurum/` (`kurum/export.py`), kurulum: `../docs/kurum-devreye-alma.md`.
 
 ## Komutlar
 
@@ -396,10 +396,11 @@ veritabanında doğrudan yapılan değişiklik "içerik değiştirilmiş"/"zinci
 Zincirin **son** olayının silinmesi tek başına fark edilemez (hash zincirlerinin bilinen sınırı); bunun için
 veritabanı yedekleri ve erişim logları esas alınır.
 
-**Docker.** `backend/docker/Dockerfile` iki hedef üretir: `core` (python:3.11-slim, portal sayfası dahil) ve
-`crawler` (yalnızca toplama + MongoDB). `backend/docker/docker-compose.yml` kurum topolojisinin yerel kopyasıdır:
+**Docker.** Repo kökündeki `Dockerfile` iki hedef üretir: `core` (varsayılan; Python 3.12, portal sayfası dahil) ve
+`crawler` (yalnızca toplama + MongoDB). Varsayılanlar kurum ayarlarıdır (Nexus imajı, `pip.conf`, kurum CA'ları);
+kurum ağı dışında `make docker-build` bunları ezer. `backend/docker/docker-compose.yml` kurum topolojisinin yerel kopyasıdır:
 `crawler`, `mongo`, `db` (PostgreSQL 16), `redis`, `migrate`, `api`, `worker`, `beat`. `make docker-build`,
-`make compose-up`. Kurum kurulumu `../deploy/` (Kubernetes + DMZ podman) ile yapılır.
+`make compose-up`. Kurum repoları (mevzuat-core, mevzuat-crawler) ve chart'lar `../kurum/export.py` ile üretilir.
 
 **Testler.** `tests/test_e2e.py` tüm hattı ağsız çalıştırır: gerçek BDDK fixture'larıyla toplama → metin çıkarma →
 tekilleştirme → sahte LLM ile ilgililik/özet/birim → portal API'de onay → denetim izi doğrulaması → manuel tespit

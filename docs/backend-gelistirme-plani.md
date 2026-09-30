@@ -699,13 +699,13 @@ Hedef: iş kuralı modüllerinde ≥ %85 satır kapsama. CI'da `ruff`, `mypy` ve
 
 ## 11. Dağıtım (DMZ crawler + Kubernetes)
 
-Tek Dockerfile, iki hedef: `--target crawler` (DMZ) ve `--target core` (K8s); Jenkins (`Jenkinsfile`) Nexus'a gönderir, SonarQube analizi yapar. Dağıtım dosyaları `deploy/` altında:
+Kurumda iki ayrı repo (**mevzuat-core**, **mevzuat-crawler**) ve kurum chart reposunda iki chart (`ai-uat-charts/mevzuat-core`, `ai-uat-charts/mevzuat-crawler`) bulunur; hepsi bu depodaki `kurum/export.py` ile üretilir. Her repoda Dockerfile, pip.conf, Jenkinsfile (Nexus + SonarQube); pipeline'ları DevOps ekibi tanımlar, ArgoCD chart'ı senkronlar:
 
 | Yer | Dosya | İçerik |
 |---|---|---|
-| LAN / K8s | `deploy/helm/mevzuat-takip/` (Helm, kurum `common` chart'ı) | api ×2 + Service + Ingress, worker (`queues`, `extraWorkers`), beat ×1 (Recreate), migrate (pre-install/upgrade hook), ConfigMap; `values-albaraka-{dev,uat}.yaml` |
-| DMZ | `deploy/dmz/` | Podman Quadlet (systemd) veya compose; `crawler.env` örneği |
-| MongoDB | `deploy/mongo/init-users.js` | `mevzuatCrawler` / `mevzuatCore` rolleri |
+| LAN / K8s | `ai-uat-charts/mevzuat-core` (kurum `common` chart'ı) | api ×2 (gunicorn) + Service + Ingress, worker (`queues`, `extraWorkers`), beat ×1 (Recreate), migrate (ArgoCD PreSync); `values-albaraka-{dev,uat}.yaml` |
+| DMZ | mevzuat-crawler reposu `deploy/dmz/` | Podman Quadlet (systemd) veya compose; `crawler.env` örneği. İnternete çıkabilen cluster için `ai-uat-charts/mevzuat-crawler` |
+| MongoDB | mevzuat-core reposu `deploy/mongo/init-users.js` | `mevzuatCrawler` / `mevzuatCore` rolleri |
 | Yerel | `backend/docker/docker-compose.yml` | Topolojinin küçük kopyası: crawler + mongo + api/worker/beat + redis + postgres |
 
 - **Air-gapped kurulum:** İmajlar kurum registry'sine alınır; Python wheel'leri imaja gömülür, çalışma zamanında internetten paket indirilmez.

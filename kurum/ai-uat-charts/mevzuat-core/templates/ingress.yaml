@@ -1,0 +1,23 @@
+{{/* Kullanıcılar ve Albatros → portal + API. Host ortam values dosyasından (ingress.host). */}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.deployment.name }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ .Values.service.name }}
+                port:
+                  number: {{ .Values.deployment.containerPort }}
+            path: /
+            pathType: Prefix
