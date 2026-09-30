@@ -10,22 +10,31 @@ MongoDB (27017) üzerinden erişir. Ana servis LAN'daki Kubernetes cluster'ında
                   [LAN] MongoDB 10.155.7.195  (mevzuat_crawl)
                         ▲ 27017 (ingest + tarama talepleri)
                         │
-       [LAN / K8s] core-api (portal + API) · core-worker · core-beat · Redis (cluster)  ──▶ PostgreSQL
+       [LAN / K8s] mevzuat-takip (portal + API) · -worker · -beat · Redis (cluster)  ──▶ PostgreSQL
                         ▲ 443                                    ──▶ vLLM, Azure DI (OCR), Keycloak
           Kullanıcılar, Albatros
 ```
 
 | Klasör | İçerik |
 |---|---|
-| `k8s/` | Ana servis: Kustomize (api ×2, worker ×1, beat ×1 Recreate, migrate Job, Ingress, ConfigMap, Secret örneği) |
+| `helm/mevzuat-takip/` | Ana servis Helm chart'ı (kurum düzeni: `common` kütüphanesi, `values-albaraka-{dev,uat}.yaml`): api ×2, worker, beat ×1 Recreate, migrate hook Job, Ingress, ConfigMap |
+| `helm/secret.example.yaml` | Chart dışındaki Secret örneği (gizli değerler values'a yazılmaz) |
 | `dmz/` | Crawler: Podman Quadlet (systemd) veya compose; ortam dosyası örneği |
 | `mongo/` | En az yetkili iki Mongo kullanıcısı ve rolleri |
 
-İmajlar (depo kökünden):
+İmajlar Jenkins'te derlenir (`../Jenkinsfile`: Nexus taban imajı, kurum pip aynası ve CA'ları build-arg ile) ve
+Nexus'a `com.albaraka.ai/mevzuat-takip-{core,crawler}` olarak gönderilir. Yerel derleme argümansız çalışır:
 
 ```bash
-docker build -f backend/docker/Dockerfile --target core -t registry.kurum.local/mevzuat/mevzuat-core:0.2.0 .
-docker build -f backend/docker/Dockerfile --target crawler -t registry.kurum.local/mevzuat/mevzuat-crawler:0.2.0 .
+docker build -f backend/docker/Dockerfile --target core -t mevzuat-core .
+docker build -f backend/docker/Dockerfile --target crawler -t mevzuat-crawler .
 ```
 
-Kurulum sırası ve günlük işletim: `docs/runbook.md` §2.
+Chart doğrulama (Helm kurulu değilse konteynerle):
+
+```bash
+helm lint deploy/helm/mevzuat-takip -f deploy/helm/mevzuat-takip/values-albaraka-uat.yaml
+helm template mevzuat-takip deploy/helm/mevzuat-takip -n artint -f deploy/helm/mevzuat-takip/values-albaraka-uat.yaml
+```
+
+Kurum ağına taşıma ve ilk kurulum: `docs/kurum-devreye-alma.md`. Günlük işletim: `docs/runbook.md`.

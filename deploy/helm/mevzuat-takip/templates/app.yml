@@ -1,0 +1,4 @@
+{{/* core-api: portal (GUI) + /api/v1 — kurum ortak şablonu (common) */}}
+{{ include "common.service" ( dict "service" .Values.service "context" $) }}
+---
+{{ include "common.deployment" ( dict "deployment" .Values.deployment "context" $) }}

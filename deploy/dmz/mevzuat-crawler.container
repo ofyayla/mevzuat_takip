@@ -9,7 +9,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-Image=registry.kurum.local/mevzuat/mevzuat-crawler:0.2.0
+Image=10.54.62.31:9099/com.albaraka.ai/mevzuat-takip-crawler:latest
 ContainerName=mevzuat-crawler
 EnvironmentFile=/etc/mevzuat/crawler.env
 Volume=mevzuat-crawler-data:/data

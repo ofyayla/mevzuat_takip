@@ -1,0 +1,3 @@
+{{/* Gizli olmayan ayarlar; gizli olanlar (DATABASE_URL, MONGO_URL, LLM_API_KEY, OCR_API_KEY) chart dışındaki
+     Secret'tan gelir (values: deployment.envVarsSecret, bkz. deploy/helm/secret.example.yaml) */}}
+{{ include "infra.configmap" ( dict "configmap" (list (dict "name" .Values.deployment.envVarsCM "data" .Values.config)) "context" $) }}

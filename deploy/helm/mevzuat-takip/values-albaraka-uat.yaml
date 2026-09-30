@@ -1,0 +1,17 @@
+# UAT (namespace: artint). helm upgrade --install mevzuat-takip deploy/helm/mevzuat-takip -n artint \
+#   -f deploy/helm/mevzuat-takip/values-albaraka-uat.yaml
+deployment:
+  image:
+    tag: "latest"
+
+ingress:
+  host: mevzuat-takip.artinttest.albarakaturk.local
+
+config:
+  APP_ENV: uat
+  # Cluster Redis'i paylaşımlı: ayrı veritabanı numarası (TEYİT: platform ekibi)
+  REDIS_URL: redis://redis-master.artint.svc:6379/5
+  MONGO_DB: mevzuat_crawl
+  OCR_ENDPOINT: https://docintel.kurum.local            # TEYİT: kurum Azure DI adresi
+  KEYCLOAK_CLIENT_ID: mevzuat-portal                    # TEYİT: IAM ekibi
+  CORS_ORIGINS: https://mevzuat-takip.artinttest.albarakaturk.local

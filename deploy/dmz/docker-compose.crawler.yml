@@ -2,7 +2,7 @@
 #   podman-compose -f docker-compose.crawler.yml up -d
 services:
   crawler:
-    image: registry.kurum.local/mevzuat/mevzuat-crawler:0.2.0
+    image: 10.54.62.31:9099/com.albaraka.ai/mevzuat-takip-crawler:latest
     env_file: [/etc/mevzuat/crawler.env]
     volumes: [crawlerdata:/data]
     read_only: true

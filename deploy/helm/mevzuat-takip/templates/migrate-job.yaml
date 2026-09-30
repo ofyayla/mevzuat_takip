@@ -1,0 +1,35 @@
+{{/* Şema: her install/upgrade öncesi "alembic upgrade head". Helm hook olduğu için Job her sürümde yeniden
+     oluşturulur. Hook'lar normal kaynaklardan önce çalıştığından ConfigMap'e değil yalnızca Secret'a dayanır. */}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.deployment.name }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.deployment.name }}-migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.deployment.name }}-migrate
+        framework: "python"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.deployment.image) }}
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - {name: DB_AUTO_CREATE, value: "false"}
+            - {name: TZ, value: Europe/Istanbul}
+          envFrom:
+            - secretRef: {name: {{ .Values.deployment.envVarsSecret }}}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}

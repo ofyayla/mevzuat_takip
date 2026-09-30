@@ -699,11 +699,11 @@ Hedef: iş kuralı modüllerinde ≥ %85 satır kapsama. CI'da `ruff`, `mypy` ve
 
 ## 11. Dağıtım (DMZ crawler + Kubernetes)
 
-Tek Dockerfile, iki hedef: `--target crawler` (DMZ) ve `--target core` (K8s). Dağıtım dosyaları `deploy/` altında:
+Tek Dockerfile, iki hedef: `--target crawler` (DMZ) ve `--target core` (K8s); Jenkins (`Jenkinsfile`) Nexus'a gönderir, SonarQube analizi yapar. Dağıtım dosyaları `deploy/` altında:
 
 | Yer | Dosya | İçerik |
 |---|---|---|
-| LAN / K8s | `deploy/k8s/` (Kustomize) | `core-api` ×2 + Service + Ingress, `core-worker` ×1 (`CELERY_QUEUES`), `core-beat` ×1 (Recreate), `mevzuat-migrate` Job, ConfigMap, Secret örneği |
+| LAN / K8s | `deploy/helm/mevzuat-takip/` (Helm, kurum `common` chart'ı) | api ×2 + Service + Ingress, worker (`queues`, `extraWorkers`), beat ×1 (Recreate), migrate (pre-install/upgrade hook), ConfigMap; `values-albaraka-{dev,uat}.yaml` |
 | DMZ | `deploy/dmz/` | Podman Quadlet (systemd) veya compose; `crawler.env` örneği |
 | MongoDB | `deploy/mongo/init-users.js` | `mevzuatCrawler` / `mevzuatCore` rolleri |
 | Yerel | `backend/docker/docker-compose.yml` | Topolojinin küçük kopyası: crawler + mongo + api/worker/beat + redis + postgres |

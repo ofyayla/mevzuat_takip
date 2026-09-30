@@ -3,7 +3,7 @@
 #
 #   [DMZ]  crawler ──27017──▶ mongo ◀── [LAN / K8s] api · worker · beat (+ redis, postgres)
 #
-# Kurum kurulumu bu dosyayla yapılmaz: LAN → deploy/k8s (Kubernetes), DMZ → deploy/dmz (podman/compose).
+# Kurum kurulumu bu dosyayla yapılmaz: LAN → deploy/helm (Kubernetes), DMZ → deploy/dmz (podman/compose).
 # Şema yalnızca "migrate" tek seferlik servisiyle kurulur/güncellenir (API açılışta migrasyon çalıştırmaz).
 x-core: &core
   image: mevzuat-core:latest
@@ -46,17 +46,17 @@ services:
     depends_on: {db: {condition: service_healthy}}
     restart: "no"
 
-  api:                      # K8s: core-api (portal + /api/v1)
+  api:                      # K8s: mevzuat-takip (portal + /api/v1)
     <<: *core
     ports: ["${API_PORT:-8000}:8000"]
 
-  worker:                   # K8s: core-worker — başlangıçta tüm kuyruklar tek worker'da
+  worker:                   # K8s: mevzuat-takip-worker — başlangıçta tüm kuyruklar tek worker'da
     <<: *core
     command: ["celery", "-A", "app.worker", "worker", "-Q", "ingest,process,ai,monitor,default", "-c", "4",
               "-n", "worker@%h"]
     healthcheck: {disable: true}
 
-  beat:                     # K8s: core-beat — TEK örnek
+  beat:                     # K8s: mevzuat-takip-beat — TEK örnek
     <<: *core
     command: ["celery", "-A", "app.worker", "beat", "--schedule", "/tmp/celerybeat-schedule"]
     healthcheck: {disable: true}
