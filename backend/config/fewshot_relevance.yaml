@@ -1,0 +1,19 @@
+# İlgililik few-shot örnekleri — v0 TASLAK (değerlendirme setiyle çakışmayan örnekler).
+# İK-6 ile Başkanlığın onay/red kararlarından oluşan havuz (fewshot_example tablosu) bunların yerini alacak.
+examples:
+  - title: "Bankaların Kredi İşlemlerine İlişkin Yönetmelikte Değişiklik Yapılmasına Dair Yönetmelik"
+    issuer: "Bankacılık Düzenleme ve Denetleme Kurumu"
+    expected: {is_relevant: true, relevance_score: 0.97, reg_type: "Yönetmelik", matched_topics: ["KREDI_FON"],
+               uncertain: false, rationale: "Bankaların kredi işlemlerini doğrudan düzenliyor."}
+  - title: "Ege Üniversitesi Lisansüstü Eğitim ve Öğretim Yönetmeliğinde Değişiklik Yapılmasına Dair Yönetmelik"
+    issuer: "Ege Üniversitesi"
+    expected: {is_relevant: false, relevance_score: 0.02, reg_type: "Yönetmelik", matched_topics: [],
+               uncertain: false, rationale: "Üniversite eğitim yönetmeliği; bankaya yükümlülük getirmiyor."}
+  - title: "Ödeme Hizmetleri ve Elektronik Para İhracı ile Ödeme Hizmeti Sağlayıcılarına İlişkin Yönetmelikte Değişiklik"
+    issuer: "Türkiye Cumhuriyet Merkez Bankası"
+    expected: {is_relevant: true, relevance_score: 0.93, reg_type: "Yönetmelik", matched_topics: ["ODEME"],
+               uncertain: false, rationale: "Bankalar ödeme hizmeti sağlayıcısıdır; ödeme süreçlerini etkiler."}
+  - title: "Elektrik Enerjisi Üretim Tesisi Kurulması Amacıyla Bazı Taşınmazların Acele Kamulaştırılması Hakkında Karar"
+    issuer: "Cumhurbaşkanlığı"
+    expected: {is_relevant: false, relevance_score: 0.03, reg_type: "Cumhurbaşkanı Kararı", matched_topics: [],
+               uncertain: false, rationale: "Belirli taşınmazların kamulaştırılması; bankacılıkla ilgisi yok."}

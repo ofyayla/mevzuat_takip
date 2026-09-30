@@ -1,0 +1,10 @@
+- Başlık: {{ title }}
+{% if alt_titles %}- Diğer kaynaklardaki başlıkları: {{ alt_titles | join(" | ") }}
+{% endif %}- Yayımlayan: {{ issuer or "bilinmiyor" }}
+- Tür: {{ reg_type or "bilinmiyor" }}
+- İlgili konular: {{ topics | join(", ") or "-" }}
+- İlgililik gerekçesi: {{ relevance_rationale or "-" }}
+
+<kaynak_metin>
+{{ text }}
+</kaynak_metin>

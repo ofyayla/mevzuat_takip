@@ -1,0 +1,17 @@
+{% for ex in examples -%}
+Örnek {{ loop.index }} — {{ ex.title }} ({{ ex.issuer }})
+Beklenen: {{ ex.expected | tojson }}
+
+{% endfor -%}
+Değerlendirilecek içerik:
+- Başlık: {{ title }}
+{% if alt_titles %}- Diğer kaynaklardaki başlıkları: {{ alt_titles | join(" | ") }}
+{% endif %}- Yayımlayan: {{ issuer or "bilinmiyor" }}
+- Yayımlandığı kaynak(lar): {{ sources | join(", ") }}
+- Yayım tarihi: {{ publish_date or "bilinmiyor" }}
+- Tür ipucu (kural tabanlı): {{ reg_type_hint or "yok" }}
+{% if not has_text %}- Not: belgenin metni çıkarılamadı (taranmış belge / yalnızca başlık). Başlığa göre değerlendir; kılavuzun 4. bölümündeki "metin eksikse" kuralını uygula.
+{% endif %}
+<kaynak_metin>
+{{ text }}
+</kaynak_metin>

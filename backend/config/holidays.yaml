@@ -1,0 +1,11 @@
+# Türkiye resmî tatilleri — kaynak sessizliği hesabında iş günü takvimi (İK-7).
+# Sabit tatiller her yıl aynıdır ve kodda tanımlıdır (1 Ocak, 23 Nisan, 1 Mayıs, 19 Mayıs, 15 Temmuz, 30 Ağustos,
+# 29 Ekim; 28 Ekim yarım gün). Dini bayramlar ay takvimine göre değiştiği için burada yıl yıl listelenir; arife günleri
+# yarım gündür ve iş günü sayılır. Tarihler Cumhurbaşkanlığı/Diyanet resmî takviminden her yıl teyit edilmelidir.
+religious_holidays:
+  2026:
+    - {name: Ramazan Bayramı, from: 2026-03-20, to: 2026-03-22}
+    - {name: Kurban Bayramı, from: 2026-05-27, to: 2026-05-30}
+  2027:
+    - {name: Ramazan Bayramı, from: 2027-03-09, to: 2027-03-11}   # teyit edilmeli
+    - {name: Kurban Bayramı, from: 2027-05-16, to: 2027-05-19}    # teyit edilmeli

@@ -1,0 +1,12 @@
+- Başlık: {{ title }}
+- Yayımlayan: {{ issuer or "bilinmiyor" }} — Tür: {{ reg_type or "bilinmiyor" }} — Yayım: {{ publish_date or "?" }}
+- İlgililik değerlendirmesi: {{ relevance_rationale or "-" }}
+{% if feedback %}
+ÖNCEKİ DENEMEDE DOĞRULANAMAYAN İFADELER — alıntıları notlardan aynen kopyala ya da ifadeyi çıkar:
+{% for f in feedback %}- {{ f }}
+{% endfor %}{% endif %}
+Bölüm notları:
+{% for n in notes -%}
+- {{ n.point }}
+  alıntılar: {{ n.quotes | tojson }}
+{% endfor %}{% if effective %}Yürürlük (notlardan): {{ effective | tojson }}{% endif %}

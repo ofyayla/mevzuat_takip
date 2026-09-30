@@ -1,0 +1,15 @@
+{% for ex in examples -%}
+Geçmiş örnek {{ loop.index }} ({{ ex.origin }}): {{ ex.input_text }}
+Başkanlığın atadığı birimler: {{ ex.units | join(", ") }}
+
+{% endfor -%}
+Değerlendirilecek düzenleme:
+- Başlık: {{ title }}
+{% if alt_titles %}- Diğer kaynaklardaki başlıkları: {{ alt_titles | join(" | ") }}
+{% endif %}- Yayımlayan: {{ issuer or "bilinmiyor" }} — Tür: {{ reg_type or "bilinmiyor" }} — Önem: {{ severity or "-" }}
+- İlgili konular: {{ topics | join(", ") or "-" }}
+- Kısa içerik: {{ summary or "(özet yok — başlık ve ilgililik gerekçesine göre değerlendir)" }}
+- İlgililik gerekçesi: {{ relevance_rationale or "-" }}
+{% if candidates %}- Anahtar kelime ön eşleşmesi (yalnızca ipucu; görev tanımına göre karar ver):
+{% for c in candidates %}  - {{ c.code }}: {{ c.hits | join(", ") }}
+{% endfor %}{% endif %}
