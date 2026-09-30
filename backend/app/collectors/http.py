@@ -245,7 +245,7 @@ class Fetcher:
             proxy, verify = self.settings.resolved_proxy(), self.settings.resolved_ca_bundle()
             extra = sorted(self.settings.extra_ca_dir.glob("*.pem")) if self.settings.extra_ca_dir.is_dir() else []
             if extra and verify is not False:
-                verify = build_ca_bundle(verify, extra, self.settings.raw_storage_dir.parent / "ca")
+                verify = build_ca_bundle(verify, extra, self.settings.ca_cache_dir)
             kind = self.source.client
             if kind == "impersonate":
                 self._backend = _ImpersonateBackend(proxy, verify)

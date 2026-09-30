@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.collectors.config import load_sources
 from app.monitoring.alerts import SyncResult, sync_alerts
 from app.monitoring.checks import Finding, SourceStatus, ago, check_source
+from app.monitoring.crawler import crawler_findings
 from app.monitoring.cross_check import ai_pipeline, cross_check
 from app.settings import Settings
 
@@ -28,7 +29,7 @@ def evaluate(session: Session, settings: Settings, now: datetime | None = None) 
     now = now or datetime.now(timezone.utc)
     statuses = [check_source(session, src, settings, now) for src in load_sources(settings.sources_file).enabled()]
     findings = [f for s in statuses for f in s.findings]
-    findings += cross_check(session, settings, now) + ai_pipeline(session)
+    findings += cross_check(session, settings, now) + ai_pipeline(session) + crawler_findings(settings, now)
     return MonitorResult(statuses, findings)
 
 
@@ -49,8 +50,12 @@ def health_summary(session: Session, settings: Settings, now: datetime | None = 
                 "lastFetch": ago(s.last_success_at, now), "message": s.message,
                 "toleranceHours": round(s.tolerance_hours, 1) if s.tolerance_hours else None,
                 "toleranceBasis": s.tolerance_basis} for s in res.statuses]
-    down = [s for s in sources if s["status"] == "down"]
-    delayed = [s for s in sources if s["status"] == "delayed"]
+    # Crawler/aktarım sorunu tüm kaynakları etkiler: kaynak satırlarından bağımsız olarak şeride yansır
+    system = [f for f in res.findings if f.alert_type in ("crawler_down", "ingest_lag")]
+    down = [s for s in sources if s["status"] == "down"] + [{"name": "Toplama", "message": f.message}
+                                                             for f in system if f.severity == "down"]
+    delayed = [s for s in sources if s["status"] == "delayed"] + [{"name": "Aktarım", "message": f.message}
+                                                                   for f in system if f.severity == "delayed"]
     parts = [f"{s['name']}: {s['message']}" for s in down] + [f"{s['name']}: {s['message']}" for s in delayed]
     return {"sources": sources, "overall": "down" if down else "delayed" if delayed else "healthy",
             "bannerText": " · ".join(parts),

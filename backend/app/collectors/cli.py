@@ -6,7 +6,8 @@
                                                   # yalnızca listeyi çeker, DB'ye yazmaz; --record yanıtları
                                                   # fixture olarak kaydeder (kurum ağında doğrulama için)
   mevzuat-collect run KOD|all [--channel K] [--max-details N]
-                                                  # tam tarama: detay + ekler + arşiv + DB
+                                                  # tam tarama: detay + ekler + arşiv + DB (CRAWL_MODE=local;
+                                                  # DMZ kurulumunda ``mevzuat-crawler run`` kullanılır)
   mevzuat-collect ca-fetch HOST [HOST ...]        # zincirini eksik gönderen sunucunun ara sertifikasını AIA'dan
                                                   # indirip doğrular ve config/certs/ altına yazar
 """
@@ -23,10 +24,11 @@ from app.collectors.config import SourceConfig, load_sources
 from app.collectors.http import Fetcher, FetchError, Recorder
 from app.collectors.locks import LockBusy, source_lock
 from app.collectors.runner import SourceCollector, list_channel
+from app.collectors.store import SqlCrawlStore
 from app.collectors.tls import fetch_intermediate, is_chain_error
 from app.db import make_sessionmaker
 from app.settings import get_settings
-from app.storage import FileSystemStorage
+from app.storage import get_storage
 
 
 def _sources(args) -> list[SourceConfig]:
@@ -135,13 +137,12 @@ def cmd_probe(args) -> int:
 
 def cmd_run(args) -> int:
     settings = get_settings()
-    session_factory = make_sessionmaker(settings.database_url)
-    storage = FileSystemStorage(settings.raw_storage_dir)
+    store = SqlCrawlStore(make_sessionmaker(settings.database_url), get_storage(settings))
     rc = 0
     for s in _sources(args):
         try:
             with source_lock(s.code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
-                collector = SourceCollector(s, settings, session_factory, storage)
+                collector = SourceCollector(s, settings, store)
                 try:
                     rep = collector.run(channels=args.channel, max_details=args.max_details)
                 finally:

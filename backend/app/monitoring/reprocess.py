@@ -17,9 +17,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.config import SourceConfig, load_sources
 from app.collectors.runner import SourceCollector
+from app.collectors.store import CrawlStore, SqlCrawlStore
 from app.db import RawDocument, Regulation, RegulationSourceLink
 from app.settings import Settings
-from app.storage import FileSystemStorage
+from app.storage import get_storage
 
 STAGES = ("extract", "classify", "summarize", "match")
 
@@ -31,13 +32,17 @@ class BackfillReport:
     runs: list[dict] = field(default_factory=list)
 
 
-def backfill(session_factory: sessionmaker[Session], settings: Settings, code: str, date_from: date, date_to: date,
+def local_store(session_factory: sessionmaker[Session], settings: Settings) -> SqlCrawlStore:
+    return SqlCrawlStore(session_factory, get_storage(settings))
+
+
+def backfill(store: CrawlStore, settings: Settings, code: str, date_from: date, date_to: date,
              *, fetcher_factory=None) -> BackfillReport:
+    """``store``: yerel kurulumda ``local_store(...)``; DMZ crawler'da ``MongoCrawlStore`` (LAN'dan tarama talebiyle)."""
     source = load_sources(settings.sources_file).get(code)
     rep = BackfillReport()
     if code != "RESMI_GAZETE":
-        col = SourceCollector(source, settings, session_factory, FileSystemStorage(settings.raw_storage_dir),
-                              fetcher=fetcher_factory(source) if fetcher_factory else None)
+        col = SourceCollector(source, settings, store, fetcher=fetcher_factory(source) if fetcher_factory else None)
         r = col.run()
         rep.days, rep.new = 1, r.new
         rep.runs.append({"status": r.status, "new": r.new})
@@ -50,8 +55,7 @@ def backfill(session_factory: sessionmaker[Session], settings: Settings, code: s
     tz = ZoneInfo(settings.timezone)
     d = date_from
     while d <= date_to:
-        col = SourceCollector(day_source, settings, session_factory, FileSystemStorage(settings.raw_storage_dir),
-                              fetcher=fetcher_factory(day_source) if fetcher_factory else None)
+        col = SourceCollector(day_source, settings, store, fetcher=fetcher_factory(day_source) if fetcher_factory else None)
         r = col.run(now=datetime.combine(d, time(23, 0), tzinfo=tz))
         rep.days += 1
         rep.new += r.new
@@ -85,7 +89,7 @@ def reprocess(session_factory: sessionmaker[Session], settings: Settings, stage:
         with session_factory() as s:
             q = select(RawDocument.id).where(RawDocument.regulation_id.in_(reg_ids)) if reg_ids else None
             raw_ids = list(s.scalars(q)) if q is not None else []
-        r = DocumentProcessor(settings, FileSystemStorage(settings.raw_storage_dir)).reextract(
+        r = DocumentProcessor(settings, get_storage(settings)).reextract(
             session_factory, ocr_pending_only=False, raw_ids=raw_ids, limit=100000)
         result.update(documents=r.processed, failed=r.failed, ocr_pending=r.ocr_pending)
     else:

@@ -1,0 +1,25 @@
+# Şemayı kurar/günceller (alembic upgrade head). Job değiştirilemez olduğundan yeni sürümde önce silinir:
+#   kubectl -n mevzuat delete job mevzuat-migrate --ignore-not-found && kubectl apply -k deploy/k8s
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mevzuat-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: mevzuat-migrate}
+    spec:
+      restartPolicy: Never
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: migrate
+          image: mevzuat-core
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: {name: mevzuat-config}
+            - secretRef: {name: mevzuat-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}

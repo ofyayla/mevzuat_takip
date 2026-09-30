@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.collectors.config import SourceConfig
 from app.collectors.runner import SourceCollector
+from app.collectors.store import SqlCrawlStore
 from app.db import FetchRun, RawDocument, make_sessionmaker
 from app.storage import FileSystemStorage
 from tests.conftest import DictFetcher
@@ -27,7 +28,7 @@ def make_source(**channel_overrides) -> SourceConfig:
 
 def collector(settings, source, pages):
     sf = make_sessionmaker(settings.database_url)
-    return SourceCollector(source, settings, sf, FileSystemStorage(settings.raw_storage_dir),
+    return SourceCollector(source, settings, SqlCrawlStore(sf, FileSystemStorage(settings.raw_storage_dir)),
                            fetcher=DictFetcher(source, settings, pages)), sf
 
 
@@ -123,11 +124,9 @@ def test_since_is_last_successful_run(settings):
     c, sf = collector(settings, src, pages)
     t0 = datetime(2026, 9, 25, 8, tzinfo=timezone.utc)
     c.run(now=t0)
-    with sf() as s:
-        assert c._last_success(s) == t0
+    assert c.store.last_success("ORNEK") == t0
     c.run(now=t0 + timedelta(hours=1))
-    with sf() as s:
-        assert c._last_success(s) == t0 + timedelta(hours=1)
+    assert c.store.last_success("ORNEK") == t0 + timedelta(hours=1)
 
 
 def test_first_run_is_baseline_until_backlog_done(settings):

@@ -19,18 +19,14 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.collectors.base import ChannelContext, ChannelResult, FetchedDocument, ItemRef
 from app.collectors.config import ChannelConfig, SourceConfig
 from app.collectors.http import Fetcher, FetchError
 from app.collectors.resolvers import resolve
+from app.collectors.store import CrawlStore, NewDoc, StoredDoc
 from app.collectors.strategies import get_strategy
 from app.collectors.strategies._html import absolutize, parse_html
-from app.db import FetchRun, RawDocument, Source, latest_documents
 from app.settings import Settings
-from app.storage import FileSystemStorage
 
 log = logging.getLogger(__name__)
 
@@ -136,69 +132,63 @@ def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, 
 
 
 class SourceCollector:
-    def __init__(self, source: SourceConfig, settings: Settings, session_factory: sessionmaker[Session],
-                 storage: FileSystemStorage, fetcher: Fetcher | None = None):
+    """``store``: kayıt katmanı (``SqlCrawlStore`` veya DMZ'de ``MongoCrawlStore``)."""
+
+    def __init__(self, source: SourceConfig, settings: Settings, store: CrawlStore, fetcher: Fetcher | None = None):
         self.source = source
         self.settings = settings
-        self.session_factory = session_factory
-        self.storage = storage
+        self.store = store
         self.fetcher = fetcher or Fetcher(source, settings)
 
     def run(self, *, channels: list[str] | None = None, max_details: int = 200,
             now: datetime | None = None) -> RunReport:
         now = now or datetime.now(timezone.utc)
-        with self.session_factory() as session:
-            self._upsert_source(session)
-            since = self._last_success(session)
-            prev_channels = self._previous_channel_stats(session)
-            run = FetchRun(source_code=self.source.code, started_at=now)
-            session.add(run)
-            session.commit()
+        self.store.upsert_source(self.source)
+        since = self.store.last_success(self.source.code)
+        prev_channels = self.store.previous_channel_stats(self.source.code)
+        run_id = self.store.start_run(self.source.code, now)
 
-            reports: list[ChannelReport] = []
-            budget = max_details
-            for channel in self.source.channels:
-                if not channel.enabled or (channels and channel.name not in channels):
-                    continue
-                rep = ChannelReport(channel.name)
-                reports.append(rep)
-                prev = prev_channels.get(channel.name) or {}
-                rep.baseline = not prev.get("baseline_complete", False)
-                rep.baseline_complete = prev.get("baseline_complete", False)
-                try:
-                    result = list_channel(self.source, channel, self.fetcher, now=now, since=since)
-                except Exception as e:  # noqa: BLE001 — kanal hatası çalıştırmayı durdurmamalı
-                    log.exception("%s/%s liste hatası", self.source.code, channel.name)
-                    rep.error = f"{type(e).__name__}: {e}"
-                    continue
-                rep.items, rep.pages, rep.signature = len(result.items), result.pages_fetched, result.signature
-                rep.warnings.extend(result.warnings)
-                rep.empty_listing = rep.items < self.source.expected.min_items_per_run
-                rep.structure_changed = bool(prev.get("signature") and rep.signature
-                                             and prev["signature"] != rep.signature)
-                budget = self._store_items(session, run, channel, result.items, rep, budget, rep.baseline, now)
-                # Mevcut içeriğin tamamı arşive alındığında (ertelenen kalmadıysa) kanal normal moda geçer
-                rep.baseline_complete = rep.baseline_complete or rep.deferred == 0
+        reports: list[ChannelReport] = []
+        budget = max_details
+        for channel in self.source.channels:
+            if not channel.enabled or (channels and channel.name not in channels):
+                continue
+            rep = ChannelReport(channel.name)
+            reports.append(rep)
+            prev = prev_channels.get(channel.name) or {}
+            rep.baseline = not prev.get("baseline_complete", False)
+            rep.baseline_complete = prev.get("baseline_complete", False)
+            try:
+                result = list_channel(self.source, channel, self.fetcher, now=now, since=since)
+            except Exception as e:  # noqa: BLE001 — kanal hatası çalıştırmayı durdurmamalı
+                log.exception("%s/%s liste hatası", self.source.code, channel.name)
+                rep.error = f"{type(e).__name__}: {e}"
+                continue
+            rep.items, rep.pages, rep.signature = len(result.items), result.pages_fetched, result.signature
+            rep.warnings.extend(result.warnings)
+            rep.empty_listing = rep.items < self.source.expected.min_items_per_run
+            rep.structure_changed = bool(prev.get("signature") and rep.signature
+                                         and prev["signature"] != rep.signature)
+            budget = self._store_items(run_id, channel, result.items, rep, budget, rep.baseline, now)
+            # Mevcut içeriğin tamamı arşive alındığında (ertelenen kalmadıysa) kanal normal moda geçer
+            rep.baseline_complete = rep.baseline_complete or rep.deferred == 0
 
-            run.finished_at = datetime.now(timezone.utc)
-            run.items_listed = sum(r.items for r in reports)
-            run.items_new = sum(r.new for r in reports)
-            run.items_changed = sum(r.changed for r in reports)
-            run.requests = self.fetcher.request_count
-            run.channels = {r.name: {k: v for k, v in r.__dict__.items() if k != "name"} for r in reports}
-            run.errors = [f"{r.name}: {r.error}" for r in reports if r.error]
-            run.structure_alert = any(r.empty_listing and not r.error for r in reports)
-            failed = [r for r in reports if r.error]
-            run.status = "failed" if reports and len(failed) == len(reports) else "partial" if failed else "success"
-            session.commit()
-            return RunReport(self.source.code, run.id, run.status, reports, self.fetcher.request_count)
+        failed = [r for r in reports if r.error]
+        status = "failed" if reports and len(failed) == len(reports) else "partial" if failed else "success"
+        self.store.finish_run(
+            run_id, finished_at=datetime.now(timezone.utc), status=status,
+            items_listed=sum(r.items for r in reports), items_new=sum(r.new for r in reports),
+            items_changed=sum(r.changed for r in reports), requests=self.fetcher.request_count,
+            channels={r.name: {k: v for k, v in r.__dict__.items() if k != "name"} for r in reports},
+            errors=[f"{r.name}: {r.error}" for r in reports if r.error],
+            structure_alert=any(r.empty_listing and not r.error for r in reports))
+        return RunReport(self.source.code, run_id, status, reports, self.fetcher.request_count)
 
     # ------------------------------------------------------------------ yardımcılar
 
-    def _store_items(self, session: Session, run: FetchRun, channel: ChannelConfig, items: list[ItemRef],
-                     rep: ChannelReport, budget: int, baseline: bool = False,
-                     now: datetime | None = None) -> int:
-        existing = latest_documents(session, self.source.code, [i.external_id for i in items])
+    def _store_items(self, run_id, channel: ChannelConfig, items: list[ItemRef], rep: ChannelReport, budget: int,
+                     baseline: bool = False, now: datetime | None = None) -> int:
+        existing = self.store.latest_documents(self.source.code, [i.external_id for i in items])
         refresh_budget = channel.refresh_max_per_run if channel.refresh_after_days else 0
         now = now or datetime.now(timezone.utc)
         for ref in items:
@@ -222,38 +212,34 @@ class SourceCollector:
                 rep.warnings.append(f"{ref.url}: {e}")
                 continue
             main = docs[0]
-            key, sha = self.storage.put(main.content)
+            key, sha = self.store.put_content(main.content)
             if prev is not None and prev.content_sha256 == sha:
-                prev.listing_hash, prev.version_key, prev.title = listing_hash, ref.version_key, ref.title
-                prev.extra = {**(prev.extra or {}), "checked_at": now.isoformat()}  # JSON alanı yeniden atanmalı
+                self.store.touch_unchanged(prev, listing_hash=listing_hash, version_key=ref.version_key,
+                                           title=ref.title, checked_at=now)
                 rep.unchanged += 1
-                session.commit()
                 continue
             if refreshing:
                 log.info("%s: içerik yerinde güncellenmiş: %s", self.source.code, ref.url)
             version = 1
             if prev is not None:
-                prev.is_latest = False
                 version = prev.version + 1
                 rep.changed += 1
             else:
                 rep.new += 1
-            parent = self._add_doc(session, run, channel, ref, main, key, sha, version, listing_hash)
-            if baseline and prev is None:
-                parent.is_baseline = True
-            session.flush()
+            is_baseline = baseline and prev is None
+            parent = self._new_doc(channel, ref, main, key, sha, version, listing_hash, is_baseline)
+            attachments = []
             for att in docs[1:]:
-                akey, asha = self.storage.put(att.content)
+                akey, asha = self.store.put_content(att.content)
                 att_ref = ItemRef(ref.source, ref.channel, f"{ref.external_id}#{asha[:12]}", att.url,
                                   att.title or ref.title, ref.published_at, ref.category)
-                row = self._add_doc(session, run, channel, att_ref, att, akey, asha, version, None,
-                                    parent_id=parent.id)
-                row.is_baseline = parent.is_baseline   # eski içeriğin ekleri de eski içeriktir
-            session.commit()
+                # eski içeriğin ekleri de eski içeriktir
+                attachments.append(self._new_doc(channel, att_ref, att, akey, asha, version, None, is_baseline))
+            self.store.add_version(prev, run_id, parent, attachments)
         return budget
 
     @staticmethod
-    def _refresh_due(prev: RawDocument, channel: ChannelConfig, now: datetime) -> bool:
+    def _refresh_due(prev: StoredDoc, channel: ChannelConfig, now: datetime) -> bool:
         last = prev.fetched_at
         if checked := (prev.extra or {}).get("checked_at"):
             last = datetime.fromisoformat(checked)
@@ -261,43 +247,13 @@ class SourceCollector:
             last = last.replace(tzinfo=timezone.utc)
         return now - last >= timedelta(days=channel.refresh_after_days or 0)
 
-    def _add_doc(self, session, run, channel, ref, doc: FetchedDocument, key, sha, version, listing_hash,
-                 parent_id=None) -> RawDocument:
-        row = RawDocument(
+    def _new_doc(self, channel, ref: ItemRef, doc: FetchedDocument, key, sha, version, listing_hash,
+                 is_baseline: bool) -> NewDoc:
+        return NewDoc(
             source_code=self.source.code, channel=channel.name, external_id=ref.external_id, version=version,
-            is_latest=True, parent_id=parent_id, role=doc.role, url=doc.url, final_url=doc.final_url,
-            title=ref.title, published_at=ref.published_at, category=ref.category, listing_hash=listing_hash,
-            version_key=ref.version_key, content_type=doc.content_type, content_sha256=sha,
-            size_bytes=len(doc.content), storage_key=key, fetch_run_id=run.id, fetched_at=doc.fetched_at,
+            role=doc.role, url=doc.url, final_url=doc.final_url, title=ref.title, published_at=ref.published_at,
+            category=ref.category, listing_hash=listing_hash, version_key=ref.version_key,
+            content_type=doc.content_type, content_sha256=sha, size_bytes=len(doc.content), storage_key=key,
+            fetched_at=doc.fetched_at, is_baseline=is_baseline,
             extra={**ref.extra, **({"summary": ref.summary} if ref.summary else {})},
         )
-        session.add(row)
-        return row
-
-    def _upsert_source(self, session: Session) -> None:
-        row = session.get(Source, self.source.code)
-        cfg = self.source.model_dump(mode="json")
-        if row is None:
-            session.add(Source(code=self.source.code, name=self.source.name, enabled=self.source.enabled, config=cfg))
-        else:
-            row.name, row.enabled, row.config = self.source.name, self.source.enabled, cfg
-        session.commit()
-
-    def _last_success(self, session: Session) -> datetime | None:
-        started = session.scalar(select(FetchRun.started_at).where(
-            FetchRun.source_code == self.source.code, FetchRun.status == "success"
-        ).order_by(FetchRun.started_at.desc()).limit(1))
-        if started is not None and started.tzinfo is None:  # SQLite tz bilgisini saklamaz
-            started = started.replace(tzinfo=timezone.utc)
-        return started
-
-    def _previous_channel_stats(self, session: Session) -> dict:
-        """Her kanal için en son kaydedilen istatistik (yalnızca bazı kanalların tarandığı çalıştırmalar olabilir)."""
-        merged: dict = {}
-        rows = session.scalars(select(FetchRun.channels).where(
-            FetchRun.source_code == self.source.code, FetchRun.status.in_(("success", "partial"))
-        ).order_by(FetchRun.started_at.desc()).limit(50))
-        for channels in rows:
-            for name, stats in (channels or {}).items():
-                merged.setdefault(name, stats)
-        return merged

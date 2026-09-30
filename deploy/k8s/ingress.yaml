@@ -1,0 +1,19 @@
+# Kullanıcılar (Albaraka Türk Client) ve Albatros → 443 → core-api. Host ve TLS sırrı kurum değerleriyle değiştirilir.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mevzuat
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 20m      # manuel tespit Excel yüklemesi
+spec:
+  tls:
+    - hosts: [mevzuat.kurum.local]
+      secretName: mevzuat-tls
+  rules:
+    - host: mevzuat.kurum.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: core-api, port: {name: http}}

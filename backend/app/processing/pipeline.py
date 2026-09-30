@@ -22,7 +22,7 @@ from app.processing.dedupe import Confirmer, Linker, LinkResult
 from app.processing.extract import UnsupportedContent, extract
 from app.processing.ocr import OcrEngine, OcrError, get_ocr_engine
 from app.settings import Settings
-from app.storage import FileSystemStorage
+from app.storage import RawStorage
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _sources(path: str) -> SourcesFile:
 
 
 class DocumentProcessor:
-    def __init__(self, settings: Settings, storage: FileSystemStorage, *, ocr: OcrEngine | None = None,
+    def __init__(self, settings: Settings, storage: RawStorage, *, ocr: OcrEngine | None = None,
                  confirmer: Confirmer | None = None, use_default_ocr: bool = True):
         self.settings = settings
         self.storage = storage

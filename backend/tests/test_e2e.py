@@ -19,6 +19,7 @@ from app.ai.unit_matching import match_pending
 from app.api.main import create_app
 from app.collectors.config import SourceConfig
 from app.collectors.runner import SourceCollector
+from app.collectors.store import SqlCrawlStore
 from app.db import ManualDetection, RawDocument, Regulation, Source
 from app.evaluation.parallel import add_detection, normalize_row, parse_rows, report
 from app.monitoring.service import run_monitor
@@ -62,7 +63,7 @@ def test_end_to_end(settings, env):  # noqa: F811
              f"{base}/Duyuru/EkGetir/3290?ekId=1": (b"%PDF-1.4 eski", "application/pdf")}
 
     # 1) ilk tarama: eski içerik BASELINE
-    col = SourceCollector(source, settings, sf, storage, fetcher=DictFetcher(source, settings, pages))
+    col = SourceCollector(source, settings, SqlCrawlStore(sf, storage), fetcher=DictFetcher(source, settings, pages))
     t1 = datetime(2026, 9, 18, 7, tzinfo=timezone.utc)
     assert col.run(now=t1).channels[0].baseline
     # 2) ikinci tarama: yeni karar

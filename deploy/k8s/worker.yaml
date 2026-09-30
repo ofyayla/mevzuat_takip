@@ -1,0 +1,42 @@
+# core-worker: arka plan işleri (ingest, metin çıkarma/OCR, tekilleştirme, YZ, izleme).
+# Başlangıçta tek Deployment tüm kuyrukları dinler. Yük artınca (ör. KEP, YZ yığılması) bu dosya kopyalanıp
+# CELERY_QUEUES daraltılarak kuyruk bazında ayrı worker açılır (ör. core-worker-ai: "ai"); kod değişmez.
+# Görevler idempotent: iki kez çalışmaları zararsızdır, ölçekleme güvenlidir (replicas > 1 olabilir).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: core-worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: core-worker}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      terminationGracePeriodSeconds: 120      # süren görev bitsin; bitmezse acks_late ile yeniden teslim edilir
+      containers:
+        - name: worker
+          image: mevzuat-core
+          env:
+            - {name: CELERY_QUEUES, value: "ingest,process,ai,monitor,default"}
+            - {name: CELERY_CONCURRENCY, value: "4"}
+          command: ["sh", "-c", "exec celery -A app.worker worker -Q \"$CELERY_QUEUES\" -c \"$CELERY_CONCURRENCY\"
+                    -n worker@$HOSTNAME --without-gossip --without-mingle"]
+          envFrom:
+            - configMapRef: {name: mevzuat-config}
+            - secretRef: {name: mevzuat-secrets}
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A app.worker inspect ping -d worker@$HOSTNAME --timeout 20"]
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            timeoutSeconds: 45
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 3Gi}     # büyük PDF'ler (≤50 MB) bellek ister
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+          volumeMounts: [{name: tmp, mountPath: /tmp}, {name: data, mountPath: /data}]
+      volumes: [{name: tmp, emptyDir: {}}, {name: data, emptyDir: {}}]

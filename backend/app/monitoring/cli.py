@@ -16,7 +16,7 @@ from datetime import date
 from sqlalchemy import select
 
 from app.db import Alert, make_sessionmaker
-from app.monitoring.reprocess import STAGES, backfill, reprocess
+from app.monitoring.reprocess import STAGES, backfill, local_store, reprocess
 from app.monitoring.service import evaluate, run_monitor
 from app.settings import get_settings
 
@@ -33,7 +33,8 @@ def cmd_check(args) -> int:
     for st in res.statuses:
         tol = f"tolerans {st.tolerance_hours:.0f} sa ({st.tolerance_basis})" if st.tolerance_hours else ""
         print(f"{ICON[st.status]}{st.code:<14} {st.status:<8} {tol:<42} {st.message or ''}")
-    others = [f for f in res.findings if f.alert_type in ("cross_check_miss", "ai_failure")]
+    others = [f for f in res.findings if f.alert_type in (
+        "cross_check_miss", "ai_failure", "crawler_down", "ingest_lag", "crawl_request")]
     for f in others:
         print(f"  uyarı [{f.alert_type}] {f.message}")
     if res.sync:
@@ -56,8 +57,15 @@ def cmd_alerts(args) -> int:
 
 def cmd_backfill(args) -> int:
     s = get_settings()
-    rep = backfill(make_sessionmaker(s.database_url), s, args.code, date.fromisoformat(args.date_from),
-                   date.fromisoformat(args.date_to))
+    if s.crawl_mode == "remote":   # LAN internete çıkamaz: DMZ crawler'a tarama talebi bırakılır
+        from app.mongo import crawl_db, submit_crawl_request
+
+        rid = submit_crawl_request(crawl_db(s), "backfill", args.code,
+                                   {"date_from": args.date_from, "date_to": args.date_to}, requested_by="cli")
+        print(f"DMZ crawler'a iletildi (talep {rid}); sonuç ingest ile gelir")
+        return 0
+    rep = backfill(local_store(make_sessionmaker(s.database_url), s), s, args.code,
+                   date.fromisoformat(args.date_from), date.fromisoformat(args.date_to))
     for r in rep.runs:
         print(r)
     print(f"{rep.days} gün, {rep.new} yeni öğe")

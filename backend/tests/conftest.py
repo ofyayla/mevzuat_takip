@@ -17,7 +17,8 @@ RECORDED_AT = datetime(2026, 9, 25, 18, 0, tzinfo=timezone.utc)
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     return Settings(_env_file=None, database_url=f"sqlite:///{tmp_path / 'test.db'}", raw_storage_dir=tmp_path / "raw",
-                    lock_dir=tmp_path / "locks", sources_file=BACKEND_DIR / "config" / "sources.yaml",
+                    lock_dir=tmp_path / "locks", crawler_heartbeat_file=tmp_path / "crawler.alive",
+                    sources_file=BACKEND_DIR / "config" / "sources.yaml",
                     collect_request_delay_s=0)
 
 

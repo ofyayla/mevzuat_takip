@@ -13,7 +13,7 @@ from app.db import Alert, AuditEvent, FetchRun, RawDocument, Regulation, Regulat
 from app.monitoring import alerts as alerts_mod
 from app.monitoring.calendar import business_hours_between, is_business_day
 from app.monitoring.checks import check_source
-from app.monitoring.reprocess import backfill, reprocess
+from app.monitoring.reprocess import backfill, local_store, reprocess
 from app.monitoring.service import health_summary, run_monitor
 from tests.conftest import DictFetcher
 from tests.test_ai import rel, sev
@@ -216,7 +216,7 @@ def test_backfill_resmi_gazete_day_by_day(settings, env):  # noqa: F811
         fetchers.append(f)
         return f
 
-    rep = backfill(sf, settings, "RESMI_GAZETE", date(2026, 9, 20), date(2026, 9, 22), fetcher_factory=factory)
+    rep = backfill(local_store(sf, settings), settings, "RESMI_GAZETE", date(2026, 9, 20), date(2026, 9, 22), fetcher_factory=factory)
     assert rep.days == 3 and rep.new == 3
     asked = [u for f in fetchers for u in f.requested if "fihrist" in u]
     assert [u for u in asked if "mukerrer" not in u] == [f"{BASE}/fihrist?tarih=2026-09-2{i}" for i in (0, 1, 2)]

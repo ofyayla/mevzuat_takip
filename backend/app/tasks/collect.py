@@ -7,9 +7,10 @@ from functools import lru_cache
 from app.collectors.config import load_sources
 from app.collectors.locks import LockBusy, source_lock
 from app.collectors.runner import SourceCollector
+from app.collectors.store import SqlCrawlStore
 from app.db import make_sessionmaker
 from app.settings import get_settings
-from app.storage import FileSystemStorage
+from app.storage import get_storage
 from app.worker import app
 
 log = logging.getLogger(__name__)
@@ -24,11 +25,13 @@ def _session_factory():
 def collect_source(self, code: str, channels: list[str] | None = None, max_details: int = 200) -> dict:
     """Bir kaynağı tarar. Aynı kaynak için eşzamanlı ikinci çalıştırma kilitle engellenir."""
     settings = get_settings()
+    if settings.crawl_mode == "remote":   # toplama DMZ crawler'da; LAN internete çıkamaz
+        log.warning("%s: CRAWL_MODE=remote iken collect görevi çalışmaz (DMZ crawler'a talep bırakın)", code)
+        return {"source": code, "status": "skipped"}
     source = load_sources(settings.sources_file).get(code)
     try:
         with source_lock(code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
-            collector = SourceCollector(source, settings, _session_factory(),
-                                        FileSystemStorage(settings.raw_storage_dir))
+            collector = SourceCollector(source, settings, SqlCrawlStore(_session_factory(), get_storage(settings)))
             try:
                 report = collector.run(channels=channels, max_details=max_details)
             finally:
