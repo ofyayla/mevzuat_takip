@@ -1,0 +1,45 @@
+{{/* Crawler: tek süreç (zamanlama + LAN tarama talepleri). MUTLAKA tek örnek (Recreate); kaynak başına Mongo kilidi
+     olsa da iki örnek zamanlamayı ikiler. Servis/port yoktur; sağlık kontrolü sinyal dosyasına bakar. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.deployment.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml .Values.deployment.labels | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Values.deployment.name }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.deployment.podLabels | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 150      # süren taramalar bitsin
+      containers:
+        - name: {{ .Values.deployment.name }}
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.deployment.image) }}
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          command: ["mevzuat-crawler", "serve"]
+          env:
+            {{- toYaml .Values.deployment.envVars | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.deployment.envVarsSecret }}
+          livenessProbe:
+            exec:
+              command: ["mevzuat-crawler", "healthcheck"]
+            initialDelaySeconds: 90
+            periodSeconds: 60
+            timeoutSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.deployment.resources | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.deployment.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.deployment.volumes | nindent 8 }}

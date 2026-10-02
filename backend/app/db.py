@@ -64,6 +64,7 @@ class FetchRun(Base):
     channels: Mapped[dict] = mapped_column(JSON, default=dict)
     errors: Mapped[list] = mapped_column(JSON, default=list)
     structure_alert: Mapped[bool] = mapped_column(Boolean, default=False)
+    ext_id: Mapped[str | None] = mapped_column(String(32), unique=True)   # DMZ crawler: Mongo _id (ingest anahtarı)
 
 
 class RawDocument(Base):
@@ -98,6 +99,7 @@ class RawDocument(Base):
     # Kanalın ilk taramasında sitede zaten duran içerik: arşive ve tekilleştirmeye girer, YZ hattına girmez
     is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
     extra: Mapped[dict] = mapped_column(JSON, default=dict)
+    ext_id: Mapped[str | None] = mapped_column(String(32), unique=True)   # DMZ crawler: Mongo _id (ingest anahtarı)
 
     # İK-2: metin çıkarma
     text: Mapped[str | None] = mapped_column(Text)

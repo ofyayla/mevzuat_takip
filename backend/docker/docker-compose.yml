@@ -1,19 +1,31 @@
-# Mevzuat Takip — Docker Compose (plan §11). Depo kökünden:
-#   docker compose -f backend/docker/docker-compose.yml --profile dev up -d      # yerel: redis dahil
-#   docker compose -f backend/docker/docker-compose.yml up -d                    # kurum: REDIS_URL kurum Redis'ini gösterir
+# Mevzuat Takip — yerel uçtan uca ortam; kurum topolojisinin küçük kopyası (plan §2.1). Depo kökünden:
+#   docker compose -f backend/docker/docker-compose.yml up -d --build
+#
+#   [DMZ]  crawler ──27017──▶ mongo ◀── [LAN / K8s] api · worker · beat (+ redis, postgres)
+#
+# Kurum kurulumu bu dosyayla yapılmaz: kurum/export.py → mevzuat-core, mevzuat-crawler repoları ve ai-uat-charts.
 # Şema yalnızca "migrate" tek seferlik servisiyle kurulur/güncellenir (API açılışta migrasyon çalıştırmaz).
-x-app: &app
-  image: mevzuat-backend:latest
-  build: {context: ../.., dockerfile: backend/docker/Dockerfile}
+# Kurum ağı dışında derleme: Dockerfile'daki kurum varsayılanları (Nexus imajı, pip aynası, CA) ezilir
+x-local-build-args: &local-args
+  BASE_IMAGE: python:3.12-slim-bullseye
+  PIP_INDEX_URL: https://pypi.org/simple
+  CA_CERT_URLS: ""
+
+x-core: &core
+  image: mevzuat-core:latest
+  build: {context: ../.., dockerfile: Dockerfile, target: core, args: *local-args}
   env_file: [../.env]
   environment: &env
     DATABASE_URL: postgresql+psycopg://mevzuat:${POSTGRES_PASSWORD:-mevzuat}@db:5432/mevzuat
-    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    REDIS_URL: redis://redis:6379/0
+    MONGO_URL: mongodb://mongo:27017
+    CRAWL_MODE: remote
+    RAW_STORAGE: gridfs
     DB_AUTO_CREATE: "false"
     TZ: Europe/Istanbul
-  volumes: [rawdata:/data]
   depends_on:
     migrate: {condition: service_completed_successfully}
+    mongo: {condition: service_started}
   restart: unless-stopped
 
 services:
@@ -24,34 +36,47 @@ services:
     healthcheck: {test: ["CMD-SHELL", "pg_isready -U mevzuat"], interval: 5s, retries: 20}
     restart: unless-stopped
 
-  redis:
+  redis:                    # yalnızca tetikleyici; kalıcılık kapalı (asıl durum PostgreSQL'de)
     image: redis:7
-    profiles: [dev]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+
+  mongo:                    # kurumda: 10.155.7.195 (DMZ ↔ LAN teslim alanı)
+    image: mongo:7
+    volumes: [mongodata:/data/db]
+    restart: unless-stopped
 
   migrate:
-    <<: *app
+    <<: *core
     command: ["alembic", "upgrade", "head"]
     depends_on: {db: {condition: service_healthy}}
     restart: "no"
 
-  api:
-    <<: *app
+  api:                      # K8s: mevzuat-core (portal + /api/v1)
+    <<: *core
     ports: ["${API_PORT:-8000}:8000"]
 
-  worker-collect:           # DMZ ayrımı gerekirse bu servis DMZ'deki ayrı VM'de çalıştırılır (plan §2.1)
-    <<: *app
-    command: ["celery", "-A", "app.worker", "worker", "-Q", "collect", "-c", "4", "-n", "collect@%h"]
-  worker-process:           # PDF/OCR CPU yoğun
-    <<: *app
-    command: ["celery", "-A", "app.worker", "worker", "-Q", "process", "-c", "2", "-n", "process@%h"]
-  worker-ai:                # vLLM eşzamanlılığıyla uyumlu tutulur
-    <<: *app
-    command: ["celery", "-A", "app.worker", "worker", "-Q", "ai", "-c", "2", "-n", "ai@%h"]
-  worker-monitor:
-    <<: *app
-    command: ["celery", "-A", "app.worker", "worker", "-Q", "monitor", "-c", "1", "-n", "monitor@%h"]
-  beat:                     # TEK örnek çalışmalı
-    <<: *app
-    command: ["celery", "-A", "app.worker", "beat", "--schedule", "/data/celerybeat-schedule"]
+  worker:                   # K8s: mevzuat-core-worker — başlangıçta tüm kuyruklar tek worker'da
+    <<: *core
+    command: ["celery", "-A", "app.worker", "worker", "-Q", "ingest,process,ai,monitor,default", "-c", "4",
+              "-n", "worker@%h"]
+    healthcheck: {disable: true}
 
-volumes: {pgdata: {}, rawdata: {}}
+  beat:                     # K8s: mevzuat-core-beat — TEK örnek
+    <<: *core
+    command: ["celery", "-A", "app.worker", "beat", "--schedule", "/tmp/celerybeat-schedule"]
+    healthcheck: {disable: true}
+
+  crawler:                  # DMZ: mevzuat-crawler (internete çıkan tek bileşen)
+    image: mevzuat-crawler:latest
+    build: {context: ../.., dockerfile: Dockerfile, target: crawler, args: *local-args}
+    # Geliştirici .env'i verilmez: DMZ'de LLM/OCR/DB ayarı ve anahtarı bulunmaz (bkz. kurum/mevzuat-crawler/deploy/dmz/crawler.env.example)
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      TZ: Europe/Istanbul
+    volumes: [crawlerdata:/data]
+    depends_on: [mongo]
+    stop_grace_period: 2m   # süren taramalar bitsin
+    restart: unless-stopped
+
+volumes: {pgdata: {}, mongodata: {}, crawlerdata: {}}

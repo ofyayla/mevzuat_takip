@@ -335,14 +335,26 @@ def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, set
         raise ApiError(404, "not_found", str(e)) from e
     if body.date_to < body.date_from or (body.date_to - body.date_from).days > 62:
         raise ApiError(400, "invalid_range", "from ≤ to ve en fazla 62 gün")
+    days = (body.date_to - body.date_from).days + 1
+    if settings.crawl_mode == "remote":   # LAN internete çıkamaz: DMZ crawler'a tarama talebi
+        rid = _crawl_request(settings, "backfill", code, {"date_from": body.date_from.isoformat(),
+                                                          "date_to": body.date_to.isoformat()}, actor)
+        return {"status": "queued", "via": "crawler", "requestId": rid, "days": days}
     background.add_task(_backfill_bg, request.app.state.session_factory, settings, code, body)
-    return {"status": "queued", "days": (body.date_to - body.date_from).days + 1}
+    return {"status": "queued", "days": days}
+
+
+def _crawl_request(settings: Settings, kind: str, code: str, params: dict, actor) -> str:
+    from app.mongo import crawl_db, submit_crawl_request
+
+    return submit_crawl_request(crawl_db(settings), kind, code, params, requested_by=actor.id)
 
 
 def _backfill_bg(sf, settings: Settings, code: str, body: "BackfillIn") -> None:
-    from app.monitoring.reprocess import backfill
+    from app.monitoring.reprocess import backfill, local_store
 
-    log.info("backfill %s: %s", code, backfill(sf, settings, code, body.date_from, body.date_to).runs)
+    log.info("backfill %s: %s", code, backfill(local_store(sf, settings), settings, code, body.date_from,
+                                                body.date_to).runs)
 
 
 @admin.post("/sources/{code}/run", status_code=202)
@@ -354,6 +366,8 @@ def admin_run_source(code: str, background: BackgroundTasks, settings: SettingsD
         load_sources(settings.sources_file).get(code)
     except KeyError as e:
         raise ApiError(404, "not_found", str(e)) from e
+    if settings.crawl_mode == "remote":
+        return {"status": "queued", "via": "crawler", "requestId": _crawl_request(settings, "run", code, {}, actor)}
     if settings.redis_url:
         from app.tasks.collect import collect_source
 

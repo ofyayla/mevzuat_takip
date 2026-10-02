@@ -1,0 +1,48 @@
+{{/* Celery worker: ingest (Mongo → PostgreSQL), metin çıkarma/OCR, tekilleştirme, YZ, izleme. Yük artınca
+     extraWorkers ile kuyruk bazında ayrı worker açılır (ör. ai); görevler idempotenttir. */}}
+{{- $root := . }}
+{{- range $w := prepend (.Values.extraWorkers | default list) .Values.worker }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $w.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    app: {{ $w.name }}
+spec:
+  replicas: {{ $w.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $w.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $w.name }}
+        framework: "python"
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: {{ $w.name }}
+          image: "{{ $root.Values.deployment.image.registry }}/{{ $root.Values.deployment.image.repository }}:{{ $root.Values.deployment.image.tag }}"
+          imagePullPolicy: {{ $root.Values.deployment.image.pullPolicy }}
+          command: ["sh", "-c", "exec celery -A app.worker worker -Q {{ $w.queues }} -c {{ $w.concurrency }} -n {{ $w.name }}@$HOSTNAME --without-gossip --without-mingle"]
+          env:
+            {{- toYaml $root.Values.deployment.envVars | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ $root.Values.deployment.envVarsSecret }}
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A app.worker inspect ping -d {{ $w.name }}@$HOSTNAME --timeout 20"]
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            timeoutSeconds: 45
+            failureThreshold: 3
+          resources:
+            {{- toYaml $w.resources | nindent 12 }}
+          volumeMounts:
+            {{- toYaml $root.Values.deployment.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml $root.Values.deployment.volumes | nindent 8 }}
+{{- end }}

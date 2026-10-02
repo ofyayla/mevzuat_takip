@@ -23,12 +23,12 @@ from app.processing.dedupe import merge_regulations, split_document
 from app.processing.ocr import OcrError, get_ocr_engine
 from app.processing.pipeline import DocumentProcessor
 from app.settings import get_settings
-from app.storage import FileSystemStorage
+from app.storage import get_storage
 
 
 def _ctx():
     s = get_settings()
-    return s, make_sessionmaker(s.database_url), FileSystemStorage(s.raw_storage_dir)
+    return s, make_sessionmaker(s.database_url), get_storage(s)
 
 
 def _print_report(r) -> None:

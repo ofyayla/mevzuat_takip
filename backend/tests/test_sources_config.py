@@ -1,6 +1,8 @@
 """config/sources.yaml tutarlılık testleri."""
 import re
 
+import pytest
+
 from app.collectors.strategies import STRATEGIES
 
 SCOPE_SOURCES = {"RESMI_GAZETE", "BDDK", "SPK", "TCMB", "KVKK", "MASAK", "TICARET", "REKABET", "TKBB"}
@@ -25,15 +27,29 @@ def test_channels_valid(sources):
 
 
 def test_schedules_are_valid_cron(sources):
+    """DMZ crawler zamanlaması (croniter): her kaynak için bir sonraki tetikleme hesaplanabilmeli."""
+    from datetime import datetime, timezone
+
+    from app.crawler.service import next_fire
+
+    now = datetime(2026, 9, 25, 9, tzinfo=timezone.utc)
+    for s in sources.sources:
+        assert s.schedule, s.code
+        nxt = next_fire(s, now, "Europe/Istanbul")
+        assert nxt is not None and nxt > now, s.code
+
+
+def test_schedules_are_valid_celery_crontab(sources):
+    pytest.importorskip("celery")        # yalnızca ana servis (CRAWL_MODE=local)
     from app.worker import _crontab
 
     for s in sources.sources:
-        assert s.schedule, s.code
         for expr in s.schedule:
             _crontab(expr)
 
 
 def test_beat_schedule_built():
+    pytest.importorskip("celery")
     from app.worker import build_beat_schedule
 
     schedule = build_beat_schedule()

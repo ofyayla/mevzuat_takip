@@ -97,39 +97,50 @@ Portal, `support.js` içindeki `dc-runtime` şablon motoruyla çalışan tek say
 
 ### 2.1 Bileşenler
 
+Kurum ağ topolojisine (Albaraka Türk ağ şeması, 30.09.2026) göre sistem **iki servisten** oluşur. İnternete çıkan tek
+bileşen DMZ'deki crawler'dır; DMZ'den LAN'a yalnızca MongoDB (27017) açıktır.
+
 ```
-                    ┌──────────────── DMZ / Proxy ────────────────┐
-  İnternet ────────▶│  HTTPS_PROXY (kontrollü çıkış, allowlist)    │
-  (RG, BDDK, SPK,   └───────────────────────┬─────────────────────┘
-   TCMB, KVKK, ...)                          │
-                                             ▼
-┌──────────────────────────── Kurum içi (on-prem) VM — Docker Compose ─────────────────────────────┐
-│                                                                                                  │
-│  ┌─────────────┐   ┌────────────────────────── Celery Workers ──────────────────────────┐        │
-│  │ celery-beat │──▶│ queue:collect   → Kaynak adaptörleri (İK-1)                        │        │
-│  │ (zamanlama) │   │ queue:process   → Metin çıkarma / OCR / tekilleştirme (İK-2)       │        │
-│  └─────────────┘   │ queue:ai        → İlgililik, önem, özet, birim eşleştirme (İK-3/4/5)│───┐    │
-│                    │ queue:monitor   → Kaynak sağlığı, alarmlar (İK-7)                  │   │    │
-│                    └───────────┬───────────────────────────────┬───────────────────────┘   │    │
-│                                │                               │                           │    │
-│         ┌──────────────────────▼──────┐      ┌─────────────────▼───────┐                   │    │
-│         │ PostgreSQL 16 (+pg_trgm)    │      │ Ham arşiv (volume)      │                   │    │
-│         └──────────────▲──────────────┘      │ /data/raw/<sha256>      │                   │    │
-│                        │                     └─────────────────────────┘                   │    │
-│  ┌─────────────────────┴───┐        ┌──────────────┐                                       │    │
-│  │ FastAPI (api)           │◀──────▶│ Redis (kurum)│  broker + result backend + kilitler   │    │
-│  │ /api/v1/*  + JWT verify │        └──────────────┘                                       │    │
-│  └───────────▲─────────────┘                                                               │    │
-│              │                                                                             │    │
-│  ┌───────────┴─────────────┐                                        ┌──────────────────────▼─┐  │
-│  │ nginx: Portal statik +  │                                        │ vLLM (GPU)             │  │
-│  │ /api reverse proxy      │                                        │ 10.144.100.204:8806    │  │
-│  └───────────▲─────────────┘                                        │ Qwen3.6-35B-A3B-FP8    │  │
-└──────────────┼──────────────────────────────────────────────────────┴────────────────────────┘  │
-               │ Tarayıcı ── Keycloak (login, token) ── Bearer JWT ile API çağrısı
+  İnternet (RG, BDDK, SPK, TCMB, KVKK, ...)
+        ▲ 443
+┌───────┴──────────────────────── DMZ ─────────────────────────┐
+│ mevzuat-crawler (RedHat, 192.168.18.35, podman/systemd)      │
+│  zamanlama: sources.yaml cron · LAN tarama talepleri         │
+│  kaynak adaptörleri (İK-1) → değişiklik tespiti → sürümleme  │
+└───────┬──────────────────────────────────────────────────────┘
+        │ 27017 (yalnızca mevzuat_crawl; silme yetkisi yok)
+┌───────▼──────────────────────── LAN ─────────────────────────────────────────────────────────────┐
+│ MongoDB 10.155.7.195 — mevzuat_crawl: raw_documents · fetch_runs · sources · GridFS "raw"          │
+│                        crawl_requests (LAN → DMZ) · crawler_status (canlılık)                      │
+│        ▲ 27017                                                                                     │
+│ ┌──────┴───────────────── Kubernetes (AI Environment) — ana servis ─────────────────────────────┐  │
+│ │ core-beat (TEK) ──▶ Redis (cluster) ──▶ core-worker (Celery)                                   │  │
+│ │   ingest (her dk): Mongo → PostgreSQL          queue:ingest                                    │  │
+│ │   metin çıkarma / OCR / tekilleştirme (İK-2)   queue:process ──▶ Azure DI (OCR)                │  │
+│ │   ilgililik, önem, özet, birim (İK-3/4/5)      queue:ai      ──▶ vLLM 10.144.100.204:8806      │  │
+│ │   kaynak sağlığı, crawler/ingest alarmları     queue:monitor                                   │  │
+│ │ core-api ×2 (FastAPI + portal, JWT) ◀── 443 ── Ingress ◀── kullanıcılar, Albatros             │  │
+│ └───────────────────────────────┬────────────────────────────────────────────────────────────────┘  │
+│                                 ▼                                                                   │
+│                        PostgreSQL 16 (tüm iş durumu, denetim izi)          Keycloak (JWT)           │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Ağ notu (İK-1 "Ağ/DMZ mimarisi tasarımı"):** Varsayılan tasarımda toplayıcılar, `HTTPS_PROXY` üzerinden allowlist'teki alan adlarına çıkar. Güvenlik ekibi "iç ağdan hiçbir süreç dışarı çıkamaz" derse, **collector worker** (`queue:collect`) ayrı bir compose profili olarak DMZ'deki bir VM'de çalıştırılır. Bu worker ham içeriği iç ağdaki paylaşımlı arşive ve DB'ye yazar; diğer bileşenler hiç değişmez. Bu ayrım, kuyruk isimleriyle baştan hazır tutulur.
+**Neden Mongo yalnızca teslim alanı:** İş durumu (kayıtlar, kararlar, denetim izi hash zinciri, portal sorguları)
+PostgreSQL'de kalır; Mongo, DMZ'nin yazabildiği tek yerdir. Crawler PostgreSQL'e ve Redis'e erişemediği için kendi
+zamanlayıcısıyla çalışır ve kayıt katmanı soyutlanmıştır (`CrawlStore`: DMZ'de `MongoCrawlStore`, yerel kurulumda
+`SqlCrawlStore`). Ana servis `ingest_crawl` ile kayıtları `ext_id` (Mongo `_id`) üzerinden idempotent aktarır; ham
+içerik GridFS'ten okunur, K8s'te paylaşımlı disk gerekmez. Ön işleme DMZ'de hafif tutulur (tarama, değişiklik
+tespiti, hash, meta veri); metin çıkarma ve OCR LAN'dadır (OCR servisi LAN'da, yeniden işleme de oradan yürür).
+
+**Neden Celery + Redis (ana serviste):** KEP dokümanları içeriden gelecek (hacim bilinmiyor) ve yeni kaynaklar
+eklenecek; kuyruk bazında ayrı worker açarak kod değiştirmeden ölçeklemek için. Başlangıçta 4 pod: api, worker (tüm
+kuyruklar), beat (tek), Redis. Redis yalnızca tetikleyicidir; asıl durum PostgreSQL'deki durum makinesidir, Redis
+boşalırsa iş kaybolmaz (Beat'in "bekleyenleri işle" görevleri devam ettirir).
+
+**Güvenlik:** İki ayrı en az yetkili Mongo kullanıcısı (`deploy/mongo/init-users.js`). DMZ ele geçirilse bile crawler
+kullanıcısı belge silemez, başka veritabanını göremez, PostgreSQL'e ve LLM/OCR'a erişemez; crawler imajında LLM, OCR,
+API ve Celery kütüphaneleri yoktur.
 
 ### 2.2 Uçtan uca akış (durum makinesi)
 
@@ -686,26 +697,20 @@ Hedef: iş kuralı modüllerinde ≥ %85 satır kapsama. CI'da `ruff`, `mypy` ve
 
 ---
 
-## 11. Dağıtım (Docker Compose)
+## 11. Dağıtım (DMZ crawler + Kubernetes)
 
-```yaml
-# docker/docker-compose.yml (özet)
-services:
-  api:      { image: mevzuat-backend, command: uvicorn app.main:app --host 0.0.0.0 --port 8000, env_file: ../.env, depends_on: [db] }
-  worker-collect: { image: mevzuat-backend, command: celery -A app.worker worker -Q collect -c 4, environment: [HTTPS_PROXY=…] }
-  worker-process: { image: mevzuat-backend, command: celery -A app.worker worker -Q process -c 2 }   # OCR CPU yoğun
-  worker-ai:      { image: mevzuat-backend, command: celery -A app.worker worker -Q ai -c 2 }        # vLLM eşzamanlılığı
-  worker-monitor: { image: mevzuat-backend, command: celery -A app.worker worker -Q monitor -c 1 }
-  beat:     { image: mevzuat-backend, command: celery -A app.worker beat }                           # TEK örnek
-  db:       { image: postgres:16, volumes: [pgdata:/var/lib/postgresql/data] }
-  nginx:    { image: nginx, volumes: [../../frontend:/usr/share/nginx/html:ro] }                     # portal + /api proxy
-  # redis: kurumdaki mevcut Redis kullanılır → REDIS_URL; yerel geliştirme için 'dev' profilinde redis servisi
-volumes: { pgdata: {}, rawdata: {} }   # rawdata → /data/raw (ham arşiv), /data/kep_inbox
-```
+Kurumda iki ayrı repo (**mevzuat-core**, **mevzuat-crawler**) ve kurum chart reposunda iki chart (`ai-uat-charts/mevzuat-core`, `ai-uat-charts/mevzuat-crawler`) bulunur; hepsi bu depodaki `kurum/export.py` ile üretilir. Her repoda Dockerfile, pip.conf, Jenkinsfile (Nexus + SonarQube); pipeline'ları DevOps ekibi tanımlar, ArgoCD chart'ı senkronlar:
 
-- **Air-gapped kurulum:** İmajlar kurum registry'sine alınır. Python wheel'leri ve `tesseract-ocr-tur` paketi imaja gömülür; çalışma zamanında internetten paket indirilmez.
-- **Migrasyon:** API konteyneri açılışta `alembic upgrade head` çalıştırmaz. Bunun yerine ayrı bir `migrate` tek seferlik servisi kullanılır.
-- **Yedekleme:** Günlük `pg_dump` + ham arşiv volume yedeği (kurum yedekleme standardına bağlanır; cron burada kullanılabilir).
+| Yer | Dosya | İçerik |
+|---|---|---|
+| LAN / K8s | `ai-uat-charts/mevzuat-core` (kurum `common` chart'ı) | api ×2 (gunicorn) + Service + Ingress, worker (`queues`, `extraWorkers`), beat ×1 (Recreate), migrate (ArgoCD PreSync); `values-albaraka-{dev,uat}.yaml` |
+| DMZ | mevzuat-crawler reposu `deploy/dmz/` | Podman Quadlet (systemd) veya compose; `crawler.env` örneği. İnternete çıkabilen cluster için `ai-uat-charts/mevzuat-crawler` |
+| MongoDB | mevzuat-core reposu `deploy/mongo/init-users.js` | `mevzuatCrawler` / `mevzuatCore` rolleri |
+| Yerel | `backend/docker/docker-compose.yml` | Topolojinin küçük kopyası: crawler + mongo + api/worker/beat + redis + postgres |
+
+- **Air-gapped kurulum:** İmajlar kurum registry'sine alınır; Python wheel'leri imaja gömülür, çalışma zamanında internetten paket indirilmez.
+- **Migrasyon:** API açılışta `alembic upgrade head` çalıştırmaz; K8s'te her sürümde `mevzuat-migrate` Job'ı çalışır.
+- **Yedekleme:** Günlük `pg_dump` + `mongodump --db mevzuat_crawl` (GridFS ham arşiv dahil). Redis yedeklenmez.
 - **Saat dilimi:** Konteynerlerde `TZ=Europe/Istanbul`; Celery Beat pencereleri de bu dilimde tanımlanır.
 
 ---
@@ -726,7 +731,7 @@ volumes: { pgdata: {}, rawdata: {} }   # rawdata → /data/raw (ham arşiv), /da
 | # | Konu | Varsayılan (plan bu varsayımla ilerler) | Kime |
 |---|---|---|---|
 | 1 | KEP erişim yöntemi (IMAP, muhaberat, sağlayıcı API) | Drop-folder adaptörü | Muhaberat / BT Altyapı |
-| 2 | Toplayıcılar proxy ile mi, DMZ'deki ayrı bir VM'de mi çalışacak? | Proxy + allowlist | Bilgi Güvenliği |
+| 2 | Toplayıcılar proxy ile mi, DMZ'deki ayrı bir VM'de mi çalışacak? | **Karar (30.09.2026):** DMZ'de ayrı sunucu (192.168.18.35), LAN'a yalnızca MongoDB 27017 — §2.1 | Bilgi Güvenliği |
 | 3 | vLLM sunucusunda reasoning parser açık mı, `max_model_len` kaç, eşzamanlı istek limiti ne? | Parser açık, 32k, 4 eşzamanlı | GPU/Platform ekibi |
 | 4 | Embedding modeli sunuluyor mu? | Hayır → `pg_trgm` + `rapidfuzz` | GPU/Platform ekibi |
 | 5 | Keycloak realm, client id ve rol isimleri; token'da ad/unvan claim'i var mı? | `mevzuat-portal` client, 3 rol | IAM ekibi |

@@ -18,12 +18,41 @@ dosyasında, genel mimari `../docs/backend-gelistirme-plani.md` dosyasında.
 ```bash
 cd backend
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"            # PostgreSQL için: pip install -e ".[dev,postgres]"
+pip install -e ".[core,dev]"       # PostgreSQL için: ".[core,dev,postgres]"; yalnızca crawler: pip install -e .
 cp .env.example .env               # proxy, CA paketi, veritabanı ayarları
 ```
 
-Varsayılan veritabanı `backend/data/mevzuat.db` (SQLite), ham arşiv `backend/data/raw/`. Üretimde `DATABASE_URL`
-PostgreSQL'i, `REDIS_URL` kurumdaki Redis'i gösterir.
+Varsayılan veritabanı `backend/data/mevzuat.db` (SQLite), ham arşiv `backend/data/raw/`, `CRAWL_MODE=local`
+(toplama aynı süreçte). Kurumda `CRAWL_MODE=remote`: toplama DMZ crawler'da, bkz. "Dağıtım topolojisi".
+
+## Dağıtım topolojisi (DMZ crawler + Kubernetes ana servis)
+
+Kurum ağında DMZ'den LAN'a yalnızca MongoDB (27017) açıktır. Bu yüzden sistem iki servis olarak çalışır:
+
+```
+[DMZ] mevzuat-crawler ──443──▶ kaynak siteleri
+        │  CrawlerService: sources.yaml cron + crawl_requests yoklama, kaynak başına Mongo kilidi
+        │  SourceCollector ─▶ MongoCrawlStore ─▶ raw_documents / fetch_runs / sources + GridFS "raw"
+        ▼ 27017
+     MongoDB mevzuat_crawl
+        ▲ 27017
+[LAN/K8s] core-beat ─(her dk)─▶ ingest_crawl: CrawlIngestor Mongo → PostgreSQL (ext_id ile idempotent)
+          core-worker: process (GridFsStorage'tan okur) → ai → monitor   ·   core-api: portal + API
+```
+
+- **Tek toplama kodu:** `SourceCollector` yalnızca `CrawlStore` arayüzünü bilir (`app/collectors/store.py`).
+  `SqlCrawlStore` yerel kurulum ve testler, `MongoCrawlStore` DMZ içindir; değişiklik tespiti, sürümleme ve
+  baseline kuralları ikisinde aynıdır.
+- **Senkron:** crawler her yazımda `synced=False` ve `rev++` yapar; ingest aktarınca `synced=True`'yu yalnızca `rev`
+  değişmemişse koyar. Ek, ana belgesi aktarılmadan aktarılmaz. PostgreSQL'de `fetch_run.ext_id` ve
+  `raw_document.ext_id` Mongo `_id`'sidir; izleme (İK-7) ve işleme hattı değişmeden çalışır.
+- **LAN → DMZ:** portal "şimdi tara" ve backfill, Mongo `crawl_requests`'e talep bırakır (`app/mongo.py`).
+- **İzleme:** `crawler_down` (sinyal yok / Mongo erişilemiyor), `ingest_lag`, `crawl_request` alarmları
+  (`app/monitoring/crawler.py`).
+- **Celery (ana servis):** Redis yalnızca tetikleyicidir; `acks_late`, `reject_on_worker_lost`, görev süre sınırı,
+  `visibility_timeout` ve `max_tasks_per_child` ayarlıdır. Görevler durum makinesi sayesinde idempotenttir.
+- **İmajlar:** `--target crawler` (toplama + pymongo; LLM/OCR/FastAPI/Celery yok) ve `--target core`.
+  Kurum repoları ve chart'lar: `../kurum/` (`kurum/export.py`), kurulum: `../docs/kurum-devreye-alma.md`.
 
 ## Komutlar
 
@@ -36,7 +65,9 @@ mevzuat-collect run all                        # tam tarama: detay + ekler + ar�
 mevzuat-collect run RESMI_GAZETE --max-details 50
 mevzuat-collect ca-fetch www.bddk.org.tr       # sunucu TLS ara sertifikasını göndermiyorsa AIA'dan indirip doğrular
 
-celery -A app.worker worker -Q collect -c 4    # zamanlanmış çalışma (REDIS_URL gerekir)
+mevzuat-crawler serve                          # DMZ crawler servisi (MONGO_URL); check | run KOD | backfill | healthcheck
+celery -A app.worker worker -Q ingest -c 1     # CRAWL_MODE=remote: Mongo → PostgreSQL aktarımı
+celery -A app.worker worker -Q collect -c 4    # CRAWL_MODE=local: zamanlanmış çalışma (REDIS_URL gerekir)
 celery -A app.worker worker -Q process -c 2    # İK-2 metin çıkarma + tekilleştirme
 celery -A app.worker worker -Q ai -c 2         # İK-3 LLM (GPU yükü: düşük eşzamanlılık)
 uvicorn app.api.main:app --port 8000          # İK-6 Portal API + portal (http://localhost:8000/)
@@ -365,9 +396,11 @@ veritabanında doğrudan yapılan değişiklik "içerik değiştirilmiş"/"zinci
 Zincirin **son** olayının silinmesi tek başına fark edilemez (hash zincirlerinin bilinen sınırı); bunun için
 veritabanı yedekleri ve erişim logları esas alınır.
 
-**Docker.** `backend/docker/Dockerfile` (python:3.11-slim, portal sayfası dahil) ve
-`backend/docker/docker-compose.yml`: `db` (PostgreSQL 16), `migrate`, `api`, `worker-collect/process/ai/monitor`,
-`beat`; `dev` profili Redis'i de başlatır (üretimde kurumdaki Redis kullanılır). `make docker-build`, `make compose-up`.
+**Docker.** Repo kökündeki `Dockerfile` iki hedef üretir: `core` (varsayılan; Python 3.12, portal sayfası dahil) ve
+`crawler` (yalnızca toplama + MongoDB). Varsayılanlar kurum ayarlarıdır (Nexus imajı, `pip.conf`, kurum CA'ları);
+kurum ağı dışında `make docker-build` bunları ezer. `backend/docker/docker-compose.yml` kurum topolojisinin yerel kopyasıdır:
+`crawler`, `mongo`, `db` (PostgreSQL 16), `redis`, `migrate`, `api`, `worker`, `beat`. `make docker-build`,
+`make compose-up`. Kurum repoları (mevzuat-core, mevzuat-crawler) ve chart'lar `../kurum/export.py` ile üretilir.
 
 **Testler.** `tests/test_e2e.py` tüm hattı ağsız çalıştırır: gerçek BDDK fixture'larıyla toplama → metin çıkarma →
 tekilleştirme → sahte LLM ile ilgililik/özet/birim → portal API'de onay → denetim izi doğrulaması → manuel tespit
@@ -399,7 +432,11 @@ ve hash zinciri PostgreSQL üzerinde de doğrulandı.
 
 ```bash
 pytest                 # ağ gerektirmez
+make mongo-test        # bir kez: Mongo entegrasyon testleri için yerel MongoDB (localhost:27018)
 ```
+
+- `tests/test_crawler_mongo.py`: crawler → Mongo/GridFS → ingest → SQL, tarama talepleri, kilit, zamanlama,
+  izleme ve API remote modu. Gerçek MongoDB ister (`MONGO_TEST_URL`); erişilemezse atlanır.
 
 - `tests/fixtures/<kaynak>/`: 25.09.2026'da canlı sitelerden `probe --record` ile kaydedilen gerçek yanıtlar.
   Testler bu yanıtları `ReplayFetcher` ile oynatır.

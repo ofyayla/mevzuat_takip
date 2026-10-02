@@ -1,0 +1,28 @@
+# Podman Quadlet (RHEL 9) — DMZ crawler'ı systemd servisi olarak çalıştırır.
+#   sudo install -m 644 mevzuat-crawler.container /etc/containers/systemd/
+#   sudo install -m 600 crawler.env.example /etc/mevzuat/crawler.env   # değerleri doldurun
+#   sudo systemctl daemon-reload && sudo systemctl start mevzuat-crawler
+#   journalctl -u mevzuat-crawler -f
+[Unit]
+Description=Mevzuat Takip DMZ crawler
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=10.54.62.31:9099/com.albaraka.ai/mevzuat-crawler:latest
+ContainerName=mevzuat-crawler
+EnvironmentFile=/etc/mevzuat/crawler.env
+Volume=mevzuat-crawler-data:/data
+HealthCmd=mevzuat-crawler healthcheck
+HealthInterval=60s
+HealthOnFailure=kill
+NoNewPrivileges=true
+ReadOnly=true
+Tmpfs=/tmp
+
+[Service]
+Restart=always
+TimeoutStopSec=150
+
+[Install]
+WantedBy=multi-user.target

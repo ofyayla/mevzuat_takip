@@ -1,0 +1,55 @@
+pipeline {
+    agent any
+    environment {
+       REGISTRYPULL = "http://nexus.albaraka.com.tr:9099"
+       REGISTRYPUSH = "http://nexus.albaraka.com.tr:9099"
+       IMAGETAG = "nexus.albaraka.com.tr:9099/com.albaraka.ai/mevzuat-core"
+       NEXUSCRED = 'jenkinsBuildForNexus'
+       IMAGE = ''
+    }
+
+    stages {
+
+        stage ('Docker Build') {
+            steps {
+                script {
+                    docker.withRegistry( REGISTRYPULL, NEXUSCRED ) {
+                        IMAGE = docker.build IMAGETAG
+                    }
+                }
+             }
+        }
+
+        stage ('Docker Deploy') {
+            steps {
+                script {
+                    docker.withRegistry( REGISTRYPUSH, NEXUSCRED) {
+                        IMAGE.push()
+                    }
+                }
+            }
+        }
+
+        stage ('Quality Analysis') {
+            steps {
+                withSonarQubeEnv(installationName: 'sonarqube', credentialsId: 'sonarqube8-token') {
+                    sh """
+                    docker run \
+                        --rm \
+                        -v /home/jenkins/.atg-ca-certs.crt:/tmp/cacerts/atg-certs.crt \
+                        -e SONAR_HOST_URL=${env.SONAR_HOST_URL} \
+                        -e SONAR_SCANNER_OPTS='-Dsonar.projectKey=mevzuat-core \
+                                                -Dsonar.projectName=mevzuat-core \
+                                                -Dsonar.sources=app/app \
+                                                -Dsonar.tests=app/tests \
+                                                -Dsonar.exclusions=app/tests/fixtures/** \
+                                                -Dsonar.python.version=3.12' \
+                        -e SONAR_TOKEN=${env.SONAR_AUTH_TOKEN} \
+                        -v .:/usr/src \
+                        sonarsource/sonar-scanner-cli
+                    """
+                }
+            }
+        }
+    }
+}

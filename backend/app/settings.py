@@ -26,8 +26,30 @@ class Settings(BaseSettings):
     redis_url: str | None = None
 
     # Depolama
+    raw_storage: str = "fs"                  # fs: raw_storage_dir | gridfs: MongoDB GridFS (DMZ crawler'ın yazdığı)
     raw_storage_dir: Path = BACKEND_DIR / "data" / "raw"
     lock_dir: Path = BACKEND_DIR / "data" / "locks"
+
+    # DMZ / LAN ayrımı (docs/backend-gelistirme-plani.md §2.1). DMZ'den LAN'a yalnızca MongoDB (27017) açıktır.
+    #   local : toplama bu kurulumda yapılır (Celery collect kuyruğu) — yerel geliştirme, tek kutu kurulum
+    #   remote: DMZ'deki mevzuat-crawler Mongo'ya yazar; burada yalnızca ingest (Mongo → PostgreSQL) çalışır
+    crawl_mode: str = "local"
+    mongo_url: str | None = None             # mongodb://kullanici:parola@10.155.7.195:27017/?authSource=admin
+    mongo_db: str = "mevzuat_crawl"
+    mongo_timeout_ms: int = 10000
+    ingest_batch: int = 500
+    # DMZ crawler servisi
+    crawler_max_parallel: int = 3            # aynı anda taranan kaynak sayısı (her kaynak kendi hızını korur)
+    crawler_poll_s: float = 15.0             # zamanlama ve tarama talebi kontrol aralığı
+    crawler_lock_ttl_s: int = 3600
+    crawler_heartbeat_file: Path = BACKEND_DIR / "data" / "crawler.alive"   # konteyner sağlık kontrolü
+    crawler_stale_minutes: int = 30          # LAN izleme: crawler bu kadar süre sinyal vermezse "down" alarmı
+
+    # Celery (ana servis). Redis yalnızca tetikleyicidir; asıl durum PostgreSQL'dedir (Redis boşalırsa iş kaybolmaz,
+    # Beat'in "bekleyenleri işle" görevleri bir sonraki turda devam eder)
+    celery_visibility_timeout_s: int = 4 * 3600   # en uzun görevden uzun olmalı; yoksa görev ikinci kez teslim edilir
+    celery_task_time_limit_s: int = 3 * 3600
+    celery_max_tasks_per_child: int = 200
 
     # Toplama
     sources_file: Path = BACKEND_DIR / "config" / "sources.yaml"
@@ -36,6 +58,7 @@ class Settings(BaseSettings):
     # Zincirini eksik gönderen sunucular (BDDK, mevzuat.gov.tr, Resmî Gazete) için ara sertifikalar. Buradaki
     # *.pem dosyaları kök deposuna eklenir; güven yine kök sertifikaya dayanır. `mevzuat-collect ca-fetch` ile güncellenir.
     extra_ca_dir: Path = BACKEND_DIR / "config" / "certs"
+    ca_cache_dir: Path = BACKEND_DIR / "data" / "ca"   # kök depo + ara sertifikalardan üretilen birleşik paket
     http_user_agent: str = "MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)"
     collect_request_delay_s: float = 1.5
     collect_timeout_s: float = 30.0
