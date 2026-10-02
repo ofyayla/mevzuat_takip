@@ -133,7 +133,10 @@ class Settings(BaseSettings):
     keycloak_public_keys_dir: Path = BACKEND_DIR / "config" / "keycloak_keys"
     keycloak_leeway_s: int = 60
     cors_origins: str = "http://localhost:8080"
-    portal_dir: Path = BACKEND_DIR.parent     # Mevzuat Takip Portali.dc.html + support.js (imajda /app/portal)
+    # Mevzuat Takip Portali.dc.html + support.js: geliştirme reposunda BACKEND_DIR.parent'ta (repo kökü),
+    # kurum/export.py çıktısında BACKEND_DIR.parent/portal'da (imajda PORTAL_DIR=/app/portal ile ezilir)
+    portal_dir: Path = (BACKEND_DIR.parent / "portal" if (BACKEND_DIR.parent / "portal").is_dir()
+                        else BACKEND_DIR.parent)
 
     # İK-7: izleme ve alarmlar
     monitor_failed_runs_down: int = 3        # son N tarama başarısızsa "down"
