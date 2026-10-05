@@ -26,3 +26,7 @@ helm lint ai-uat-charts/mevzuat-core -f ai-uat-charts/mevzuat-core/values-albara
 ```
 
 Kurulum sırası: `docs/kurum-devreye-alma.md`.
+
+**JupyterHub (atgdevtmirpr01) üzerinde yerel çalıştırma:** export çıktısı + iki venv (`~/venv-core`, `~/venv-crawler`) +
+her `app/.env` hazırlandıktan sonra `kurum/jupyterhub/start.sh [start|stop|restart|status|logs <süreç>]` crawler,
+API (gunicorn, 127.0.0.1:5000), Celery worker ve beat'i başlatır/durdurur; loglar `~/mevzuat-logs`.
