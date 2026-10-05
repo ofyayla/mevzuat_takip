@@ -33,8 +33,9 @@ SETSID=$(command -v setsid || true)
 SETUP_LOG=$LOG_DIR/setup.log
 
 mkdir -p "$LOG_DIR"
+[[ ${DEBUG:-} == 1 ]] && set -x    # DEBUG=1 kurum/jupyterhub/start.sh → her komutu göster
 
-say()  { echo "▸ $*"; }
+say()  { echo "▸ $(date +%H:%M:%S) $*"; }
 die()  { echo "HATA: $*" >&2; exit 1; }
 quiet() {     # uzun çıktılı komutları setup.log'a yazar; hata olursa son satırları gösterir
   if ! "$@" >>"$SETUP_LOG" 2>&1; then
@@ -122,6 +123,7 @@ pick_python() {
 
 ensure_venv() {   # venv, requirements dosyası → yoksa oluştur; requirements değiştiyse yeniden kur
   local venv=$1 req=$2 stamp sum
+  say "venv kontrolü: $venv"
   stamp=$venv/.requirements.sha256
   sum=$(sha256sum "$req" | cut -d' ' -f1)
   if [[ ! -x $venv/bin/python ]]; then
@@ -137,6 +139,7 @@ ensure_venv() {   # venv, requirements dosyası → yoksa oluştur; requirements
 }
 
 ensure_export() {
+  say "export kontrolü: $KURUM_DIR"
   if [[ ! -d $KURUM_DIR/mevzuat-core || ! -d $KURUM_DIR/mevzuat-crawler ]]; then
     say "kurum/export.py → $KURUM_DIR"
     quiet "$CORE_VENV/bin/python" "$REPO/kurum/export.py" "$KURUM_DIR" --force
@@ -210,9 +213,10 @@ EOF
 ensure_ca_bundle() {    # bir kez dener; başarısız olursa sistem/certifi deposu kullanılır
   [[ -f $CERT_DIR/bundle.pem || -f $CERT_DIR/.indirilemedi || -z $CA_CERT_URLS ]] && return
   mkdir -p "$CERT_DIR"
+  say "kurum CA sertifikaları indiriliyor (en çok ~40 sn)"
   local u ok=1
   for u in $CA_CERT_URLS; do
-    curl -fsSk -o "$CERT_DIR/$(basename "$u")" "$u" 2>>"$SETUP_LOG" || ok=0
+    curl -fsSk --connect-timeout 10 --max-time 20 -o "$CERT_DIR/$(basename "$u")" "$u" 2>>"$SETUP_LOG" || ok=0
   done
   if [[ $ok == 1 ]]; then
     cat "$("$CORE_VENV/bin/python" -m certifi)" "$CERT_DIR"/*.crt >"$CERT_DIR/bundle.pem"
@@ -271,14 +275,17 @@ EOF
 
 setup() {
   : >"$SETUP_LOG"
+  say "ayarlar: $CONF"
   load_conf
   require_secrets
   PY=$(pick_python)
+  say "python: $PY ($("$PY" --version 2>&1)), pip ayarı: $PIP_CONFIG_FILE"
   ensure_venv "$CORE_VENV" "$REPO/kurum/mevzuat-core/requirements.txt"   # export.py da bu venv'le çalışır
   ensure_export
   ensure_venv "$CRAWLER_VENV" "$CRAWLER_APP/requirements.txt"
   ensure_editable "$CORE_VENV" "$CORE_APP"
   ensure_editable "$CRAWLER_VENV" "$CRAWLER_APP"
+  say ".env dosyaları yazılıyor"
   write_envs
   ensure_ca_bundle
   ca_env
@@ -330,7 +337,7 @@ start_procs() {
   launch beat "$CORE_APP" "$CORE_VENV/bin/celery" -A app.worker beat -l INFO \
     -s "$LOG_DIR/celerybeat-schedule" --pidfile=
   sleep 3
-  if curl -fsS "http://$API_BIND/readyz" >/dev/null 2>&1; then
+  if curl -fsS -m 5 "http://$API_BIND/readyz" >/dev/null 2>&1; then
     echo "API hazır: http://$API_BIND/  (tarayıcı: ssh -L ${API_BIND##*:}:$API_BIND <kullanıcı>@atgdevtmirpr01)"
   else
     echo "API henüz yanıt vermiyor; kontrol: $0 logs api" >&2
@@ -366,7 +373,7 @@ status() {
       printf '  %-8s DURUYOR\n' "$name"
     fi
   done
-  curl -fsS "http://$API_BIND/readyz" 2>/dev/null && echo || echo "  readyz: yanıt yok"
+  curl -fsS -m 5 "http://$API_BIND/readyz" 2>/dev/null && echo || echo "  readyz: yanıt yok"
 }
 
 check() {
@@ -390,6 +397,11 @@ update() {
   setup
   start_procs
 }
+
+if [[ ${1:-start} != logs ]]; then   # ekrandaki her şey ayrıca start.log'a
+  exec > >(tee -a "$LOG_DIR/start.log") 2>&1
+  echo "===== $(date '+%F %T') start.sh ${*:-start}"
+fi
 
 case ${1:-start} in
   start)   setup; start_procs ;;
