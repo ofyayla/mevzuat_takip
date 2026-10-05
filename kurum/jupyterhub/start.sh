@@ -22,6 +22,7 @@ CORE_VENV=${CORE_VENV:-$HOME/venv-core}
 CRAWLER_VENV=${CRAWLER_VENV:-$HOME/venv-crawler}
 LOG_DIR=${LOG_DIR:-$HOME/mevzuat-logs}
 CERT_DIR=${CERT_DIR:-$HOME/certs}
+PY_ENV=${PY_ENV:-$CONF_DIR/python312}       # sistemde Python ≥ 3.11 yoksa conda ile buraya kurulur
 CA_CERT_URLS=${CA_CERT_URLS:-"https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"}
 export PIP_CONFIG_FILE=${PIP_CONFIG_FILE:-$REPO/pip.conf}   # kurum pip aynası
 export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -110,15 +111,26 @@ ca_env() {    # kurum CA'ları + certifi birleşik paketi varsa Python'a tanıt 
 }
 
 # ---------------------------------------------------------------- kurulum adımları
-pick_python() {
-  local p
-  for p in ${PYTHON:-} python3.12 python3.11 python3; do
+pick_python() {   # Python ≥ 3.11 bulur; yoksa conda/mamba ile $PY_ENV'e 3.12 kurar (stdout: python yolu)
+  local p conda=""
+  for p in ${PYTHON:-} "$PY_ENV/bin/python" python3.13 python3.12 python3.11 python3 \
+           "$HOME"/.conda/envs/*/bin/python /opt/conda/envs/*/bin/python /opt/tljh/user/envs/*/bin/python; do
     if command -v "$p" >/dev/null 2>&1 &&
        "$p" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
       echo "$p"; return
     fi
   done
-  die "Python ≥ 3.11 bulunamadı (requirements Python 3.12 ile test edildi; PYTHON=... ile verilebilir)"
+  for p in mamba conda /opt/tljh/user/bin/mamba /opt/tljh/user/bin/conda /opt/conda/bin/mamba /opt/conda/bin/conda \
+           "$HOME"/miniconda3/bin/conda "$HOME"/anaconda3/bin/conda /opt/anaconda3/bin/conda; do
+    if command -v "$p" >/dev/null 2>&1; then conda=$p; break; fi
+  done
+  [[ -n $conda ]] || die "Python ≥ 3.11 ve conda bulunamadı (sistemde: $(python3 --version 2>&1)). Yöneticiden python3.12 isteyin veya PYTHON=/yol/python3.12 ile verin."
+  say "Python 3.12 kuruluyor: $conda create -p $PY_ENV python=3.12 (birkaç dakika; ayrıntı: $SETUP_LOG)" >&2
+  if ! "$conda" create -y -p "$PY_ENV" python=3.12 >>"$SETUP_LOG" 2>&1; then
+    tail -n 25 "$SETUP_LOG" >&2
+    die "conda ile Python 3.12 kurulamadı (kanal erişimi? ~/.condarc ile kurum aynası gerekebilir)"
+  fi
+  echo "$PY_ENV/bin/python"
 }
 
 ensure_venv() {   # venv, requirements dosyası → yoksa oluştur; requirements değiştiyse yeniden kur
@@ -126,6 +138,10 @@ ensure_venv() {   # venv, requirements dosyası → yoksa oluştur; requirements
   say "venv kontrolü: $venv"
   stamp=$venv/.requirements.sha256
   sum=$(sha256sum "$req" | cut -d' ' -f1)
+  if [[ -x $venv/bin/python ]] && ! "$venv/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+    say "eski Python'lu venv siliniyor: $venv ($("$venv/bin/python" --version 2>&1))"
+    rm -rf "$venv"
+  fi
   if [[ ! -x $venv/bin/python ]]; then
     say "venv oluşturuluyor: $venv ($PY)"
     quiet "$PY" -m venv "$venv"
