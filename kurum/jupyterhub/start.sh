@@ -24,7 +24,6 @@ LOG_DIR=${LOG_DIR:-$HOME/mevzuat-logs}
 CERT_DIR=${CERT_DIR:-$HOME/certs}
 PY_ENV=${PY_ENV:-$CONF_DIR/python312}       # sistemde Python ≥ 3.11 yoksa conda ile buraya kurulur
 CA_CERT_URLS=${CA_CERT_URLS:-"https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"}
-export PIP_CONFIG_FILE=${PIP_CONFIG_FILE:-$REPO/pip.conf}   # kurum pip aynası
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 
 CORE_APP=$KURUM_DIR/mevzuat-core/app
@@ -131,6 +130,23 @@ pick_python() {   # Python ≥ 3.11 bulur; yoksa conda/mamba ile $PY_ENV'e 3.12 
     die "conda ile Python 3.12 kurulamadı (kanal erişimi? ~/.condarc ile kurum aynası gerekebilir)"
   fi
   echo "$PY_ENV/bin/python"
+}
+
+pip_env() {   # venv'ler, kaynak Python'un pip ayarını (dizin, trusted-host, proxy …) PIP_* ortam değişkenleriyle alır
+  # Conda ortamının kendi pip.conf'u ($CONDA_PREFIX/pip.conf) venv'e geçmez; bu yüzden ayar buradan aktarılır.
+  # PIP_CONFIG_FILE verilmişse (ör. repodaki kurum pip.conf'u) o kullanılır.
+  local line key val
+  if [[ -z ${PIP_CONFIG_FILE:-} ]]; then
+    while IFS= read -r line; do
+      [[ $line == *.*=* ]] || continue
+      key=${line%%=*}; val=${line#*=}; val=${val#\'}; val=${val%\'}
+      key=${key#*.}; key=${key//-/_}
+      export "PIP_${key^^}=$val"
+    done < <("$PY" -m pip config list 2>/dev/null)
+  fi
+  # erişilemeyen dizinde saatlerce beklemesin (kurum pip.conf'unda timeout=180, retries=20)
+  export PIP_TIMEOUT=${PIP_FORCE_TIMEOUT:-30} PIP_RETRIES=${PIP_FORCE_RETRIES:-3}
+  say "pip dizini: ${PIP_INDEX_URL:-https://pypi.org/simple (varsayılan)}${PIP_CONFIG_FILE:+ (ayar: $PIP_CONFIG_FILE)}"
 }
 
 ensure_venv() {   # venv, requirements dosyası → yoksa oluştur; requirements değiştiyse yeniden kur
@@ -295,7 +311,8 @@ setup() {
   load_conf
   require_secrets
   PY=$(pick_python)
-  say "python: $PY ($("$PY" --version 2>&1)), pip ayarı: $PIP_CONFIG_FILE"
+  say "python: $PY ($("$PY" --version 2>&1))"
+  pip_env
   ensure_venv "$CORE_VENV" "$REPO/kurum/mevzuat-core/requirements.txt"   # export.py da bu venv'le çalışır
   ensure_export
   ensure_venv "$CRAWLER_VENV" "$CRAWLER_APP/requirements.txt"
