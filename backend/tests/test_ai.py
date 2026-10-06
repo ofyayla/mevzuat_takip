@@ -74,6 +74,17 @@ def test_complete_json_repair_cache_and_logging(settings, env):  # noqa: F811
     assert [r.status for r in rows] == ["ok", "ok", "invalid"]
 
 
+def test_llm_verify_tls_secenegi(settings):
+    from app.ai.llm_client import _insecure_http_client
+
+    on = settings.model_copy(update={"llm_provider": "vllm", "llm_base_url": "https://llm.test/v1"})
+    assert _insecure_http_client(on) is None                        # varsayılan: SDK'nın doğrulamalı istemcisi
+    off = on.model_copy(update={"llm_verify_tls": False})
+    client = _insecure_http_client(off)
+    assert client is not None and OpenAICompatibleLLM(off).client is not None
+    client.close()
+
+
 def test_openai_compatible_request_shape(settings):
     captured = {}
 

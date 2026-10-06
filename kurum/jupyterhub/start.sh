@@ -77,6 +77,8 @@ LLM_BASE_URL='https://qwen36-35b-a3b-nvfp4.llm.alb.albarakatech.com/v1'
 LLM_MODEL='qwen36-35b-a3b-nvfp4'
 LLM_API_KEY='EMPTY'
 LLM_MAX_CONCURRENCY='2'
+# 'false': LLM sunucusunun TLS sertifikası doğrulanmaz (kurum CA'sı pakete eklenene kadar; YALNIZCA geliştirme)
+LLM_VERIFY_TLS='false'
 
 # Crawler internete proxy ile çıkıyorsa (ör. http://proxy.kurum.local:8080)
 HTTPS_PROXY=''
@@ -214,6 +216,7 @@ LLM_PROVIDER=vllm
 LLM_BASE_URL=$LLM_BASE_URL
 LLM_MODEL=$LLM_MODEL
 LLM_API_KEY=$LLM_API_KEY
+LLM_VERIFY_TLS=${LLM_VERIFY_TLS:-true}
 LLM_TIMEOUT_S=120
 LLM_MAX_CONCURRENCY=${LLM_MAX_CONCURRENCY:-2}
 LLM_ENABLE_THINKING=true

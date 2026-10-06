@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     llm_thinking_tasks: str = "relevance,severity,summary,unit_match"
     llm_store_reasoning: bool = False
     llm_json_mode: str = "json_schema"       # json_schema | json_object (sunucu şema zorlamasını desteklemiyorsa)
+    llm_verify_tls: bool = True              # false: sunucu sertifikası doğrulanmaz — YALNIZCA geliştirme ortamı
     taxonomy_file: Path = BACKEND_DIR / "config" / "taxonomy.yaml"
     labeling_guide_file: Path = BACKEND_DIR / "config" / "labeling_guide.md"
 

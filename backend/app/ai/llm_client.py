@@ -180,6 +180,17 @@ def _truncate(messages: list[dict], limit: int = 4000) -> list[dict]:
     return [{**m, "content": m["content"][:limit] + ("…" if len(m["content"]) > limit else "")} for m in messages]
 
 
+def _insecure_http_client(settings: Settings):
+    """``LLM_VERIFY_TLS=false`` (yalnızca geliştirme): sertifika doğrulamasız httpx istemcisi; aksi halde SDK varsayılanı."""
+    if settings.llm_verify_tls:
+        return None
+    import httpx
+
+    log.warning("LLM_VERIFY_TLS=false: %s için TLS sertifikası DOĞRULANMIYOR (yalnızca geliştirme ortamında kullanın)",
+                settings.llm_base_url)
+    return httpx.Client(verify=False, timeout=settings.llm_timeout_s)
+
+
 class OpenAICompatibleLLM(_Base):
     """OpenAI ve vLLM (OpenAI uyumlu) — aynı SDK."""
 
@@ -191,7 +202,8 @@ class OpenAICompatibleLLM(_Base):
         self.model = settings.llm_model
         self.client = client or OpenAI(base_url=settings.llm_base_url or None,
                                        api_key=settings.llm_api_key or "EMPTY",
-                                       timeout=settings.llm_timeout_s, max_retries=0)
+                                       timeout=settings.llm_timeout_s, max_retries=0,
+                                       http_client=_insecure_http_client(settings))
         self.thinking_tasks = {t.strip() for t in settings.llm_thinking_tasks.split(",") if t.strip()}
 
     def _call(self, task, messages, schema, temperature, n):

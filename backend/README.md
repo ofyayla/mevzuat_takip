@@ -173,6 +173,8 @@ mevzuat-ai eval tests/eval/relevance_v0.jsonl  # recall / precision / eşik tara
 `.env`: yerelde `LLM_PROVIDER=openai` + `LLM_API_KEY`; kurumda `LLM_PROVIDER=vllm`,
 `LLM_BASE_URL=http://10.144.100.204:8806/v1`, `LLM_MODEL=Qwen/Qwen3.6-35B-A3B-FP8`. İşleme görevi yeni düzenleme
 açtığında sınıflandırma görevini tetikler; Beat ayrıca saatte iki kez bekleyenleri tarar.
+LLM sunucusu kurum içi CA ile imzalıysa CA paketi `SSL_CERT_FILE` ile verilir. Yalnızca geliştirme ortamında
+`LLM_VERIFY_TLS=false` sertifika doğrulamasını kapatır (açılışta uyarı loglanır); kurumda `true` kalır.
 
 **Akış:** `NEW → RELEVANT` (portala düşer, İK-4 özetler) / `IRRELEVANT` (silinmez) / `AI_FAILED` (3 deneme).
 `BASELINE` ve `MERGED` kayıtlar sınıflandırılmaz.
