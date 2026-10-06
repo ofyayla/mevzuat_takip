@@ -68,7 +68,10 @@
         </sc-if>
       </div>
 
-
+      <a href="./surec" title="İşleme hattının durumları ve canlı sayıları" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); color:var(--foreground); text-decoration:none; font-size:12.5px; white-space:nowrap; flex:0 0 auto;">
+        <i data-lucide="workflow" style="width:14px; height:14px; color:var(--primary);"></i>
+        Süreç haritası
+      </a>
     </header>
 
     <div style="flex:1; overflow-y:auto; padding:28px 32px 60px;">
@@ -565,6 +568,9 @@ class Component extends DCLogic {
     this.renderIcons();
     this.loadMeta();
     this.loadList();
+    // Süreç haritasından gelen bağlantı: /#kayit=<id> doğrudan ayrıntıyı açar
+    const m = /^#kayit=(\d+)$/.exec(location.hash);
+    if (m) { history.replaceState(null, '', location.pathname); this.openDetail(Number(m[1])); }
   }
   componentDidUpdate() { this.renderIcons(); }
   renderIcons() { if (window.lucide) window.lucide.createIcons(); }

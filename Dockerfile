@@ -66,7 +66,7 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/mevzuat-bundle.pem REQUESTS_CA_BUNDLE=/etc/ssl/
 COPY backend/config ./config
 COPY backend/migrations ./migrations
 COPY backend/alembic.ini ./
-COPY ["Mevzuat Takip Portali.dc.html", "support.js", "/app/portal/"]
+COPY ["Mevzuat Takip Portali.dc.html", "support.js", "surec-haritasi.html", "/app/portal/"]
 ENV PORTAL_DIR=/app/portal
 USER mevzuat
 EXPOSE 8000

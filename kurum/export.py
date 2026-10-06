@@ -60,7 +60,7 @@ def export_core(out: Path) -> None:
         copy(BACKEND / item, app / item)
     pyproject = (BACKEND / "pyproject.toml").read_text()
     (app / "pyproject.toml").write_text(pyproject.replace('name = "mevzuat-takip-backend"', 'name = "mevzuat-core"'))
-    for item in ("Mevzuat Takip Portali.dc.html", "support.js"):
+    for item in ("Mevzuat Takip Portali.dc.html", "support.js", "surec-haritasi.html"):
         copy(ROOT / item, out / "portal" / item)
     for doc in sorted((ROOT / "docs").glob("*.md")):
         copy(doc, out / "docs" / doc.name)

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Süreç Haritası · Mevzuat Takip Portalı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Portal (Mevzuat Takip Portali.dc.html) ile aynı tasarım belirteçleri */
+  :root {
+    --background: oklch(1 0 0); --foreground: oklch(0.145 0 0); --card: oklch(1 0 0);
+    --primary: oklch(0.511 0.096 186.391); --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0); --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+    --destructive: oklch(0.577 0.245 27.325); --success: oklch(0.62 0.13 152); --warning: oklch(0.78 0.14 75);
+    --info: oklch(0.62 0.14 240); --border: oklch(0.92 0 0);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-pill: 9999px;
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04); --shadow-lg: 0 12px 24px -6px oklch(0 0 0 / 0.10);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sidebar-bg: color-mix(in oklch, var(--primary) 38%, black);
+    --k-flow: var(--primary); --k-ok: var(--success); --k-wait: var(--info); --k-fail: var(--destructive);
+    --k-terminal: oklch(0.65 0 0);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-sans); background: var(--background); color: var(--foreground);
+         font-size: 15px; line-height: 1.5; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 20px; padding: 14px 32px;
+           border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background) 88%, transparent);
+           backdrop-filter: blur(12px); flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .logo { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--sidebar-bg); display: flex;
+          align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .brand b { display: block; font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .brand small { font-size: 11px; color: var(--muted-foreground); }
+  .crumb { font-size: 13px; color: var(--muted-foreground); }
+  .crumb a { color: var(--muted-foreground); text-decoration: none; } .crumb a:hover { color: var(--foreground); }
+  .grow { flex: 1; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, button { font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--card);
+                   color: var(--foreground); border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; }
+  button:hover, select:hover { background: var(--secondary); }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  button.primary:hover { background: color-mix(in oklch, var(--primary) 88%, black); }
+  label.chk { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted-foreground); cursor: pointer; }
+  main { padding: 24px 32px 48px; max-width: 1560px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lead { color: var(--muted-foreground); font-size: 14px; margin: 0 0 20px; max-width: 900px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; background: var(--card);
+         box-shadow: var(--shadow-xs); }
+  .kpi .v { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .kpi .l { font-size: 12.5px; color: var(--muted-foreground); }
+  .kpi.bad .v { color: var(--destructive); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-xs); }
+  .graph { overflow-x: auto; padding: 8px; }
+  .graph svg { display: block; min-width: 1060px; width: 100%; height: auto; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--border);
+            font-size: 12.5px; color: var(--muted-foreground); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .panel { padding: 18px; position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; }
+  .panel h2 { font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+  .panel .desc { font-size: 13.5px; color: var(--muted-foreground); margin: 0 0 12px; }
+  .panel code { font-family: var(--font-mono); font-size: 12px; background: var(--muted); padding: 2px 6px; border-radius: 6px; }
+  .sec { font-size: 11.5px; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em;
+         margin: 16px 0 8px; }
+  .tr { font-size: 13px; display: flex; gap: 6px; align-items: baseline; padding: 3px 0; }
+  .tr a { color: var(--primary); cursor: pointer; text-decoration: none; } .tr a:hover { text-decoration: underline; }
+  .q { font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; border-radius: var(--radius-pill);
+       background: color-mix(in oklch, var(--primary) 12%, white); color: var(--primary); }
+  .sum { font-size: 13px; margin: 4px 0; }
+  .items { display: flex; flex-direction: column; gap: 6px; }
+  .item { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; font-size: 13px; }
+  .item.link { cursor: pointer; } .item.link:hover { border-color: var(--primary); }
+  .item .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
+             -webkit-box-orient: vertical; }
+  .item .m { font-size: 12px; color: var(--muted-foreground); }
+  .item .e { font-size: 12px; color: var(--destructive); font-family: var(--font-mono); word-break: break-word; }
+  .empty { font-size: 13px; color: var(--muted-foreground); padding: 8px 0; }
+  .warn { border: 1px solid color-mix(in oklch, var(--warning) 60%, white); background: color-mix(in oklch, var(--warning) 14%, white);
+          border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  .err { border-color: color-mix(in oklch, var(--destructive) 40%, white); background: color-mix(in oklch, var(--destructive) 8%, white); }
+  .muted { color: var(--muted-foreground); font-size: 12.5px; }
+  /* grafik */
+  .node { cursor: pointer; }
+  .node rect.box { fill: var(--card); stroke: var(--border); stroke-width: 1.2; transition: stroke 0.15s; }
+  .node:hover rect.box { stroke: color-mix(in oklch, var(--foreground) 35%, white); }
+  .node.sel rect.box { stroke: var(--primary); stroke-width: 2.2; }
+  .node.zero { opacity: 0.55; }
+  .node text.lbl { font-size: 13px; font-weight: 500; fill: var(--foreground); }
+  .node text.cnt { font-size: 20px; font-weight: 600; fill: var(--foreground); font-variant-numeric: tabular-nums; }
+  .node text.st { font-size: 10px; font-family: var(--font-mono); fill: var(--muted-foreground); }
+  .lane rect { fill: var(--muted); }
+  .lane text { font-size: 12px; font-weight: 600; fill: var(--muted-foreground); letter-spacing: 0.02em; }
+  .edge path { fill: none; stroke: oklch(0.78 0 0); stroke-width: 1.4; transition: stroke 0.15s, opacity 0.15s; }
+  .edge.retry path { stroke-dasharray: 5 4; }
+  .edge.fail path { stroke: color-mix(in oklch, var(--destructive) 45%, white); }
+  .edge text { font-size: 11px; fill: var(--foreground); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+  .edge text.bg { stroke: var(--background); stroke-width: 4px; stroke-linejoin: round; }
+  svg.labels .edge text, .edge.hi text { opacity: 1; }
+  .edge.hi path { stroke: var(--primary); stroke-width: 2.2; }
+  svg.focus .edge:not(.hi) { opacity: 0.25; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } .panel { position: static; max-height: none; } }
+  @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><div class="logo">M</div><div><b>Mevzuat Takip Portalı</b><small>Mevzuat ve Uyum Başkanlığı</small></div></a>
+  <div class="crumb"><a href="./">Kayıtlar</a> › Süreç haritası</div>
+  <div class="grow"></div>
+  <div class="controls">
+    <select id="days" title="Zaman penceresi">
+      <option value="">Tüm zamanlar</option><option value="1">Son 24 saat</option>
+      <option value="7">Son 7 gün</option><option value="30">Son 30 gün</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="labels"> Geçiş etiketleri</label>
+    <label class="chk"><input type="checkbox" id="auto" checked> 30 sn'de yenile</label>
+    <button id="refresh">Yenile</button>
+    <button id="mermaid" title="Grafiği Mermaid metni olarak panoya kopyala">Mermaid kopyala</button>
+  </div>
+</header>
+<main>
+  <h1>Süreç haritası</h1>
+  <p class="lead">Kaynaktan uzman kararına kadar her kaydın geçtiği durumlar ve şu an her durumda kaç kayıt olduğu.
+    Sayılar veritabanındaki durum makinesinden canlı okunur; bir duruma tıklayınca o durumdaki en yeni kayıtlar ve
+    geçişleri yürüten görevler görünür.</p>
+  <div id="alerts"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="layout">
+    <div class="card">
+      <div class="graph"><svg id="svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="İşleme hattı durum grafiği"></svg></div>
+      <div class="legend">
+        <span><i style="background:var(--k-flow)"></i>Toplama</span>
+        <span><i style="background:var(--k-wait)"></i>Sırada / işleniyor</span>
+        <span><i style="background:var(--k-ok)"></i>Tamamlandı</span>
+        <span><i style="background:var(--k-fail)"></i>Hata (yeniden denenir)</span>
+        <span><i style="background:var(--k-terminal)"></i>Son durum (hat dışı)</span>
+        <span>┄ yeniden deneme / işleme</span>
+        <span class="grow"></span><span id="stamp"></span>
+      </div>
+    </div>
+    <aside class="card panel" id="panel"></aside>
+  </div>
+</main>
+<script>
+// Veri: GET /api/v1/pipeline (+ /pipeline/nodes/{id}). Portal ile aynı bağlantı kuralları: window.MTP_API_BASE,
+// Keycloak kullanılırken window.MTP_TOKEN_PROVIDER (async, token döndürür).
+const API_BASE = window.MTP_API_BASE || '/api/v1';
+const KIND_COLOR = { flow: 'var(--k-flow)', ok: 'var(--k-ok)', wait: 'var(--k-wait)', fail: 'var(--k-fail)', terminal: 'var(--k-terminal)' };
+const FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const NUM = new Intl.NumberFormat('tr-TR');
+// Yerleşim: [sütun (katman), satır]. Katman sırası sunucudaki LAYERS ile aynıdır.
+const POS = {
+  'sources': [0, 1], 'fetch': [0, 2],
+  'raw:FETCHED': [1, 0], 'raw:EXTRACTED': [1, 1], 'raw:LINKED': [1, 2], 'raw:EXTRACT_FAILED': [1, 3],
+  'reg:BASELINE': [2, 1], 'reg:NEW': [2, 2], 'reg:MERGED': [2, 3],
+  'reg:IRRELEVANT': [3, 0], 'reg:RELEVANT': [3, 1], 'reg:SUMMARIZED': [3, 2], 'reg:READY': [3, 3], 'reg:AI_FAILED': [3, 4],
+  'review:Onaylandı': [4, 2], 'review:Bekliyor': [4, 3], 'review:Reddedildi': [4, 4],
+};
+const COL_W = 222, ROW_H = 92, NODE_W = 164, NODE_H = 60, PAD_X = 30, TOP = 46;
+
+let data = null, selected = null, timer = null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function api(path, asText) {
+  const headers = { Accept: asText ? 'text/plain' : 'application/json' };
+  const token = window.MTP_TOKEN_PROVIDER ? await window.MTP_TOKEN_PROVIDER() : null;
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
+  }
+  return asText ? res.text() : res.json();
+}
+const daysQ = () => $('days').value ? 'days=' + $('days').value : '';
+
+async function load() {
+  try {
+    data = await api('/pipeline' + (daysQ() ? '?' + daysQ() : ''));
+    $('alerts').innerHTML = '';
+    render();
+    if (selected) showPanel(selected, true); else showIntro();
+  } catch (e) {
+    $('alerts').innerHTML = `<div class="warn err">Süreç verisi alınamadı: ${esc(e.message)}</div>`;
+  }
+}
+
+function count(id) { const n = data.nodes.find(x => x.id === id); return n ? n.count : 0; }
+
+function render() {
+  const c = (id) => count(id);
+  const openAlerts = Object.values(data.openAlerts || {}).reduce((a, b) => a + b, 0);
+  const runs = data.fetchRuns || {};
+  const failed = c('raw:EXTRACT_FAILED') + c('reg:AI_FAILED');
+  const inFlight = c('raw:FETCHED') + c('raw:EXTRACTED') + c('reg:NEW') + c('reg:RELEVANT') + c('reg:SUMMARIZED');
+  const kpis = [
+    { v: NUM.format(c('fetch')), l: `Tarama · ${NUM.format(runs.failed || 0)} başarısız` },
+    { v: NUM.format(c('raw:LINKED') + c('raw:EXTRACTED') + c('raw:FETCHED') + c('raw:EXTRACT_FAILED')), l: 'Ham belge' },
+    { v: NUM.format(inFlight), l: 'Hatta ilerleyen kayıt' },
+    { v: NUM.format(c('review:Bekliyor')), l: 'Uzman kararı bekleyen' },
+    { v: NUM.format(failed), l: 'Hata (yeniden denenecek)', bad: failed > 0 },
+    { v: NUM.format(openAlerts), l: 'Açık alarm', bad: openAlerts > 0 },
+  ];
+  $('kpis').innerHTML = kpis.map(k => `<div class="kpi${k.bad ? ' bad' : ''}"><div class="v">${k.v}</div><div class="l">${esc(k.l)}</div></div>`).join('');
+  if ((data.unknownStatuses || []).length) {
+    $('alerts').innerHTML = `<div class="warn">Grafikte tanımlı olmayan durum(lar): ${data.unknownStatuses
+      .map(u => `<code>${esc(u.id)}</code> (${u.count})`).join(', ')} — <code>app/services/pipeline.py</code> güncellenmeli.</div>`;
+  }
+  $('stamp').textContent = 'Güncellendi: ' + FMT.format(new Date(data.generatedAt));
+  drawGraph();
+}
+
+function box(id) {
+  const [col, row] = POS[id] || [0, 5];
+  const x = PAD_X + col * COL_W + (COL_W - NODE_W) / 2, y = TOP + 18 + row * ROW_H;
+  return { x, y, w: NODE_W, h: NODE_H, cx: x + NODE_W / 2, cy: y + NODE_H / 2, col, row };
+}
+
+function edgePath(e) {
+  const a = box(e.source), b = box(e.target);
+  if (a.col !== b.col) {   // katmanlar arası: sağ kenardan sol kenara
+    const x1 = a.x + a.w, y1 = a.cy, x2 = b.x, y2 = b.cy, dx = (x2 - x1) / 2;
+    return { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
+  }
+  const down = b.row > a.row;
+  if (Math.abs(b.row - a.row) === 1 && !/yeniden/.test(e.label)) {   // komşu satır: düz dikey
+    const y1 = down ? a.y + a.h : a.y, y2 = down ? b.y : b.y + b.h;
+    return { d: `M${a.cx},${y1} L${b.cx},${y2}`, mx: a.cx + 6, my: (y1 + y2) / 2, anchor: 'start' };
+  }
+  // aynı sütunda atlayan veya geri dönen geçiş: kenardan yay (yeniden denemeler solda, diğerleri sağda)
+  const left = /yeniden/.test(e.label);
+  const x = left ? a.x : a.x + a.w, bulge = (left ? -1 : 1) * (26 + 8 * Math.abs(b.row - a.row));
+  const y1 = a.cy + (down ? 8 : -8), y2 = b.cy + (down ? -8 : 8);
+  return { d: `M${x},${y1} C${x + bulge},${y1} ${x + bulge},${y2} ${x},${y2}`, mx: x + bulge * 0.8, my: (y1 + y2) / 2,
+           anchor: left ? 'end' : 'start' };
+}
+
+function drawGraph() {
+  const svg = $('svg');
+  const W = PAD_X * 2 + COL_W * data.layers.length, H = TOP + 18 + ROW_H * 5 + 4;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.classList.toggle('labels', $('labels').checked);
+  const lanes = data.layers.map((l, i) => `<g class="lane"><rect x="${PAD_X + i * COL_W + 6}" y="8" width="${COL_W - 12}" height="${H - 12}" rx="14"/>
+      <text x="${PAD_X + i * COL_W + COL_W / 2}" y="32" text-anchor="middle">${esc(l.label)}</text></g>`).join('');
+  const edges = data.edges.map((e, i) => {
+    const p = edgePath(e), retry = /yeniden/.test(e.label), fail = e.target.endsWith('FAILED');
+    const label = e.label + (e.queue ? ' · ' + e.queue : '');
+    const anchor = p.anchor || 'middle';
+    return `<g class="edge${retry ? ' retry' : ''}${fail ? ' fail' : ''}" data-s="${esc(e.source)}" data-t="${esc(e.target)}">
+      <path d="${p.d}" marker-end="url(#arr)"><title>${esc(label)}</title></path>
+      <text class="bg" x="${p.mx}" y="${p.my - 4}" text-anchor="${anchor}">${esc(label)}</text>
+      <text x="${p.mx}" y="${p.my - 4}" text-anchor="${anchor}">${esc(label)}</text></g>`;
+  }).join('');
+  const nodes = data.nodes.map(n => {
+    const b = box(n.id), col = KIND_COLOR[n.kind] || 'var(--k-terminal)';
+    const status = n.id.includes(':') ? n.id.split(':')[1] : '';
+    return `<g class="node${n.count === 0 ? ' zero' : ''}${selected === n.id ? ' sel' : ''}" data-id="${esc(n.id)}" tabindex="0" role="button"
+        aria-label="${esc(n.label)}: ${n.count}">
+      <rect class="box" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="12"/>
+      <rect x="${b.x}" y="${b.y + 10}" width="4" height="${b.h - 20}" rx="2" fill="${col}"/>
+      <text class="lbl" x="${b.x + 14}" y="${b.y + 23}">${esc(n.label)}</text>
+      <text class="st" x="${b.x + 14}" y="${b.y + 43}">${esc(status || (n.id === 'fetch' ? 'fetch_run' : 'sources.yaml'))}</text>
+      <text class="cnt" x="${b.x + b.w - 12}" y="${b.y + 38}" text-anchor="end" fill="${n.count && n.kind === 'fail' ? 'var(--destructive)' : ''}">${NUM.format(n.count)}</text>
+      <title>${esc(n.description)}</title></g>`;
+  }).join('');
+  svg.innerHTML = `<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="oklch(0.7 0 0)"/></marker></defs>${lanes}${edges}${nodes}`;
+  svg.querySelectorAll('.node').forEach(g => {
+    g.addEventListener('click', () => select(g.dataset.id));
+    g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(g.dataset.id); } });
+    g.addEventListener('mouseenter', () => highlight(g.dataset.id));
+    g.addEventListener('mouseleave', () => highlight(selected));
+  });
+  highlight(selected);
+}
+
+function highlight(id) {
+  const svg = $('svg');
+  svg.classList.toggle('focus', !!id);
+  svg.querySelectorAll('.edge').forEach(e => e.classList.toggle('hi', !!id && (e.dataset.s === id || e.dataset.t === id)));
+}
+
+function select(id) {
+  selected = selected === id ? null : id;
+  try { history.replaceState(null, '', selected ? '#' + encodeURIComponent(selected) : location.pathname); } catch (_) {}
+  drawGraph();
+  if (selected) showPanel(selected); else showIntro();
+}
+
+function showIntro() {
+  const c = (id) => count(id);
+  $('panel').innerHTML = `<h2>Bir duruma tıklayın</h2>
+    <p class="desc">Panelde durumun açıklaması, geçişleri yürüten Celery kuyrukları ve o durumdaki en yeni kayıtlar gösterilir.</p>
+    <div class="sec">Akış özeti</div>
+    <p class="sum">Toplanan belgelerin <b>${NUM.format(c('raw:LINKED'))}</b>'i düzenleme kaydına bağlandı.</p>
+    <p class="sum">YZ <b>${NUM.format(c('reg:RELEVANT') + c('reg:SUMMARIZED') + c('reg:READY') + c('reg:AI_FAILED'))}</b> kaydı ilgili,
+      <b>${NUM.format(c('reg:IRRELEVANT'))}</b> kaydı ilgisiz buldu.</p>
+    <p class="sum">Portalda <b>${NUM.format(c('review:Bekliyor'))}</b> kayıt karar bekliyor; <b>${NUM.format(c('review:Onaylandı'))}</b> onaylandı,
+      <b>${NUM.format(c('review:Reddedildi'))}</b> reddedildi.</p>
+    <div class="sec">Notlar</div>
+    <p class="muted">Durumlar Redis'te değil veritabanında tutulur; Beat'in "bekleyenleri işle" görevleri takılan kayıtları
+      sonraki turda yeniden ele alır. Ekler (attachment) sayılmaz; ham belge sayıları her belgenin son sürümüdür.</p>`;
+}
+
+async function showPanel(id, keepItems) {
+  const n = data.nodes.find(x => x.id === id);
+  if (!n) { selected = null; return showIntro(); }
+  const name = (nid) => (data.nodes.find(x => x.id === nid) || {}).label || nid;
+  const tr = (e, dir) => `<div class="tr">${dir === 'in' ? '←' : '→'} <a data-go="${esc(dir === 'in' ? e.source : e.target)}">${esc(name(dir === 'in' ? e.source : e.target))}</a>
+      <span class="muted">${esc(e.label)}</span>${e.queue ? `<span class="q">${esc(e.queue)}</span>` : ''}</div>`;
+  const ins = data.edges.filter(e => e.target === id), outs = data.edges.filter(e => e.source === id);
+  const prevItems = keepItems ? ($('items') || {}).innerHTML : null;
+  $('panel').innerHTML = `<h2>${esc(n.label)} <span class="muted">· ${NUM.format(n.count)}</span></h2>
+    <p class="desc">${esc(n.description)}</p>
+    ${n.module ? `<div class="muted">Kod: <code>${esc(n.module)}</code></div>` : ''}
+    ${ins.length ? `<div class="sec">Gelen geçişler</div>${ins.map(e => tr(e, 'in')).join('')}` : ''}
+    ${outs.length ? `<div class="sec">Giden geçişler</div>${outs.map(e => tr(e, 'out')).join('')}` : ''}
+    <div class="sec">${id === 'sources' ? 'Kaynak durumu' : 'En yeni kayıtlar'}</div>
+    <div class="items" id="items">${prevItems || '<div class="empty">Yükleniyor…</div>'}</div>`;
+  $('panel').querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', () => select(a.dataset.go)));
+  try {
+    if (id === 'sources') return renderSources(await api('/sources/health'));
+    const res = await api('/pipeline/nodes/' + encodeURIComponent(id) + (daysQ() ? '?' + daysQ() : ''));
+    if (selected !== id) return;
+    renderItems(res.items);
+  } catch (e) {
+    $('items').innerHTML = `<div class="warn err">${esc(e.message)}</div>`;
+  }
+}
+
+function renderItems(items) {
+  if (!items.length) { $('items').innerHTML = '<div class="empty">Bu durumda kayıt yok.</div>'; return; }
+  $('items').innerHTML = items.map(it => {
+    const link = it.visible;   // portal yalnızca görünür kayıtların ayrıntısını açar
+    const meta = [it.source, it.severity, it.at ? FMT.format(new Date(it.at)) : null, it.detail].filter(Boolean).map(esc).join(' · ');
+    return `<div class="item${link ? ' link' : ''}" ${link ? `data-reg="${it.regulationId}"` : ''} title="${esc(it.title)}">
+      <div class="t">${esc(it.title)}</div><div class="m">#${it.id} · ${meta}</div>
+      ${it.error ? `<div class="e">${esc(it.error)}</div>` : ''}</div>`;
+  }).join('') + (items.length >= 20 ? '<div class="muted">En yeni 20 kayıt gösteriliyor.</div>' : '');
+  $('items').querySelectorAll('[data-reg]').forEach(el => el.addEventListener('click', () => { location.href = './#kayit=' + el.dataset.reg; }));
+}
+
+function renderSources(h) {
+  const label = { healthy: 'sağlıklı', delayed: 'gecikmeli', down: 'erişilemiyor' };
+  $('items').innerHTML = (h.sources || []).map(s => `<div class="item"><div class="t">${esc(s.name)}</div>
+      <div class="m">${esc(label[s.status] || s.status)}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</div>
+      ${s.status !== 'healthy' && s.message ? `<div class="e">${esc(s.message)}</div>` : ''}</div>`).join('')
+    || '<div class="empty">Kaynak bilgisi yok.</div>';
+}
+
+async function copyMermaid() {
+  try {
+    const text = await api('/pipeline?format=mermaid' + (daysQ() ? '&' + daysQ() : ''), true);
+    await navigator.clipboard.writeText(text);
+    $('mermaid').textContent = 'Kopyalandı ✓';
+  } catch (e) {
+    $('mermaid').textContent = 'Kopyalanamadı';
+  }
+  setTimeout(() => { $('mermaid').textContent = 'Mermaid kopyala'; }, 1800);
+}
+
+function schedule() {
+  clearInterval(timer);
+  if ($('auto').checked) timer = setInterval(() => { if (!document.hidden) load(); }, 30000);
+}
+
+try { const s = localStorage.getItem('mtp.surec.days'); if (s !== null) $('days').value = s; } catch (_) {}
+try { $('labels').checked = localStorage.getItem('mtp.surec.labels') === '1'; } catch (_) {}
+if (location.hash) selected = decodeURIComponent(location.hash.slice(1));
+$('days').addEventListener('change', () => { try { localStorage.setItem('mtp.surec.days', $('days').value); } catch (_) {} load(); });
+$('labels').addEventListener('change', () => { try { localStorage.setItem('mtp.surec.labels', $('labels').checked ? '1' : '0'); } catch (_) {} drawGraph(); });
+$('auto').addEventListener('change', schedule);
+$('refresh').addEventListener('click', load);
+$('mermaid').addEventListener('click', copyMermaid);
+load();
+schedule();
+</script>
+</body>
+</html>

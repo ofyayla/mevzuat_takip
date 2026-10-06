@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -38,6 +38,7 @@ from app.settings import Settings, get_settings
 
 log = logging.getLogger(__name__)
 PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
+PIPELINE_FILE = "surec-haritasi.html"
 
 
 # ------------------------------------------------------------------------------------------------ bağımlılıklar
@@ -164,6 +165,28 @@ def sources(settings: SettingsDep, actor: ActorDep):
 def health_of_sources(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     require(actor, ROLE_VIEWER)
     return sources_health(session, settings)
+
+
+@api.get("/pipeline")
+def pipeline(session: SessionDep, settings: SettingsDep, actor: ActorDep,
+             days: Annotated[int | None, Query(ge=1, le=365)] = None, format: Literal["json", "mermaid"] = "json"):
+    from app.services.pipeline import mermaid, overview
+
+    require(actor, ROLE_VIEWER)
+    data = overview(session, settings, days)
+    if format == "mermaid":
+        return PlainTextResponse(mermaid(data))
+    return data
+
+
+@api.get("/pipeline/nodes/{node_id}")
+def pipeline_node(node_id: str, session: SessionDep, actor: ActorDep,
+                  days: Annotated[int | None, Query(ge=1, le=365)] = None,
+                  limit: Annotated[int, Query(ge=1, le=100)] = 20):
+    from app.services.pipeline import node_items
+
+    require(actor, ROLE_VIEWER)
+    return node_items(session, node_id, days, limit)
 
 
 @api.get("/me")
@@ -514,6 +537,10 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     @app.get("/", include_in_schema=False)
     def portal():
         return FileResponse(settings.portal_dir / PORTAL_FILE, media_type="text/html; charset=utf-8")
+
+    @app.get("/surec", include_in_schema=False)
+    def pipeline_page():
+        return FileResponse(settings.portal_dir / PIPELINE_FILE, media_type="text/html; charset=utf-8")
 
     @app.get("/support.js", include_in_schema=False)
     def support_js():

@@ -15,7 +15,7 @@ Mevzuat ve Uyum Başkanlığı portalını (portal + API) sağlar.
 | Yol | İçerik |
 |---|---|
 | `app/` | Uygulama: `app/` paketi, `config/`, `migrations/` (Alembic), `tests/`, `requirements.txt`, `pyproject.toml` |
-| `portal/` | Portal arayüzü (`Mevzuat Takip Portali.dc.html`, `support.js`); API ile aynı imajda sunulur |
+| `portal/` | Portal arayüzü (`Mevzuat Takip Portali.dc.html`, `support.js`, süreç haritası `surec-haritasi.html`); API ile aynı imajda sunulur |
 | `Dockerfile`, `pip.conf`, `gunicorn_config.py` | İmaj (Nexus taban imajı, kurum pip aynası, kurum CA'ları); API gunicorn + UvicornWorker |
 | `Jenkinsfile` | Nexus'a derle-gönder + SonarQube |
 | `API_REFERENCE.md` | Portal API uç noktaları |

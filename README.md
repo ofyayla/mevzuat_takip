@@ -22,6 +22,7 @@ Kurum repoları ve chart'lar üretilir: `backend/.venv/bin/python kurum/export.p
 |---|---|
 | `backend/` | Kod, yapılandırma, migrasyonlar, testler — ayrıntı: `backend/README.md` |
 | `Mevzuat Takip Portali.dc.html`, `support.js` | Portal arayüzü |
+| `surec-haritasi.html` | Süreç haritası (`/surec`): işleme hattının durumları ve canlı sayıları |
 | `kurum/` | Kurum repolarının iskeletleri (Dockerfile, Jenkinsfile, pip.conf, gunicorn, README, deploy), chart'lar, `export.py` |
 | `Dockerfile`, `pip.conf`, `backend/docker/docker-compose.yml` | Yerel uçtan uca ortam (crawler + mongo + api/worker/beat + redis + postgres) |
 | `docs/` | Devreye alma, işletim (runbook), mimari plan, kaynak keşif raporu |
