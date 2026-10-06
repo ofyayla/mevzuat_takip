@@ -59,6 +59,7 @@ Kurum ağında DMZ'den LAN'a yalnızca MongoDB (27017) açıktır. Bu yüzden si
 ```bash
 mevzuat-collect sources                        # kaynaklar, kanallar, doğrulama durumu
 mevzuat-collect check-access                   # 9 kaynağa bağlantı testi (firewall/proxy istisnası sonrası)
+python3 scripts/erisim_testi.py                # aynı test, kurulumsuz (yalnızca stdlib; --proxy, --ca-file, --tcp HOST:PORT)
 mevzuat-collect probe TCMB                     # yalnızca listeyi çeker ve gösterir, DB'ye yazmaz
 mevzuat-collect probe BDDK --record tests/fixtures/bddk --with-details   # yanıtları fixture olarak kaydet
 mevzuat-collect run all                        # tam tarama: detay + ekler + arşiv + DB
