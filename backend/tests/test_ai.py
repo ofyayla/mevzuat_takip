@@ -74,6 +74,17 @@ def test_complete_json_repair_cache_and_logging(settings, env):  # noqa: F811
     assert [r.status for r in rows] == ["ok", "ok", "invalid"]
 
 
+def test_relevance_liste_alanlari_eksikse_bos_sayilir():
+    from pydantic import ValidationError
+
+    eksik = {"is_relevant": False, "relevance_score": 0.1, "reg_type": "Diğer", "rationale": "x", "uncertain": False}
+    out = RelevanceOut.model_validate(eksik)
+    assert out.matched_topics == [] and out.matched_criteria == []
+    assert "matched_criteria" in strict_schema(RelevanceOut)["required"]       # sunucuya yine zorunlu bildirilir
+    with pytest.raises(ValidationError):                                      # karar alanı eksikse hata
+        RelevanceOut.model_validate({k: v for k, v in eksik.items() if k != "uncertain"})
+
+
 def test_llm_verify_tls_secenegi(settings):
     from app.ai.llm_client import _insecure_http_client
 

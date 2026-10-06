@@ -31,8 +31,10 @@ class RelevanceOut(BaseModel):
     is_relevant: bool
     relevance_score: float = Field(ge=0.0, le=1.0)
     reg_type: str
-    matched_topics: list[str]
-    matched_criteria: list[str]
+    # Liste alanları: model ilgisiz belgede bazen hiç göndermiyor (vLLM şema zorlaması gevşek) → boş liste say.
+    # Karar alanları (is_relevant, relevance_score, uncertain) zorunlu kalır; eksikse çağrı hatalı sayılır.
+    matched_topics: list[str] = Field(default_factory=list)
+    matched_criteria: list[str] = Field(default_factory=list)
     rationale: str
     uncertain: bool
 
