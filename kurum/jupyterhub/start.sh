@@ -362,7 +362,18 @@ launch() {    # ad, çalışma dizini, komut...
   fi
 }
 
+check_envs() {    # app/.env dosyaları yoksa ya da MONGO_URL boşsa süreçler anlamsız hatalarla düşer
+  local f bad=0
+  for f in "$CORE_APP/.env" "$CRAWLER_APP/.env"; do
+    if [[ ! -s $f ]] || ! grep -qE '^MONGO_URL=.+' "$f"; then
+      echo "HATA: $f yok ya da MONGO_URL boş" >&2; bad=1
+    fi
+  done
+  [[ $bad == 0 ]] || die "Ayarlar eksik. Önce çalıştırın: $0 setup   (app/.env dosyaları $CONF'tan yeniden üretilir)"
+}
+
 start_procs() {
+  check_envs
   ca_env
   echo "mevzuat-crawler:"
   launch crawler "$CRAWLER_APP" "$CRAWLER_VENV/bin/mevzuat-crawler" serve
@@ -445,7 +456,7 @@ case ${1:-start} in
   update)  update ;;
   check)   load_conf; check ;;
   stop)    stop ;;
-  restart) stop; load_conf; start_procs ;;
+  restart) stop; setup; start_procs ;;   # setup: ayar değişiklikleri app/.env'ye yansısın
   status)  load_conf; status ;;
   logs)    tail -n 100 -f "$LOG_DIR/${2:?süreç adı: ${PROCS[*]} setup}.log" ;;
   *)       echo "Kullanım: $0 [start|setup|update|check|stop|restart|status|logs <${PROCS[*]}|setup>]" >&2; exit 2 ;;
