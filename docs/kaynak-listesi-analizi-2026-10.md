@@ -1,15 +1,32 @@
 # Kaynak Listesi Güncellemesi — Etki Analizi ve İş Planı
 
 **Tarih:** 07.10.2026 · **Girdi:** Mevzuat ve Uyum Başkanlığı'nın gönderdiği
-`Regulators_and_website_links - 05.10.2026.xlsx` (58 satır, sayfa "REGULATOR LİST", sütunlar: Kurum, Link)
+`Regulators_and_website_links - 07.10.2026.xlsx` (61 satır, sayfa "REGULATOR LİST", sütunlar: Kurum, Link;
+önceki sürüm 05.10.2026, 58 satır — farklar §0'da)
 · **Karşılaştırılan:** `backend/config/sources.yaml` (Kapsam Formu v3, 9 kaynak) ve `docs/kaynak-kesif-raporu.md`
+
+## 0. Sürüm farkı (05.10.2026 → 07.10.2026)
+
+- **Eklenen 3 satır** (hepsi ana sayfa linki, hepsi yeni kurum, öncelik B, Grup I):
+
+  | # | Kurum | Link | Değerlendirme |
+  |---|---|---|---|
+  | 56 | Finansal Kurumlar Birliği (FKB) | fkb.org.tr | Finansal kiralama, faktoring ve finansman şirketlerinin meslek birliği; BDDK düzenlemeleriyle (Liste/52) kesişir, banka için dolaylı |
+  | 57 | Türkiye Ödeme ve Elektronik Para Kuruluşları Birliği (TÖDEB) | todeb.org.tr | Ödeme ve e-para kuruluşlarının birliği; ödeme hizmetleri mevzuatı TCMB'den zaten geliyor, değeri sektör duyuruları/standartları |
+  | 58 | Sermaye Piyasası Lisanslama Sicil ve Eğitim Kuruluşu (SPL) | spl.com.tr | Personel lisans ve sicil duyuruları; şubelerde sermaye piyasası ürünü satan personel nedeniyle ilgili (İK/eğitim birimleri) |
+
+- **Silinen veya düzeltilen satır yok.** §4'teki teyit konuları (mükerrer Aile/Çalışma Bakanlığı satırı, eski EPDK
+  adresi, sabit tarihli RG Mükerrer linki) ve §1a'daki Grup III satırları (haber siteleri, yargı) listede aynen
+  duruyor; bunlar hâlâ Başkanlığın cevabını bekliyor.
+- Eklenen satırların hepsi kamu kurumu niteliğinde meslek/sektör kuruluşu; liste **Grup I yönünde büyüdü**, Grup
+  III'e dokunulmadı.
 
 ## 1. Özet
 
-- Listede **58 satır** var. Bunların **11'i bugün tam karşılanıyor** (9 kaynak; RG mükerrer ve BDDK "RG'de
+- Listede **61 satır** var. Bunların **11'i bugün tam karşılanıyor** (9 kaynak; RG mükerrer ve BDDK "RG'de
   yayımlanmayan kurul kararları" satırları mevcut kanallar). **4 satır mevcut kaynağa yeni kanal ya da doğrulama**
-  gerektiriyor. **43 satır yeni kurum** (bir çifti muhtemelen mükerrer/güncel değil, bkz. §4).
-- Liste bir **kanal tanımı değil, ana sayfa listesi.** 58 satırın 46'sı kurumun ana sayfasını gösteriyor. Bizim
+  gerektiriyor. **46 satır yeni kurum** (bir çifti muhtemelen mükerrer/güncel değil, bkz. §4).
+- Liste bir **kanal tanımı değil, ana sayfa listesi.** 61 satırın 49'u kurumun ana sayfasını gösteriyor. Bizim
   çalışma birimimiz "kurum" değil "kanal" (izlenecek liste sayfası + okuma stratejisi). Bugünkü 9 kaynak 23 kanal
   demek. Her yeni kurum için **"bu kurumda neyi izliyoruz?"** sorusunun Başkanlıkla cevaplanması gerekiyor
   (duyurular mı, mevzuat listesi mi, kurul kararları mı, taslaklar mı?). Bu cevap olmadan geliştirme başlamamalı.
@@ -29,7 +46,7 @@ grup çıkıyor:
 
 | Grup | Amaç testi (talep tanımı) | Liste testi (9 kaynak) | Nitelik | Satırlar |
 |---|---|---|---|---|
-| **I — Kapsam genişlemesi** | İçinde: kamu otoritesi/öz-düzenleyici, düzenleyici içerik | Dışında | Meşru talep; Kapsam Formu hükmüne göre **değişiklik talebi + ek efor/takvim** | Öncelik A ve B'deki kamu otoriteleri ve birlikler (TKBB Danışma Kurulu, TBB, SEDDK, HMB, GİB, TMSF, Siber Güvenlik Bşk., Risk Merkezi, KGK, SGK, BKM, MKK, Borsa İstanbul, Takasbank …) |
+| **I — Kapsam genişlemesi** | İçinde: kamu otoritesi/öz-düzenleyici, düzenleyici içerik | Dışında | Meşru talep; Kapsam Formu hükmüne göre **değişiklik talebi + ek efor/takvim** | Öncelik A ve B'deki kamu otoriteleri ve birlikler (TKBB Danışma Kurulu, TBB, SEDDK, HMB, GİB, TMSF, Siber Güvenlik Bşk., Risk Merkezi, KGK, SGK, BKM, MKK, Borsa İstanbul, Takasbank, FKB, TÖDEB, SPL …) |
 | **II — Sınırda** | Yorumlanabilir: kamu otoritesi yayımlıyor ama "mevzuat/duyuru" değil, ya da otorite Türk değil, ya da metin henüz mevzuat değil | Kısmen | Her biri için Başkanlıkla tek tek karar | MASAK SSS, Reklam Kurulu kararları, TBMM kanun teklifleri, FATF, BIS, KAP, Diyanet |
 | **III — Kapsam kayması** | **Dışında:** kamu otoritesi değil (haber, topluluk, toplayıcı) ya da mevzuat değil (içtihat) | Dışında | Ürünün niteliğini değiştirir; bu talebin kapsamında ele alınmamalı | katilimanaliz, procompliance, Fintech İstanbul; KAYSİS ve mevzuat.gov.tr (kaynak olarak; çözümleyici kullanımı sürer); Anayasa Mahkemesi (bireysel başvuru), Yargıtay, Danıştay, Barolar Birliği, Adalet Bakanlığı |
 
@@ -120,11 +137,14 @@ Durum: ✅ mevcut · 🟡 mevcut kaynakta yeni kanal/doğrulama · 🆕 yeni kur
 | 53 | Merkezi Kayıt Kuruluşu | mkk.com.tr | 🆕 | B | RG ilan filtresinde var |
 | 54 | Borsa İstanbul | borsaistanbul.com | 🆕 | B | RG ilan filtresinde var |
 | 55 | Darphane ve Damga Matbaası GM | darphane.gov.tr | 🆕 | B | |
-| 56 | Takasbank | takasbank.com.tr | 🆕 | B | RG ilan filtresinde var |
-| 57 | FATF | fatf-gafi.org | 🆕 | A | Yabancı kaynak, İngilizce; gri liste / kamuoyu açıklamaları (yılda 3 genel kurul) |
-| 58 | BASEL / BIS | bis.org | 🆕 | A/B | Yabancı, İngilizce; BCBS yayınları için resmi RSS beslemeleri var |
+| 56 | Finansal Kurumlar Birliği | fkb.org.tr | 🆕 | B | 07.10 sürümünde eklendi. Kiralama/faktoring/finansman sektörü |
+| 57 | TÖDEB | todeb.org.tr | 🆕 | B | 07.10 sürümünde eklendi. Ödeme ve e-para kuruluşları |
+| 58 | SPL | spl.com.tr | 🆕 | B | 07.10 sürümünde eklendi. Lisans/sicil duyuruları |
+| 59 | Takasbank | takasbank.com.tr | 🆕 | B | RG ilan filtresinde var |
+| 60 | FATF | fatf-gafi.org | 🆕 | A | Yabancı kaynak, İngilizce; gri liste / kamuoyu açıklamaları (yılda 3 genel kurul) |
+| 61 | BASEL / BIS | bis.org | 🆕 | A/B | Yabancı, İngilizce; BCBS yayınları için resmi RSS beslemeleri var |
 
-**Dağılım (43 yeni kurum + 4 yeni kanal):** A: 14 (11 kurum + 3 kanal) · B: 23 · C: 5 · D: 5 (#46 dahil).
+**Dağılım (46 yeni kurum + 4 yeni kanal):** A: 14 (11 kurum + 3 kanal) · B: 26 · C: 5 · D: 5 (#46 dahil).
 
 ## 3. Kurum başına ne iş çıkar?
 
@@ -170,7 +190,7 @@ yapılandırmayla karşılar; çoğu kurum **kod değil YAML + fixture** işidir
 
 ## 5. Operasyonel etki
 
-- **Firewall:** DMZ'den internete izin listesine yaklaşık **45–55 yeni alan adı** (www/kök/alt alan adı, ek
+- **Firewall:** DMZ'den internete izin listesine yaklaşık **50–60 yeni alan adı** (www/kök/alt alan adı, ek
   host'lar) girecek. Bilgi Güvenliği onayı en uzun süren kalem olabilir; liste kesinleşince tek seferde talep
   edilmeli (`mevzuat-collect sources` çıktısı).
 - **Tarama yükü:** 23 kanal → kabaca 100–120 kanal. Host başına kibar tarama (1,5 sn) korunduğu sürece kaynak
@@ -192,12 +212,12 @@ yapılandırmayla karşılar; çoğu kurum **kod değil YAML + fixture** işidir
 | **0 — Kapsam netleştirme** (Başkanlıkla 1 toplantı + yazılı onay) | §2 tablosundaki öncelik ve "izlenecek sayfa" sütununun doldurulması; §4 teyitleri; C/D gruplarının bu fazda mı ayrı iş mi olacağı; Kapsam Formu revizyonu | — |
 | **1 — Firewall talebi** | Kesinleşen alan adları için tek talep | Faz 0 |
 | **2 — A grubu** (≈11 kurum + 3 yeni kanal) | Keşif → YAML → fixture/test → izleme eşikleri. TKBB Danışma Kurulu ilk sırada. FATF/BIS için İngilizce istem uyarlaması | Faz 1 (keşif Türkiye'den yapılmalı) |
-| **3 — B grubu** (≈23 kurum) | Çoğunlukla tek "duyurular" kanalı, düşük öncelik ağırlığı, hafif izleme | Faz 2 kalıpları |
+| **3 — B grubu** (≈26 kurum) | Çoğunlukla tek "duyurular" kanalı, düşük öncelik ağırlığı, hafif izleme | Faz 2 kalıpları |
 | **4 — C ve D grupları** | İçtihat takibi ve haber/erken uyarı akışı — ayrı tasarım | Ayrı kapsam kararı |
 
 Kurum başına kabaca efor (keşiften teste, kurum ağından erişim varsayımıyla): standart HTML/besleme kaynağı
 **0,5–1 gün**, TLS/parmak izi sorunu veya çok kanallı kaynak **1–2 gün**, SPA/tarayıcı gerektiren ya da yeni
-kaynak türü **3+ gün**. Bu, A+B grupları için kabaca **6–9 hafta-kişi** demek; C ve D ayrıca tasarlanmalı.
+kaynak türü **3+ gün**. Bu, A+B grupları için kabaca **6–10 hafta-kişi** demek; C ve D ayrıca tasarlanmalı.
 Kesin tahmin, Faz 2'nin ilk 3–4 kaynağındaki keşif sonuçlarından sonra güncellenmelidir.
 
 ## 7. Başkanlığa sorulacaklar
