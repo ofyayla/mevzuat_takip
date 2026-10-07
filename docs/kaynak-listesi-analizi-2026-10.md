@@ -20,6 +20,43 @@
 - Bu bir **kapsam değişikliği** (Kapsam Formu v3 / Talep 138380 → 9 kaynak + KEP). Formun revize edilmesi,
   takvim ve DMZ firewall izin listesinin buna göre güncellenmesi gerekir.
 
+## 1a. Kapsam değerlendirmesi: genişleme mi, kayma mı?
+
+Talep tanımı üç girdi sayıyor: (1) Resmî Gazete, (2) kamu otoritelerinin yayımladığı mevzuat ve basın
+duyuruları, (3) KEP'e gelen mevzuat içerikli resmî yazılar. Kapsam Formu v3 ayrıca kaynak listesinin "nihai ve
+sabit" olduğunu, **ek kaynak talebinin kapsam değişikliği sayılacağını** yazıyor. Listeyi iki testle ayırınca üç
+grup çıkıyor:
+
+| Grup | Amaç testi (talep tanımı) | Liste testi (9 kaynak) | Nitelik | Satırlar |
+|---|---|---|---|---|
+| **I — Kapsam genişlemesi** | İçinde: kamu otoritesi/öz-düzenleyici, düzenleyici içerik | Dışında | Meşru talep; Kapsam Formu hükmüne göre **değişiklik talebi + ek efor/takvim** | Öncelik A ve B'deki kamu otoriteleri ve birlikler (TKBB Danışma Kurulu, TBB, SEDDK, HMB, GİB, TMSF, Siber Güvenlik Bşk., Risk Merkezi, KGK, SGK, BKM, MKK, Borsa İstanbul, Takasbank …) |
+| **II — Sınırda** | Yorumlanabilir: kamu otoritesi yayımlıyor ama "mevzuat/duyuru" değil, ya da otorite Türk değil, ya da metin henüz mevzuat değil | Kısmen | Her biri için Başkanlıkla tek tek karar | MASAK SSS, Reklam Kurulu kararları, TBMM kanun teklifleri, FATF, BIS, KAP, Diyanet |
+| **III — Kapsam kayması** | **Dışında:** kamu otoritesi değil (haber, topluluk, toplayıcı) ya da mevzuat değil (içtihat) | Dışında | Ürünün niteliğini değiştirir; bu talebin kapsamında ele alınmamalı | katilimanaliz, procompliance, Fintech İstanbul; KAYSİS ve mevzuat.gov.tr (kaynak olarak; çözümleyici kullanımı sürer); Anayasa Mahkemesi (bireysel başvuru), Yargıtay, Danıştay, Barolar Birliği, Adalet Bakanlığı |
+
+Grup III'ün kayma sayılmasının nedeni yalnız kaynak sayısı değil; talebin tasarım varsayımlarıyla çelişmesi:
+
+- **Kaynağa dayalılık (İK-4):** Özetin her ifadesi kaynak metne dayandırılıyor ve kayıt "resmî yayım sayfasına"
+  bağlanıyor. Haber metni resmî metin değil; haberden açılan kayıt yanlış ya da eksik aktarımı resmî bilgi gibi
+  Başkanlığa sunar, denetim izinde "kaynak" ikincil bir site olur.
+- **Tekilleştirme (İK-2):** Aynı düzenleme için resmî kayda ek olarak her haber ayrı bir aday üretir; mükerrer
+  bildirimi önleme hedefini zorlar.
+- **İlgililik ve etiketleme (İK-3):** Etiketleme kılavuzu ve few-shot örnekleri düzenleyici metinler için
+  hazırlanıyor. Yorum yazısı, haber ve mahkeme kararı ayrı bir sınıflandırma problemi.
+- **İçtihat:** Mahkeme kararı mevzuat değil; hacimli, kişisel veri içeren ve arama formuyla erişilen bir alan.
+  Bankayı bağlayan kararlar (AYM iptal, Yargıtay İBK) zaten RG'de yayımlanıyor ve kapsamda.
+
+Muhtemel açıklama: liste, Başkanlığın bugün **elle baktığı siteler listesi** (ana sayfa linkleri, haber siteleri,
+SSS sayfası bunu gösteriyor). "Manuel takip ihtiyacını azaltma" hedefiyle bakılınca anlaşılır, ama bu bir kaynak
+şartnamesi değil. Önerilen tutum:
+
+1. **Grup I:** değişiklik talebi olarak kabul; fazlara bölünmüş ek efor ve firewall talebiyle.
+2. **Grup II:** her satır için "hangi sayfa, hangi amaçla" sorusuyla tek tek karar. Mevcut emsaller: Rekabet
+   ve BDDK kurul kararları kapsamda olduğu için Reklam Kurulu kararları Grup I'e yakın; MASAK SSS mevcut kaynağın
+   bir sayfası olduğu için düşük efor.
+3. **Grup III:** bu talebin kapsamı dışında. İhtiyaç sürerse ayrı talep olarak "haber/erken uyarı akışı"
+   (onaya düşen mevzuat kaydı açmayan, ayrı ekranlı bilgilendirme) ve "içtihat takibi" tanımlanabilir; o zamana
+   kadar bu siteler elle izlenmeye devam eder.
+
 ## 2. Satır satır eşleştirme
 
 Durum: ✅ mevcut · 🟡 mevcut kaynakta yeni kanal/doğrulama · 🆕 yeni kurum.
