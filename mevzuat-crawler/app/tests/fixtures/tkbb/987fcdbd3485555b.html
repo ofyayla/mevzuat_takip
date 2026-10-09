@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="tr-TR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/ico" href="/favicon.ico">
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script type="module" crossorigin src="/assets/main.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <link rel="stylesheet" crossorigin href="/assets/styles.css?v=5" />
+  <link rel="stylesheet" crossorigin href="/assets/custom.css?v=21" />
+
+  <script src="/assets/photoswipe.umd.min.js"></script>
+  <script src="/assets/photoswipe-lightbox.umd.min.js"></script>
+  <script src="/assets/photoswipe-video-plugin.umd.js"></script>
+
+  <link rel="stylesheet" href="/assets/photoswipe.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/css/splide.min.css" rel="stylesheet">
+
+    <meta property="og:image" content="/assets/TKBB-Turkce-25-Yil-Renkli.png" />
+
+  <title>TKBB</title>
+  <meta name="description" content="" />
+
+</head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-51RC30GMEL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag('js', new Date());
+
+  gtag('config', 'G-51RC30GMEL');
+</script>
+
+<body>
+  <div id="root">
+    <div style="
+          position: fixed;
+          z-index: 9999;
+          inset: 16px;
+          pointer-events: none;
+        "></div>
+    <div class="main-container" style="zoom: calc(100%); filter: unset">
+      <div class="bg-[#1D398D] h-2"></div>
+      <div class="flex flex-col zoom zoom-none main-menu-nav">
+        <div class="flex flex-row py-[20px] justify-center items-center">
+          <a href="/"><img class="w-[150px] h-[100px]" src="/assets/TKBB-Turkce-25-Yil-Renkli.svg" alt="TKBB Logo" /></a>
+          <div class="flex flex-row items-center ml-[339px] mr-[318px] w-[480px] relative">
+            <input type="text" id="header-search" class="border rounded-[40px] pl-12 w-full py-4 bg-[##1D398D0D] backdrop-blur-[25px]" placeholder="Ara..." value="" /><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute text-opacity-80 top-4 left-5">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.3-4.3"></path>
+            </svg>
+            <div
+  id="search-popup"
+  class="flex hidden flex-col absolute bg-gri top-[100px] w-[800px] z-[100] left-[-150px] rounded-[21px]">
+  <div class="flex flex-col px-8 py-[29px]">
+    <div class="flex justify-between items-center w-full">
+      <p>Sonuçlar</p>
+      <p><span id="resultCount"></span> sonuç bulundu</p>
+    </div>
+    <div class="flex gap-4 pt-6 mb-[28px]">
+      <span
+        class="text-[#fff] search-filter-button  bg-mavi px-4 py-3 border rounded-[32px] cursor-pointer flex flex-nowrap"
+        data-module="all">Tümü
+        <p class="pl-2" id="allCount"></p>
+      </span><span
+        class="px-4 py-3 border rounded-[32px] search-filter-button  cursor-pointer flex flex-nowrap"
+        data-module="tkbb">TKBB
+        <p class="pl-2" id="tkbbCount"></p>
+      </span><span
+        class="px-4 py-3 border search-filter-button rounded-[32px] cursor-pointer flex flex-nowrap"
+        data-module="veripetegi">Veri Peteği
+        <p class="pl-2" id="veripetegiCount"></p>
+      </span><span
+        class="px-4 py-3 hidden border search-filter-button  rounded-[32px] cursor-pointer flex flex-nowrap">Eğitim
+        <p class="pl-2"></p>
+      </span><span
+        class="px-4 py-3 border rounded-[32px] search-filter-button  cursor-pointer flex flex-nowrap"
+        data-module="sozluk">Katılım Sözlük
+        <p class="pl-2" id="sozlukCount"></p>
+      </span>
+    </div>
+  </div>
+  <div class="border-b opacity-20"></div>
+  <div
+    id="search-content"
+    class="flex flex-col pr-[40px] pl-[32px] py-[8px] h-[450px] overflow-auto">
+  </div>
+</div>
+<script>
+  var inpt = document.getElementById("header-search");
+  var searchResults = document.getElementById("search-popup");
+  inpt.addEventListener("keyup", (e) => {
+    if (inpt.value.length > 0) {
+      let html = "";
+      searchResults.classList.remove("hidden");
+      fetch("/search?q=" + inpt.value).then(res => res.json().then(data => {
+        document.querySelector(".search-filter-button[data-module=all]").click();
+        document.getElementById("veripetegiCount").innerText = data.veripetegiCount;
+        document.getElementById("sozlukCount").innerText = data.sozlukCount;
+        document.getElementById("allCount").innerText = data.veripetegiCount + data.tkbbCount + data.sozlukCount;
+        document.getElementById("tkbbCount").innerText = data.tkbbCount;
+        document.getElementById("resultCount").innerText = data.veripetegiCount + data.tkbbCount + data.sozlukCount;
+        for (item of data.data) {
+          let type = item.module == "veripetegi" || item.module == "sozluk" ? item.module : "tkbb";
+          html += `
+                <div class="flex justify-between border-b py-6" data-module="${type}">
+                    <div class="flex items-center">
+                        <img
+                        src="/assets/TKBB-Turkce-25-Yil-Renkli.svg"
+                        width="56"
+                        class="rounded-[16px] h-[56px] mr-4"
+                        alt=""
+                        />
+                        <div class="flex flex-col truncate overflow-hidden">
+                        <p class="truncate overflow-hidden" style="max-width:400px">${item.name}</p>
+                        <p class="mt-[8px]">
+                            <span> TKBB </span> <span class="mx-[8px]">•</span>
+                        </p>
+                        </div>
+                    </div>
+                    <a class="flex items-center text-mavi" href="${item.slug}"
+                        ><p class="pr-3">Sonuca Git</p>
+                        <svg
+                        stroke="currentColor"
+                        fill="currentColor"
+                        stroke-width="0"
+                        viewBox="0 0 24 24"
+                        height="24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                        >
+                        <path
+                            d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"
+                        ></path>
+                        </svg>
+                    </a>
+                    </div>
+                `
+        }
+        searchResults.querySelector("#search-content").innerHTML = html
+      }))
+    } else {
+
+      searchResults.classList.add("hidden");
+    }
+  })
+  document.querySelectorAll(".search-filter-button").forEach((item) => {
+    item.addEventListener("click", function() {
+      document.querySelectorAll(".search-filter-button").forEach((button) => button.classList.remove("bg-mavi", "text-[#fff]"))
+
+      item.classList.add("bg-mavi");
+      item.classList.add("text-[#fff]");
+      const module = item.getAttribute("data-module");
+      if (module == "all") {
+        searchResults.querySelectorAll(`div[data-module]`).forEach((el) => {
+          el.classList.remove("hidden");
+        })
+        return
+      }
+      searchResults.querySelectorAll(`div[data-module]`).forEach((el) => {
+        el.classList.add("hidden");
+      })
+      searchResults.querySelectorAll(`div[data-module=${module}]`).forEach((el) => {
+        el.classList.remove("hidden");
+      })
+    })
+  })
+</script>          </div>
+          <div class="flex flex-row gap-4">
+            <a href="/kurumsal/sikca-sorulan-sorular">SSS</a><a href="/kurumsal/iletisim">İletişim</a>
+          </div>
+          <div class="relative">
+            <div id="notification-button" class="rounded-full p-4 cursor-pointer ml-12 bg-gri">
+              <img class="open-icon" src="/assets/Notification-647cc45f.svg" />
+              <svg class="close-icon" stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="24" width="24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM12 10.5858L14.8284 7.75736L16.2426 9.17157L13.4142 12L16.2426 14.8284L14.8284 16.2426L12 13.4142L9.17157 16.2426L7.75736 14.8284L10.5858 12L7.75736 9.17157L9.17157 7.75736L12 10.5858Z"></path>
+              </svg>
+            </div>
+            <div id="notifications" class="flex hidden flex-col absolute bg-gri top-[70px] w-[360px] z-[100] left-[-250px] rounded-[21px] shadow-2xl">
+              <div class="flex flex-col px-8 py-[29px]">
+                <div class="flex justify-between items-center w-full">
+                  <h2>Bildirimler</h2>
+                </div>
+              </div>
+              <div class="border-b opacity-20"></div>
+              <div class="flex flex-col pr-[40px] pl-[32px] py-[8px] h-[450px] overflow-auto">
+                                  <div class="flex flex-col justify-between py-6 gap-4 border-b">
+                    <div class="flex items-center">
+                      <div class="flex flex-col">
+                        <h2 class="text-siyah">
+                          TÜRK EXİMBANK KATILIM ESASLI İHRACAT ALACAK SİGORTASI PROGRAMINI UYGULAMAYA ALIYOR                        </h2>
+                        <p class="mt-[8px] text-opacity-80"></p>
+                      </div>
+                    </div>
+                    <a class="flex items-center justify-start text-start text-mavi text-[18px]" href="/kurumsal/duyurular/turk-eximbank-katilim-esasli-ihracat-alacak-sigortasi-programini-uygulamaya-aliyor">
+                      <p class=""></p>
+                      Git                      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"></path>
+                      </svg>
+                    </a>
+                  </div>
+                                  <div class="flex flex-col justify-between py-6 gap-4 border-b">
+                    <div class="flex items-center">
+                      <div class="flex flex-col">
+                        <h2 class="text-siyah">
+                          BANKACILIK SEKTÖRÜNÜN GELİŞİMİNE DAİR KAMUOYU DUYURUSU                        </h2>
+                        <p class="mt-[8px] text-opacity-80"></p>
+                      </div>
+                    </div>
+                    <a class="flex items-center justify-start text-start text-mavi text-[18px]" href="/kurumsal/duyurular/duyurutkbb-bankacilik-sektoru-tum-yukumluluklerini-karsilayabilecek-gucte-051327">
+                      <p class=""></p>
+                      Git                      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"></path>
+                      </svg>
+                    </a>
+                  </div>
+                                  <div class="flex flex-col justify-between py-6 gap-4 border-b">
+                    <div class="flex items-center">
+                      <div class="flex flex-col">
+                        <h2 class="text-siyah">
+                          DEPREMDEN ETKİLENEN KATILIM BANKASI MÜŞTERİLERİNE YÖNELİK ALINAN YÖNETİM KURULU KARARINA İLİŞKİN KAMUOYU DUYURUSU                        </h2>
+                        <p class="mt-[8px] text-opacity-80"></p>
+                      </div>
+                    </div>
+                    <a class="flex items-center justify-start text-start text-mavi text-[18px]" href="/kurumsal/duyurular/depremden-etkilenen-katilim-bankasi-musterilerine-yonelik-alinan-yonetim-kurulu-kararina-iliskin-kamuoyu-duyurusu">
+                      <p class=""></p>
+                      Git                      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"></path>
+                      </svg>
+                    </a>
+                  </div>
+                                  <div class="flex flex-col justify-between py-6 gap-4 border-b">
+                    <div class="flex items-center">
+                      <div class="flex flex-col">
+                        <h2 class="text-siyah">
+                          TÜRKİYE’NİN GRİ LİSTEDEN ÇIKARILMASI HAKKINDA KAMUOYU DUYURUSU                        </h2>
+                        <p class="mt-[8px] text-opacity-80"></p>
+                      </div>
+                    </div>
+                    <a class="flex items-center justify-start text-start text-mavi text-[18px]" href="/kurumsal/duyurular/turkiyenin-gri-listeden-cikarilmasi-hakkinda-kamuoyu-duyurusu">
+                      <p class=""></p>
+                      Git                      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"></path>
+                      </svg>
+                    </a>
+                  </div>
+                                  <div class="flex flex-col justify-between py-6 gap-4 border-b">
+                    <div class="flex items-center">
+                      <div class="flex flex-col">
+                        <h2 class="text-siyah">
+                           SAHTE DÖVİZ BANKNOT İŞLEMLERİNE İLİŞKİN KAMUOYU DUYURUSU                        </h2>
+                        <p class="mt-[8px] text-opacity-80"></p>
+                      </div>
+                    </div>
+                    <a class="flex items-center justify-start text-start text-mavi text-[18px]" href="/kurumsal/duyurular/sahte-doviz-banknot-islemlerine-iliskin-kamuoyu-duyurusu">
+                      <p class=""></p>
+                      Git                      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"></path>
+                      </svg>
+                    </a>
+                  </div>
+                
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="flex flex-row justify-center items-center bg-[#F8F8F9] text-homeDesc">
+          <div class="flex lg:flex-row flex-col justify-center items-center">
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Anasayfa                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/kurumsal" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Kurumsal                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/merkezi-danisma-komitesi" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Merkezi Danışma Komitesi                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/mevzuat" target="_self">
+                    <div class="px-4 relative text-navigationHeader text-[#1D398D]">
+                      Mevzuat                    </div>
+                                          <div class="flex absolute left-[calc(50%-20px)] mt-[12px]">
+                        <div class="border border-mavi w-[24px]"></div>
+                      </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/veripetegi" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Banka ve Sektör Bilgileri                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/finansal-tuketiciler" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Finansal Tüketici                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/faaliyetler" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      Faaliyetler                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="/iktisadi-isletme" target="_self">
+                    <div class="px-4 relative text-navigationHeader ">
+                      İktisadi İşletme                    </div>
+                                      </a>
+                                      <div><img src="/assets/slash-fc8488d8.svg" /></div>
+                                  </div>
+              </div>
+                          
+              <div>
+                <div class="relative flex items-center group gap-x-2">
+                  <a class="py-[32px]" href="https://www.borsaistanbul.com/tr/sayfa/10350/katilim-finans" target="_blank">
+                    <div class="px-4 relative text-navigationHeader ">
+                      BIST Katılım                    </div>
+                                      </a>
+                                  </div>
+              </div>
+                      </div>
+          <div class="flex gap-[14px] ml-[81px] items-center group relative py-[32px] cursor-pointer">
+            <!-- <img src="/assets/TRflag-e758f634.svg" alt="" /> -->
+            <p>Türkçe</p>
+            <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
+              <path d="M11.9997 13.1714L16.9495 8.22168L18.3637 9.63589L11.9997 15.9999L5.63574 9.63589L7.04996 8.22168L11.9997 13.1714Z"></path>
+            </svg>
+            <div class="group-hover:flex flex-col hidden absolute top-[85px] right-[-100px] z-50 bg-gri rounded-[21px] p-6">
+              <div class="flex flex-col">
+                <div class="cursor-pointer flex gap-3 items-center border-b pb-4 pr-[150px]"><a href="/lang/tr?redirect=mevzuat/birligimiz-duzenlemeleri/idari-duzenlemeler" class="flex items-center gap-3">
+                    <!-- <img src="/assets/TRflag-e758f634.svg" alt="" /> -->
+                    Türkçe
+                  </a>
+                </div>
+                <div class="cursor-pointer flex gap-3 items-center border-b py-4 pr-[150px]"><a href="https://en.tkbb.org.tr/" class="flex items-center gap-3">
+                    <!-- <img src="/assets/ENflag-b5fe1a2d.svg" alt="" /> -->
+                    English
+                  </a>
+                </div>
+                <div class="cursor-pointer flex gap-3 items-center border-b py-4 pl-[150px]"><a href="https://ar.tkbb.org.tr/" class="flex items-center gap-3">
+                    <!-- <img src="/assets/ENflag-b5fe1a2d.svg" alt="" /> -->
+                    عربي
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-between items-center w-full px-[30px] py-[10px] bg-[#ffff] sticky top-0 z-[200] main-menu-nav-mobile">
+        <a href="/"><img class="w-[141px] h-[64px]" src="/assets/TKBB-Turkce-25-Yil-Renkli.svg" alt="" /></a>
+        <button id="mobile-menu-button" class="h-full flex items-center justify-center cursor-pointer">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5C3 3.87479 3.02811 3 6.5 3C9.97189 3 10 3.87479 10 6.5C10 9.12521 10.0111 10 6.5 10C2.98893 10 3 9.12521 3 6.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M14 6.5C14 3.87479 14.0281 3 17.5 3C20.9719 3 21 3.87479 21 6.5C21 9.12521 21.0111 10 17.5 10C13.9889 10 14 9.12521 14 6.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M3 17.5C3 14.8748 3.02811 14 6.5 14C9.97189 14 10 14.8748 10 17.5C10 20.1252 10.0111 21 6.5 21C2.98893 21 3 20.1252 3 17.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M14 17.5C14 14.8748 14.0281 14 17.5 14C20.9719 14 21 14.8748 21 17.5C21 20.1252 21.0111 21 17.5 21C13.9889 21 14 20.1252 14 17.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="h-[80px] bg-beyaz w-full flex flex-row items-center justify-between fixed bottom-[0px] z-[100] main-menu-nav-mobile">
+        <div class="h-[80px] w-full flex items-center justify-center">
+          <a class="w-full h-full m-[24px] flex items-center justify-center cursor-pointer" href="/"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9.15722 20.7714V17.7047C9.1572 16.9246 9.79312 16.2908 10.581 16.2856H13.4671C14.2587 16.2856 14.9005 16.9209 14.9005 17.7047V20.7809C14.9003 21.4432 15.4343 21.9845 16.103 22H18.0271C19.9451 22 21.5 20.4607 21.5 18.5618V9.83784C21.4898 9.09083 21.1355 8.38935 20.538 7.93303L13.9577 2.6853C12.8049 1.77157 11.1662 1.77157 10.0134 2.6853L3.46203 7.94256C2.86226 8.39702 2.50739 9.09967 2.5 9.84736V18.5618C2.5 20.4607 4.05488 22 5.97291 22H7.89696C8.58235 22 9.13797 21.4499 9.13797 20.7714" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg></a>
+        </div>
+        <div class="h-[48px] w-[1px] bg-[#18181C] opacity-10"></div>
+        <!-- <div class="h-[80px] w-full flex items-center justify-center">
+          <button id="mobile-menu-button" class="w-full h-full m-[24px] flex items-center justify-center cursor-pointer">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5C3 3.87479 3.02811 3 6.5 3C9.97189 3 10 3.87479 10 6.5C10 9.12521 10.0111 10 6.5 10C2.98893 10 3 9.12521 3 6.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M14 6.5C14 3.87479 14.0281 3 17.5 3C20.9719 3 21 3.87479 21 6.5C21 9.12521 21.0111 10 17.5 10C13.9889 10 14 9.12521 14 6.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M3 17.5C3 14.8748 3.02811 14 6.5 14C9.97189 14 10 14.8748 10 17.5C10 20.1252 10.0111 21 6.5 21C2.98893 21 3 20.1252 3 17.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M14 17.5C14 14.8748 14.0281 14 17.5 14C20.9719 14 21 14.8748 21 17.5C21 20.1252 21.0111 21 17.5 21C13.9889 21 14 20.1252 14 17.5Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div> -->
+        <div class="h-[48px] w-[1px] bg-[#18181C] opacity-10"></div>
+        <div class="h-[80px] w-full flex items-center justify-center">
+          <button id="mobile-search-button" class="w-full h-full m-[24px] flex items-center justify-center cursor-pointer">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M11.7664 20.7551C16.7306 20.7551 20.7549 16.7308 20.7549 11.7666C20.7549 6.80233 16.7306 2.77802 11.7664 2.77802C6.80215 2.77802 2.77783 6.80233 2.77783 11.7666C2.77783 16.7308 6.80215 20.7551 11.7664 20.7551Z" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M18.0181 18.4851L21.5421 22" stroke="#1D398D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="mobile-menu" class="h-full w-full hidden flex flex-col items-center fixed bottom-[80px] z-[200]">
+        <div class="flex-col h-full w-full flex bg-beyaz z-[300] overflow-y-auto max-h-screen">
+          <div class="mt-[80px]">
+            <div class="bg-[#1D398D] h-2"></div>
+            <div class="px-[30px] py-[10px] bg-[#ffff]">
+              <a href="/"><img class="w-[141px] h-[64px]" src="/assets/TKBB-Turkce-25-Yil-Renkli.svg" alt="" /></a>
+            </div>
+            <ul>
+              <div class="flex lg:flex-row flex-col justify-center lg:items-center w-full overflow-y-auto">
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/kurumsal">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Kurumsal</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8">
+                      <div class="h-[1px] w-full bg-[#18181C] opacity-10"></div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/merkezi-danisma-komitesi">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Merkezi Danışma Komitesi</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8">
+                      <div class="h-[1px] w-full bg-[#18181C] opacity-10"></div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/mevzuat">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Mevzuat</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8">
+                      <div class="h-[1px] w-full bg-[#18181C] opacity-10"></div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/veripetegi">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Banka ve Sektör Bilgileri</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8">
+                      <div class="h-[1px] w-full bg-[#18181C] opacity-10"></div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/finansal-tuketiciler">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Finansal Tüketici</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8">
+                      <div class="h-[1px] w-full bg-[#18181C] opacity-10"></div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/faaliyetler">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">Faaliyetler</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="/iktisadi-isletme">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">İktisadi İşletme</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="relative flex-col flex items-center group w-full">
+                    <a class="py-[24px] w-full" href="https://www.borsaistanbul.com/tr/sayfa/10350/katilim-finans" target="_blank">
+                      <div class="flex flex-row items-center justify-between w-full px-8">
+                        <div class="relative">BIST Katılım</div>
+                        <div>
+                          <svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.75 6.72569L0.75 6.72569" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M9.7002 0.701289L15.7502 6.72529L9.7002 12.7503" stroke="#18181C" stroke-linecap="round" stroke-linejoin="round"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    </a>
+                    <div class="w-full px-8"></div>
+                  </div>
+                </div>
+
+              </div>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div id="mobile-search" class="h-full hidden w-full flex flex-col items-center fixed bottom-[80px] z-[200]">
+        <div class="flex-col h-full w-full flex bg-beyaz z-[300]">
+          <div class="mt-[80px]">
+            <div class="bg-[#1D398D] h-2"></div>
+            <div class="px-[30px] py-[10px] bg-[#ffff]">
+              <a href="/"><img class="w-[141px] h-[64px]" src="/assets/TKBB-Turkce-25-Yil-Renkli.svg" alt="" /></a>
+            </div>
+            <ul>
+              <div class="flex flex-row items-center w-full relative mt-[24px] px-[24px]">
+                <input type="text" class="border rounded-[40px] pl-12 w-full py-4 bg-[##1D398D0D] backdrop-blur-[25px]" placeholder="Ara..." value="" /><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute text-opacity-80 top-4 left-10">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.3-4.3"></path>
+                </svg>
+              </div>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col justify-center items-center zoom zoom-none">
+        <div class="bg-page-banner-bg bg-cover w-full mb-[72px]">
+  <div class="flex flex-col justify-center items-center py-[66px]">
+    <h3 class="pb-[20px]">Mevzuat</h3>
+    <div class="flex items-center">
+      <a href="/">
+        <p class="text-opacity-80 pr-4">Anasayfa</p>
+      </a>
+      <svg
+        stroke="currentColor"
+        fill="currentColor"
+        stroke-width="0"
+        viewBox="0 0 24 24"
+        class="text-opacity-80"
+        height="20"
+        width="20"
+        xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M13.1714 12.0007L8.22168 7.05093L9.63589 5.63672L15.9999 12.0007L9.63589 18.3646L8.22168 16.9504L13.1714 12.0007Z"></path>
+      </svg>
+                        <span class="text-mavi pl-4"> Mevzuat</span>
+                  </div>
+  </div>
+</div><div class="flex justify-start gap-[72px] w-full md:flex-nowrap flex-wrap lg:px-[240px] px-8">
+  <div
+  class="rounded-[32px] bg-[#fff] md:p-8 p-2 border border-[#18181C1A] hidden lg:block h-fit"
+>
+  <div class="flex text-mavi items-center pb-[48px]">
+    <svg
+      stroke="currentColor"
+      fill="currentColor"
+      stroke-width="0"
+      viewBox="0 0 24 24"
+      height="24"
+      width="24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M7 5V2C7 1.44772 7.44772 1 8 1H16C16.5523 1 17 1.44772 17 2V5H21C21.5523 5 22 5.44772 22 6V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V6C2 5.44772 2.44772 5 3 5H7ZM4 15V19H20V15H4ZM11 11V13H13V11H11ZM9 3V5H15V3H9Z"
+      ></path></svg
+    ><span class="text-siyah text-[24px] font-EuclidMedium pl-4">
+      Mevzuat    </span>
+  </div>
+  <div class="w-[350px]">
+      
+    <a href="/mevzuat/kanun_ve_alt_duzenlemeler"><span class="text-[18px]">İlgili Kanunlar ve Alt Düzenlemeler</span></a>          <div class="border-b border-siyah opacity-20 my-6 w-[336px]" daata-bok></div>
+          
+    <div class="accordion-item"><div class="accordion-title items-center justify-between flex cursor-pointer"><div><div class="text-[18px]">Birliğimiz Düzenlemeleri</div></div><div><svg stroke="currentColor" fill="currentColor" stroke-width="0" class="plus" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"></path></svg></div></div><div class="accordion-content"><div class="text-siyah-60 pt-6 pl-6 pb-6"><a href="/mevzuat/birligimiz-duzenlemeleri/idari-duzenlemeler"><span class="text-[18px] text-mavi active-link">İdari Düzenlemeler</span></a><div class="border-b border-siyah opacity-20 my-6 w-[336px]"></div><a href="/mevzuat/birligimiz-duzenlemeleri/mesleki-duzenlemeler"><span class="text-[18px]">Mesleki Düzenlemeler</span></a></div></div></div><div class="border-b border-siyah opacity-20 my-6 w-[336px]"></div>          </div>
+</div>
+    <div class="flex flex-col w-full flex-wrap">
+    <div class="flex flex-col w-full gap-12">
+              <div data-nested="yes"
+    class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+  >
+    <div data-nested="yes" class="accordion-title flex items-center justify-between cursor-pointer">
+      <h2>
+        Çalışma Komiteleri Toplantı Esas Ve Usülleri
+      </h2>
+      <div>
+        <p class="flex justify-center items-center gap-4">
+          Göster
+          <svg
+            stroke="currentColor"
+            fill="currentColor"
+            stroke-width="0"
+            viewBox="0 0 24 24"
+            height="1em"
+            width="1em"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11.9997 13.1714L16.9495 8.22168L18.3637 9.63589L11.9997 15.9999L5.63574 9.63589L7.04996 8.22168L11.9997 13.1714Z"
+            ></path>
+          </svg>
+        </p>
+      </div>
+    </div>
+    <div class="accordion-content mt-10">
+        <div
+  class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+>
+  <div class="accordion-content mt-10">
+    <div class="flex flex-col gap-6">
+      <div
+        class="flex flex-col border border-siyah-1 md:p-8 p-2 rounded-[32px]"
+      >
+        <div class="flex justify-between items-center">
+          <div class="flex justify-between items-center"><img class="mr-6" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAwCAYAAABjezibAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAPUSURBVHgB7ZlLTBNBGMe/mbbxSayPKHKxiI+jGJUYL9ZEGxNNrJ704OtgoicfAY+2XtVEPGniQYwHPQkeTAxCKBdjELB4k4dFD1gSo1VABHZn/L4puyzQ0qWPbQ/8EtjZ2ZnOf7//N7MvBmno23/Uz3VxAkD6QYJPMvDCImEA0aoPb3dDDrjnVsT2H/Xpuv4EdN0vLSNlA/avtu731wSCTMgnwFl9VUfzbTu/wa07sX1HqoWmf8SiHwqAAAiSE1LKcKwmcN5OHz5LnIS2bKzMBl3KBjsilUCyFc+u0SlxBiSyFwOzUBslEHMuhPnigyKAAtoWEskperi9AMXDSyKndcyDC00LQvHxCl1PKZJLxk5ACUAplkokZ3PWqnwTqw6aE88lRHShtqZISx+OlQWduVMrJ31GGVeKaKb2SqRnzBTJocAwS45v72yJgBAPMvWhK5DuGWukcuEFSnnVatm2rtZreCXJeJljjPlo64bC49U8f0O4vW5UYCTDOBkaNE3Dm5CkkLl4pFTpwPr3HZHgAC7GLlR2ND+FRVJwiw3osjZQEwgtsptzETQHBBjE/03CxV9JzhMeIRJpGy9fnnBc4GKgk3HM4mygNbGkBRJLAnNlSWCuLAlMO3DZanvtwAHwIR3KjgfM/Y23aqGy9SVUPLqXsa8TdzOzWLFnlxI7dKUOtO/xjO1zjqCnYlPqH0YLF7JxvKsHpoaGIRNZRXBL0zOY6B1Q0eBlqzASwxCvC6s6Yv2NK+A9fVKVE88bzX5rL52FdfhHkO3j3Z9g6HIt5F0gsWznVojfDIMYGYU1KKbi4V34GjwHqw4eUOIMC8uOzeTe7xcvQcOobQzVwrfgWVvjZG0xRYZsoqj9uP9I2enevEnl11jknWnhz8fP1EkQYmQMtHjSVjpmx+K8zGK+OplrLhRJYsToKOQLWwLdm8txWWhUVhp4z5yCZTuq1CTZcP2yspOi9q+7R9lMkaRjlI9217yUY9tpRAPRZLDO2InPA1B+JwTuinIlLl6XfFAj6+mEaK0jyO5csH1HTQIphwiaxX9eN8MvzC8SnSqXqD1h9MkW27M43UDpEj1XYQZZLTMJXC4m+76AE6DFgRje/fugNElwwaAdSpcoBykjULr0cM/UVBM+fyagBHG5XPW8MhpJgI23TUWgofL9m+SDe1VnSz1uIlAi4Ku3QYyeCpp5qcOKi3QASgAhxEWKHpVNgSqcnB8qpkiaC/hy85B6EztTN5++vYfDKPY8NvaBc0TIRSNyBmm/Y05/9fRjEb+nMV++F/PplWMQbwTaMRBN1qhZ+Q+A0JTSMNne1wAAAABJRU5ErkJggg==" alt="">
+            <div class="flex flex-col">
+              <h2 class="text-[18px]">Çalışma Komiteleri Toplantı Esas ve Usülleri
+              </h2>
+              <p class="text-siyah-40"></p>
+            </div>
+          </div>
+          <a
+            href="/upload/Calisma_Komiteleri_Toplanti_Esas_ve_Usulleri_REVIZE_12.08.2021.docx"
+            target="_blank"
+            ><button
+              class="flex bg-gri hover:bg-[#fff] text-mavi items-center px-6 py-[18px] hover:border hover:border-mavi rounded-[24px] + undefined"
+            >
+              <svg
+                stroke="currentColor"
+                fill="currentColor"
+                stroke-width="0"
+                viewBox="0 0 24 24"
+                height="20"
+                width="20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12.0003 3C17.3924 3 21.8784 6.87976 22.8189 12C21.8784 17.1202 17.3924 21 12.0003 21C6.60812 21 2.12215 17.1202 1.18164 12C2.12215 6.87976 6.60812 3 12.0003 3ZM12.0003 19C16.2359 19 19.8603 16.052 20.7777 12C19.8603 7.94803 16.2359 5 12.0003 5C7.7646 5 4.14022 7.94803 3.22278 12C4.14022 16.052 7.7646 19 12.0003 19ZM12.0003 16.5C9.51498 16.5 7.50026 14.4853 7.50026 12C7.50026 9.51472 9.51498 7.5 12.0003 7.5C14.4855 7.5 16.5003 9.51472 16.5003 12C16.5003 14.4853 14.4855 16.5 12.0003 16.5ZM12.0003 14.5C13.381 14.5 14.5003 13.3807 14.5003 12C14.5003 10.6193 13.381 9.5 12.0003 9.5C10.6196 9.5 9.50026 10.6193 9.50026 12C9.50026 13.3807 10.6196 14.5 12.0003 14.5Z"
+                ></path>
+              </svg>
+              <p class="ml-[12px] md:flex hidden">İncele</p>
+            </button></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        </div></div>
+                    <div data-nested="yes"
+    class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+  >
+    <div data-nested="yes" class="accordion-title flex items-center justify-between cursor-pointer">
+      <h2>
+        Merkezi Danışma Komitesi
+      </h2>
+      <div>
+        <p class="flex justify-center items-center gap-4">
+          Göster
+          <svg
+            stroke="currentColor"
+            fill="currentColor"
+            stroke-width="0"
+            viewBox="0 0 24 24"
+            height="1em"
+            width="1em"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11.9997 13.1714L16.9495 8.22168L18.3637 9.63589L11.9997 15.9999L5.63574 9.63589L7.04996 8.22168L11.9997 13.1714Z"
+            ></path>
+          </svg>
+        </p>
+      </div>
+    </div>
+    <div class="accordion-content mt-10">
+        <div
+  class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+>
+  <div class="accordion-content mt-10">
+    <div class="flex flex-col gap-6">
+      <div
+        class="flex flex-col border border-siyah-1 md:p-8 p-2 rounded-[32px]"
+      >
+        <div class="flex justify-between items-center">
+          <div class="flex justify-between items-center">
+          <img
+            class="mr-6"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAqCAYAAADFw8lbAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAT4SURBVHgB1VkxbBRHFP27TkPlU1qkZAvaU0hDZeRzhxSk4PYooiiVIyTcINlNwJVRKDASMk0QSWGXcQpHoeMs04QK2SUUZwQlcDTQsDvMm5l/+29vd2fGAiSeNLd7u7P737z//+zs34SOCaVUR29O6/ajbpnb77gGjHQbuu2eboMkSQb0uaAJ9nS7qdtrFQ9cc0+30/Sp4Ag+kFb3nxRqc1Co/h+52j0ozLGjl7YBOIZz6HPwvKiSxr0y+liAi52CBqO3Sq3/V6juWq5mL783bWkrH5/rrr1Xc7/nZh9Y+bvsh3Nb/xfjgTjcdGHUisRDMtObB2RjkK7fV3Rnr6A378o+33yd0O6lVG+JVnfseWBpPqH1xdT0PXujoGevlLiGqH8mpZVzY/ND3RZ0DA+jibo4AsnOs1dEF+/mdPhiut9mP9VGE9p+pOjX7WLi3NYvKf3QTejhU0XnbxdT14Lw7qUZs3VkFzXZx3V8Uh9JEDh7o57k3KnEkMRArt+fJrK6Y9VHP7QqcB3u/e+hUTuDzaZES2tI4oIdJgmVpKsloCaAfjBaR4RDQbh5Arj3xbuFuQfZqa02ydIKSdNRtwyjrLpSAgrBZU1qMu7sqVZVGbBVIdtpJKpxFSRhvI0kgGQB2kgCIOlTlYFQcZ7JHJdpok7uZeyfv503uhtApiNJACSKD1LV2RPN/TgMHJYxd08R1biHH0xBdfEmMXfKbptis44ADwjJ14bDF0p66eoEUZdpPRjdftTuSmnMZWsQoCrAnvD1dR7tsaqs6GX8YNQ+heA6TooQtzOgFOBzPyDjWuOCJGr++BID6J4sSbbFcZ1xHhjfow1uBgB+wgyQOmk7mNBD4o3jkxWKAV/TPenvCy5uYGY5CUV7+PfwqV9Na4QVpWjw0y1EUdt/LMYFEJ2PMczxFeP20rDdhhIVnDIQNU8Aubppg1tABPeXePPOXuNLJoZQ9DsQzazhsIsx2cf0l+BreLA+CK91Eqxc6QtASl8IviL7ltj5djUPSpDRxozZdpZzOg5irkcsH62b/qPUEQ0OcE6i0DiTKBMxtH/5qgKiZukfOmWw6qEDqzMcO8OQU/QIe/zE8aF8uoQNTCJ2Dhac9kD0nxjD5aRN0Yh9/Io3ggG7fsSvFj7EPl0kYh6/CBPXf4RSUKp/kEx/4YhvUWuJhi/XJOTyMERR8dpiPJ7KP0vzadBaMWa5xpBrWF+MQk3h9ltjoq7KNgBJfmlrA6/sQ/oyeGUv1pmN6J8ZZ/yACxLyybSGn5VzqVcpNhbqfijEYeV7K0BfcHD4mXfGR5yqRmaUYnxvizAY6gHOdniibbKfPWHrWA63ZC2q+qy/ptsQsqPA1Qa8rQIhcc0K8QteEzb7iaxDXZPnJti4GWBBtxFcxSWbOkDREFWRvVxRaXM7SLo4HpKt7I0aiTqypiOTbQsDqap4Lo9hY9OaaKq8wN0g6fqB3GJd+bFWMpdpIDvEKPevzNQSkaquL06fZzWRfHVqImn3r6SS5EJU2bFKFsYOfkud4UlCXO3DgGQIYL+pJAkVcS+QFDH5fRPJILjS+AbXsVHWRnlblsZR/ubSOMriOMelcZTNy9J4rsvq5TmHjZDSeAzhTFU+NuADQujHBnyYqPnY0KNPBdSpdPtTHf/zzcZxCMYvgSZJ98gWMFAbgPsymvwghoa4w5oX64nH1WknFB8Ab77hJpIDtcYAAAAASUVORK5CYII="
+            alt=""
+          />
+            <div class="flex flex-col">
+              <h2 class="text-[18px]">MÜLGA - Danışma Kurulunun Oluşumu, Görev, Çalışma Usül ve Esasları
+              </h2>
+              <p class="text-siyah-40"></p>
+            </div>
+          </div>
+          <a
+            href="/mevzuat/birligimiz-duzenlemeleri-details/2098"
+            target="_blank"
+            ><button
+              class="flex bg-gri hover:bg-[#fff] text-mavi items-center px-6 py-[18px] hover:border hover:border-mavi rounded-[24px] + undefined"
+            >
+              <svg
+                stroke="currentColor"
+                fill="currentColor"
+                stroke-width="0"
+                viewBox="0 0 24 24"
+                height="20"
+                width="20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12.0003 3C17.3924 3 21.8784 6.87976 22.8189 12C21.8784 17.1202 17.3924 21 12.0003 21C6.60812 21 2.12215 17.1202 1.18164 12C2.12215 6.87976 6.60812 3 12.0003 3ZM12.0003 19C16.2359 19 19.8603 16.052 20.7777 12C19.8603 7.94803 16.2359 5 12.0003 5C7.7646 5 4.14022 7.94803 3.22278 12C4.14022 16.052 7.7646 19 12.0003 19ZM12.0003 16.5C9.51498 16.5 7.50026 14.4853 7.50026 12C7.50026 9.51472 9.51498 7.5 12.0003 7.5C14.4855 7.5 16.5003 9.51472 16.5003 12C16.5003 14.4853 14.4855 16.5 12.0003 16.5ZM12.0003 14.5C13.381 14.5 14.5003 13.3807 14.5003 12C14.5003 10.6193 13.381 9.5 12.0003 9.5C10.6196 9.5 9.50026 10.6193 9.50026 12C9.50026 13.3807 10.6196 14.5 12.0003 14.5Z"
+                ></path>
+              </svg>
+              <p class="ml-[12px] md:flex hidden">İncele</p>
+            </button></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        
+        <div
+  class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+>
+  <div class="accordion-content mt-10">
+    <div class="flex flex-col gap-6">
+      <div
+        class="flex flex-col border border-siyah-1 md:p-8 p-2 rounded-[32px]"
+      >
+        <div class="flex justify-between items-center">
+          <div class="flex justify-between items-center">
+          <img
+            class="mr-6"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAqCAYAAADFw8lbAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAT4SURBVHgB1VkxbBRHFP27TkPlU1qkZAvaU0hDZeRzhxSk4PYooiiVIyTcINlNwJVRKDASMk0QSWGXcQpHoeMs04QK2SUUZwQlcDTQsDvMm5l/+29vd2fGAiSeNLd7u7P737z//+zs34SOCaVUR29O6/ajbpnb77gGjHQbuu2eboMkSQb0uaAJ9nS7qdtrFQ9cc0+30/Sp4Ag+kFb3nxRqc1Co/h+52j0ozLGjl7YBOIZz6HPwvKiSxr0y+liAi52CBqO3Sq3/V6juWq5mL783bWkrH5/rrr1Xc7/nZh9Y+bvsh3Nb/xfjgTjcdGHUisRDMtObB2RjkK7fV3Rnr6A378o+33yd0O6lVG+JVnfseWBpPqH1xdT0PXujoGevlLiGqH8mpZVzY/ND3RZ0DA+jibo4AsnOs1dEF+/mdPhiut9mP9VGE9p+pOjX7WLi3NYvKf3QTejhU0XnbxdT14Lw7qUZs3VkFzXZx3V8Uh9JEDh7o57k3KnEkMRArt+fJrK6Y9VHP7QqcB3u/e+hUTuDzaZES2tI4oIdJgmVpKsloCaAfjBaR4RDQbh5Arj3xbuFuQfZqa02ydIKSdNRtwyjrLpSAgrBZU1qMu7sqVZVGbBVIdtpJKpxFSRhvI0kgGQB2kgCIOlTlYFQcZ7JHJdpok7uZeyfv503uhtApiNJACSKD1LV2RPN/TgMHJYxd08R1biHH0xBdfEmMXfKbptis44ADwjJ14bDF0p66eoEUZdpPRjdftTuSmnMZWsQoCrAnvD1dR7tsaqs6GX8YNQ+heA6TooQtzOgFOBzPyDjWuOCJGr++BID6J4sSbbFcZ1xHhjfow1uBgB+wgyQOmk7mNBD4o3jkxWKAV/TPenvCy5uYGY5CUV7+PfwqV9Na4QVpWjw0y1EUdt/LMYFEJ2PMczxFeP20rDdhhIVnDIQNU8Aubppg1tABPeXePPOXuNLJoZQ9DsQzazhsIsx2cf0l+BreLA+CK91Eqxc6QtASl8IviL7ltj5djUPSpDRxozZdpZzOg5irkcsH62b/qPUEQ0OcE6i0DiTKBMxtH/5qgKiZukfOmWw6qEDqzMcO8OQU/QIe/zE8aF8uoQNTCJ2Dhac9kD0nxjD5aRN0Yh9/Io3ggG7fsSvFj7EPl0kYh6/CBPXf4RSUKp/kEx/4YhvUWuJhi/XJOTyMERR8dpiPJ7KP0vzadBaMWa5xpBrWF+MQk3h9ltjoq7KNgBJfmlrA6/sQ/oyeGUv1pmN6J8ZZ/yACxLyybSGn5VzqVcpNhbqfijEYeV7K0BfcHD4mXfGR5yqRmaUYnxvizAY6gHOdniibbKfPWHrWA63ZC2q+qy/ptsQsqPA1Qa8rQIhcc0K8QteEzb7iaxDXZPnJti4GWBBtxFcxSWbOkDREFWRvVxRaXM7SLo4HpKt7I0aiTqypiOTbQsDqap4Lo9hY9OaaKq8wN0g6fqB3GJd+bFWMpdpIDvEKPevzNQSkaquL06fZzWRfHVqImn3r6SS5EJU2bFKFsYOfkud4UlCXO3DgGQIYL+pJAkVcS+QFDH5fRPJILjS+AbXsVHWRnlblsZR/ubSOMriOMelcZTNy9J4rsvq5TmHjZDSeAzhTFU+NuADQujHBnyYqPnY0KNPBdSpdPtTHf/zzcZxCMYvgSZJ98gWMFAbgPsymvwghoa4w5oX64nH1WknFB8Ab77hJpIDtcYAAAAASUVORK5CYII="
+            alt=""
+          />
+            <div class="flex flex-col">
+              <h2 class="text-[18px]">MÜLGA - Danışma Kurulunun Çalışma Usül ve Esasları Hakkında İç Yönerge
+              </h2>
+              <p class="text-siyah-40"></p>
+            </div>
+          </div>
+          <a
+            href="/mevzuat/birligimiz-duzenlemeleri-details/2099"
+            target="_blank"
+            ><button
+              class="flex bg-gri hover:bg-[#fff] text-mavi items-center px-6 py-[18px] hover:border hover:border-mavi rounded-[24px] + undefined"
+            >
+              <svg
+                stroke="currentColor"
+                fill="currentColor"
+                stroke-width="0"
+                viewBox="0 0 24 24"
+                height="20"
+                width="20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12.0003 3C17.3924 3 21.8784 6.87976 22.8189 12C21.8784 17.1202 17.3924 21 12.0003 21C6.60812 21 2.12215 17.1202 1.18164 12C2.12215 6.87976 6.60812 3 12.0003 3ZM12.0003 19C16.2359 19 19.8603 16.052 20.7777 12C19.8603 7.94803 16.2359 5 12.0003 5C7.7646 5 4.14022 7.94803 3.22278 12C4.14022 16.052 7.7646 19 12.0003 19ZM12.0003 16.5C9.51498 16.5 7.50026 14.4853 7.50026 12C7.50026 9.51472 9.51498 7.5 12.0003 7.5C14.4855 7.5 16.5003 9.51472 16.5003 12C16.5003 14.4853 14.4855 16.5 12.0003 16.5ZM12.0003 14.5C13.381 14.5 14.5003 13.3807 14.5003 12C14.5003 10.6193 13.381 9.5 12.0003 9.5C10.6196 9.5 9.50026 10.6193 9.50026 12C9.50026 13.3807 10.6196 14.5 12.0003 14.5Z"
+                ></path>
+              </svg>
+              <p class="ml-[12px] md:flex hidden">İncele</p>
+            </button></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        
+        <div
+  class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+>
+  <div class="accordion-content mt-10">
+    <div class="flex flex-col gap-6">
+      <div
+        class="flex flex-col border border-siyah-1 md:p-8 p-2 rounded-[32px]"
+      >
+        <div class="flex justify-between items-center">
+          <div class="flex justify-between items-center"><img class="mr-6" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAwCAYAAABjezibAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAPUSURBVHgB7ZlLTBNBGMe/mbbxSayPKHKxiI+jGJUYL9ZEGxNNrJ704OtgoicfAY+2XtVEPGniQYwHPQkeTAxCKBdjELB4k4dFD1gSo1VABHZn/L4puyzQ0qWPbQ/8EtjZ2ZnOf7//N7MvBmno23/Uz3VxAkD6QYJPMvDCImEA0aoPb3dDDrjnVsT2H/Xpuv4EdN0vLSNlA/avtu731wSCTMgnwFl9VUfzbTu/wa07sX1HqoWmf8SiHwqAAAiSE1LKcKwmcN5OHz5LnIS2bKzMBl3KBjsilUCyFc+u0SlxBiSyFwOzUBslEHMuhPnigyKAAtoWEskperi9AMXDSyKndcyDC00LQvHxCl1PKZJLxk5ACUAplkokZ3PWqnwTqw6aE88lRHShtqZISx+OlQWduVMrJ31GGVeKaKb2SqRnzBTJocAwS45v72yJgBAPMvWhK5DuGWukcuEFSnnVatm2rtZreCXJeJljjPlo64bC49U8f0O4vW5UYCTDOBkaNE3Dm5CkkLl4pFTpwPr3HZHgAC7GLlR2ND+FRVJwiw3osjZQEwgtsptzETQHBBjE/03CxV9JzhMeIRJpGy9fnnBc4GKgk3HM4mygNbGkBRJLAnNlSWCuLAlMO3DZanvtwAHwIR3KjgfM/Y23aqGy9SVUPLqXsa8TdzOzWLFnlxI7dKUOtO/xjO1zjqCnYlPqH0YLF7JxvKsHpoaGIRNZRXBL0zOY6B1Q0eBlqzASwxCvC6s6Yv2NK+A9fVKVE88bzX5rL52FdfhHkO3j3Z9g6HIt5F0gsWznVojfDIMYGYU1KKbi4V34GjwHqw4eUOIMC8uOzeTe7xcvQcOobQzVwrfgWVvjZG0xRYZsoqj9uP9I2enevEnl11jknWnhz8fP1EkQYmQMtHjSVjpmx+K8zGK+OplrLhRJYsToKOQLWwLdm8txWWhUVhp4z5yCZTuq1CTZcP2yspOi9q+7R9lMkaRjlI9217yUY9tpRAPRZLDO2InPA1B+JwTuinIlLl6XfFAj6+mEaK0jyO5csH1HTQIphwiaxX9eN8MvzC8SnSqXqD1h9MkW27M43UDpEj1XYQZZLTMJXC4m+76AE6DFgRje/fugNElwwaAdSpcoBykjULr0cM/UVBM+fyagBHG5XPW8MhpJgI23TUWgofL9m+SDe1VnSz1uIlAi4Ku3QYyeCpp5qcOKi3QASgAhxEWKHpVNgSqcnB8qpkiaC/hy85B6EztTN5++vYfDKPY8NvaBc0TIRSNyBmm/Y05/9fRjEb+nMV++F/PplWMQbwTaMRBN1qhZ+Q+A0JTSMNne1wAAAABJRU5ErkJggg==" alt="">
+            <div class="flex flex-col">
+              <h2 class="text-[18px]">Merkezi Danışma Komitesinin Oluşumu, Görevleri ve Çalışma Usul ve Esasları Hakkında Yönerge
+              </h2>
+              <p class="text-siyah-40"></p>
+            </div>
+          </div>
+          <a
+            href="/upload/2194650372-yonerge.pdf"
+            target="_blank"
+            ><button
+              class="flex bg-gri hover:bg-[#fff] text-mavi items-center px-6 py-[18px] hover:border hover:border-mavi rounded-[24px] + undefined"
+            >
+              <svg
+                stroke="currentColor"
+                fill="currentColor"
+                stroke-width="0"
+                viewBox="0 0 24 24"
+                height="20"
+                width="20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12.0003 3C17.3924 3 21.8784 6.87976 22.8189 12C21.8784 17.1202 17.3924 21 12.0003 21C6.60812 21 2.12215 17.1202 1.18164 12C2.12215 6.87976 6.60812 3 12.0003 3ZM12.0003 19C16.2359 19 19.8603 16.052 20.7777 12C19.8603 7.94803 16.2359 5 12.0003 5C7.7646 5 4.14022 7.94803 3.22278 12C4.14022 16.052 7.7646 19 12.0003 19ZM12.0003 16.5C9.51498 16.5 7.50026 14.4853 7.50026 12C7.50026 9.51472 9.51498 7.5 12.0003 7.5C14.4855 7.5 16.5003 9.51472 16.5003 12C16.5003 14.4853 14.4855 16.5 12.0003 16.5ZM12.0003 14.5C13.381 14.5 14.5003 13.3807 14.5003 12C14.5003 10.6193 13.381 9.5 12.0003 9.5C10.6196 9.5 9.50026 10.6193 9.50026 12C9.50026 13.3807 10.6196 14.5 12.0003 14.5Z"
+                ></path>
+              </svg>
+              <p class="ml-[12px] md:flex hidden">İncele</p>
+            </button></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        </div></div>
+                    <div data-nested="yes"
+    class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+  >
+    <div data-nested="yes" class="accordion-title flex items-center justify-between cursor-pointer">
+      <h2>
+        MÜLGA - Kalkınma Ve Yatırım Bankalarına Faizsiz Bankacılık İlke Ve Standartlarına Uygunluk Konusunda Hizmet Verecek Kuruluşların Belirlenmesine İlişkin Usul Ve Esaslar Hakkında Yönerge
+      </h2>
+      <div>
+        <p class="flex justify-center items-center gap-4">
+          Göster
+          <svg
+            stroke="currentColor"
+            fill="currentColor"
+            stroke-width="0"
+            viewBox="0 0 24 24"
+            height="1em"
+            width="1em"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11.9997 13.1714L16.9495 8.22168L18.3637 9.63589L11.9997 15.9999L5.63574 9.63589L7.04996 8.22168L11.9997 13.1714Z"
+            ></path>
+          </svg>
+        </p>
+      </div>
+    </div>
+    <div class="accordion-content mt-10">
+        <div
+  class="accordion-item md:md:p-8 p-2 p-2 rounded-[32px] border border-siyah-1"
+>
+  <div class="accordion-content mt-10">
+    <div class="flex flex-col gap-6">
+      <div
+        class="flex flex-col border border-siyah-1 md:p-8 p-2 rounded-[32px]"
+      >
+        <div class="flex justify-between items-center">
+          <div class="flex justify-between items-center">
+          <img
+            class="mr-6"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAqCAYAAADFw8lbAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAT4SURBVHgB1VkxbBRHFP27TkPlU1qkZAvaU0hDZeRzhxSk4PYooiiVIyTcINlNwJVRKDASMk0QSWGXcQpHoeMs04QK2SUUZwQlcDTQsDvMm5l/+29vd2fGAiSeNLd7u7P737z//+zs34SOCaVUR29O6/ajbpnb77gGjHQbuu2eboMkSQb0uaAJ9nS7qdtrFQ9cc0+30/Sp4Ag+kFb3nxRqc1Co/h+52j0ozLGjl7YBOIZz6HPwvKiSxr0y+liAi52CBqO3Sq3/V6juWq5mL783bWkrH5/rrr1Xc7/nZh9Y+bvsh3Nb/xfjgTjcdGHUisRDMtObB2RjkK7fV3Rnr6A378o+33yd0O6lVG+JVnfseWBpPqH1xdT0PXujoGevlLiGqH8mpZVzY/ND3RZ0DA+jibo4AsnOs1dEF+/mdPhiut9mP9VGE9p+pOjX7WLi3NYvKf3QTejhU0XnbxdT14Lw7qUZs3VkFzXZx3V8Uh9JEDh7o57k3KnEkMRArt+fJrK6Y9VHP7QqcB3u/e+hUTuDzaZES2tI4oIdJgmVpKsloCaAfjBaR4RDQbh5Arj3xbuFuQfZqa02ydIKSdNRtwyjrLpSAgrBZU1qMu7sqVZVGbBVIdtpJKpxFSRhvI0kgGQB2kgCIOlTlYFQcZ7JHJdpok7uZeyfv503uhtApiNJACSKD1LV2RPN/TgMHJYxd08R1biHH0xBdfEmMXfKbptis44ADwjJ14bDF0p66eoEUZdpPRjdftTuSmnMZWsQoCrAnvD1dR7tsaqs6GX8YNQ+heA6TooQtzOgFOBzPyDjWuOCJGr++BID6J4sSbbFcZ1xHhjfow1uBgB+wgyQOmk7mNBD4o3jkxWKAV/TPenvCy5uYGY5CUV7+PfwqV9Na4QVpWjw0y1EUdt/LMYFEJ2PMczxFeP20rDdhhIVnDIQNU8Aubppg1tABPeXePPOXuNLJoZQ9DsQzazhsIsx2cf0l+BreLA+CK91Eqxc6QtASl8IviL7ltj5djUPSpDRxozZdpZzOg5irkcsH62b/qPUEQ0OcE6i0DiTKBMxtH/5qgKiZukfOmWw6qEDqzMcO8OQU/QIe/zE8aF8uoQNTCJ2Dhac9kD0nxjD5aRN0Yh9/Io3ggG7fsSvFj7EPl0kYh6/CBPXf4RSUKp/kEx/4YhvUWuJhi/XJOTyMERR8dpiPJ7KP0vzadBaMWa5xpBrWF+MQk3h9ltjoq7KNgBJfmlrA6/sQ/oyeGUv1pmN6J8ZZ/yACxLyybSGn5VzqVcpNhbqfijEYeV7K0BfcHD4mXfGR5yqRmaUYnxvizAY6gHOdniibbKfPWHrWA63ZC2q+qy/ptsQsqPA1Qa8rQIhcc0K8QteEzb7iaxDXZPnJti4GWBBtxFcxSWbOkDREFWRvVxRaXM7SLo4HpKt7I0aiTqypiOTbQsDqap4Lo9hY9OaaKq8wN0g6fqB3GJd+bFWMpdpIDvEKPevzNQSkaquL06fZzWRfHVqImn3r6SS5EJU2bFKFsYOfkud4UlCXO3DgGQIYL+pJAkVcS+QFDH5fRPJILjS+AbXsVHWRnlblsZR/ubSOMriOMelcZTNy9J4rsvq5TmHjZDSeAzhTFU+NuADQujHBnyYqPnY0KNPBdSpdPtTHf/zzcZxCMYvgSZJ98gWMFAbgPsymvwghoa4w5oX64nH1WknFB8Ab77hJpIDtcYAAAAASUVORK5CYII="
+            alt=""
+          />
+            <div class="flex flex-col">
+              <h2 class="text-[18px]">MÜLGA - Kalkınma Ve Yatırım Bankalarına Faizsiz Bankacılık İlke Ve Standartlarına Uygunluk Konusunda Hizmet Verecek Kuruluşların Belirlenmesine İlişkin Usul Ve Esaslar Hakkında Yönerge
+              </h2>
+              <p class="text-siyah-40"></p>
+            </div>
+          </div>
+          <a
+            href="/mevzuat/birligimiz-duzenlemeleri-details/2097"
+            target="_blank"
+            ><button
+              class="flex bg-gri hover:bg-[#fff] text-mavi items-center px-6 py-[18px] hover:border hover:border-mavi rounded-[24px] + undefined"
+            >
+              <svg
+                stroke="currentColor"
+                fill="currentColor"
+                stroke-width="0"
+                viewBox="0 0 24 24"
+                height="20"
+                width="20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12.0003 3C17.3924 3 21.8784 6.87976 22.8189 12C21.8784 17.1202 17.3924 21 12.0003 21C6.60812 21 2.12215 17.1202 1.18164 12C2.12215 6.87976 6.60812 3 12.0003 3ZM12.0003 19C16.2359 19 19.8603 16.052 20.7777 12C19.8603 7.94803 16.2359 5 12.0003 5C7.7646 5 4.14022 7.94803 3.22278 12C4.14022 16.052 7.7646 19 12.0003 19ZM12.0003 16.5C9.51498 16.5 7.50026 14.4853 7.50026 12C7.50026 9.51472 9.51498 7.5 12.0003 7.5C14.4855 7.5 16.5003 9.51472 16.5003 12C16.5003 14.4853 14.4855 16.5 12.0003 16.5ZM12.0003 14.5C13.381 14.5 14.5003 13.3807 14.5003 12C14.5003 10.6193 13.381 9.5 12.0003 9.5C10.6196 9.5 9.50026 10.6193 9.50026 12C9.50026 13.3807 10.6196 14.5 12.0003 14.5Z"
+                ></path>
+              </svg>
+              <p class="ml-[12px] md:flex hidden">İncele</p>
+            </button></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        </div></div>
+                </div>
+  </div>
+
+</div>
+      </div>
+      <div id="asistan-container" class="fixed z-10 hidden bottom-[7rem] screen500:right-[6rem] right-0 z-[150] bg-gri p-4 rounded-[18px] border border-siyah/10 screen500:h-[25rem] h-[20rem] screen500:w-[20rem] w-[18rem]">
+        <div class="flex flex-col justify-center items-start text-[#fff]">
+          <div class="bg-mavi px-8 py-4 rounded-[18px] w-full text-center">
+            Asistan'a sor          </div>
+          <div class="bg-gri screen500:h-[17rem] h-[12.5rem] overflow-auto text-mavi w-full content">
+            <div></div>
+            <p class="mt-4 welcome-text">
+              Asistana hoş geldiniz. Lütfen aramak istediğiniz kelimeyi giriniz.            </p>
+          </div>
+          <input type="text" class="border border-mavi/20 rounded-[32px] w-full pl-4 text-[14px] py-2" placeholder="Ara..." value="" />
+        </div>
+      </div>
+
+      <div id="asistan-button" class="fixed bottom-[6.5rem] sm:bottom-[2.5rem] bg-mavi text-[#fff] right-[1.5rem] z-50 rounded-[32px] p-4 cursor-pointer">
+        <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="24" width="24" class="open-icon" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5.45455 15L1 18.5V3C1 2.44772 1.44772 2 2 2H17C17.5523 2 18 2.44772 18 3V15H5.45455ZM4.76282 13H16V4H3V14.3851L4.76282 13ZM8 17H18.2372L20 18.3851V8H21C21.5523 8 22 8.44772 22 9V22.5L17.5455 19H9C8.44772 19 8 18.5523 8 18V17Z"></path>
+        </svg>
+        <svg class="close-icon" stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="24" width="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM12 10.5858L14.8284 7.75736L16.2426 9.17157L13.4142 12L16.2426 14.8284L14.8284 16.2426L12 13.4142L9.17157 16.2426L7.75736 14.8284L10.5858 12L7.75736 9.17157L9.17157 7.75736L12 10.5858Z"></path>
+        </svg>
+      </div>
+
+      <div class="flex flex-col justify-center zoom zoom-none relative mt-[200px]">
+        <div class="absolute top-[-56px] right-[88px] text-[white] rounded-[60px] bg-mavi p-4 cursor-pointer">
+          <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="40" width="40" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12.9999 7.82843V20H10.9999V7.82843L5.63589 13.1924L4.22168 11.7782L11.9999 4L19.778 11.7782L18.3638 13.1924L12.9999 7.82843Z"></path>
+          </svg>
+        </div>
+        <div class="flex flex-wrap pt-[88px] pb-[89px] px-[10%] sm:justify-between max-sm:text-center justify-center max-sm:gap-12">
+          <div class="grid md:grid-cols-3 grid-cols-1 items-start">
+            <div class="flex flex-col justify-center">
+              <img src="/assets/TKBB-Turkce-25-Yil-Renkli.svg" alt="" width="176" class="sm:mb-[72px] mb-[30px]" />
+            </div>
+            <div class="flex flex-col">
+              <h3 class="pb-[24px] font-EuclidSemiBold text-[20px]">
+                Kurumsal              </h3>
+
+              <a class="pb-4 text-mavi text-[20px]" href="/kurumsal/hakkimizda/tarihce">
+                <p>Hakkımızda</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/vizyon-ve-misyon">
+                <p>Vizyon ve Misyon</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/yonetim-kurulu">
+                <p>Yönetim Kurulu</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/merkezi-danisma-komitesi">
+                <p>Merkezi Danışma Komitesi</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/genel-sekreterlik">
+                <p>Genel Sekreter</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/calisma-komiteleri">
+                <p>Çalışma Komiteleri</p>
+              </a><a class="pb-4 text-mavi text-[20px]" href="/kurumsal/medya/kurumsal-logolarimiz">
+                <p>Medya</p>
+              </a>
+            </div>
+            <div class="grid lg:grid-cols-2 grid-cols-1">
+              <div class="flex flex-col">
+                <h3 class="font-EuclidSemiBold text-[20px] mb-[24px]">
+                  Yayınlar                </h3>
+                <a class="pb-4 text-mavi text-[20px]" href="/faaliyetler/yayinlar/sektor-sunumlari">
+                  <p>Sektör Sunumları</p>
+                </a><a class="pb-4 text-mavi text-[20px]" href="/faaliyetler/yayinlar/yillik-sektor-raporlari">
+                  <p>Yayınlar</p>
+                </a>
+              </div>
+              <div class="flex flex-col">
+                <h3 class="font-EuclidSemiBold text-[20px] mb-[24px]">
+                  Etkinlikler                </h3>
+                <a class="pb-4 text-mavi text-[20px]" href="/faaliyetler/etkinlikler/duzenlenen-etkinlikler" target="">
+                  <p>Düzenlenen Etkinlikler</p>
+                </a><a class="pb-4 text-mavi text-[20px]" href="/faaliyetler/etkinlikler/genel-kurul-fotograflari" target="">
+                  <p>Foto Galeri</p>
+                </a><a class="pb-4 text-mavi text-[20px]" href="/faaliyetler/etkinlikler/genel-kurul-videolari" target="">
+                  <p>Video Galeri</p>
+                </a><a class="pb-4 text-mavi text-[20px]" href="https://tkbbegitim.org.tr/" target="_blank">
+                  <p>Eğitim</p>
+                </a>
+              </div>
+              <div class="flex flex-col lg:col-span-2">
+                <h3 class="mb-[24px] font-EuclidSemiBold text-[20px]">
+                  Adres                </h3>
+                <p class="text-[20px] text-mavi">
+                  İnkılap Mh. Dr.Adnan Büyükdeniz Cd. Akofis Park C Blok Kat:9 No:8 34768 <br />
+                  Ümraniye / İSTANBUL
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex lg:flex-row flex-col sm:justify-between items-center justify-center lg:gap-0 gap-7 bg-gri px-[10%] py-[30px] pb-4">
+          <div class="flex flex-row text-mavi">
+            <a href="https://www.facebook.com/TurkiyeKatilimBankalariBirligi" target="_blank"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="23" width="23" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 13.5H16.5L17.5 9.5H14V7.5C14 6.47062 14 5.5 16 5.5H17.5V2.1401C17.1743 2.09685 15.943 2 14.6429 2C11.9284 2 10 3.65686 10 6.69971V9.5H7V13.5H10V22H14V13.5Z"></path>
+              </svg></a>
+            <div class="pl-[24px]"></div>
+            <div class="border border-mavi opacity-10"></div>
+            <div class="pr-[24px]"></div>
+            <a href="https://twitter.com/TkbbOrgTr" target="_blank"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="23" width="23" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 2H1L9.26086 13.0145L1.44995 21.9999H4.09998L10.4883 14.651L16 22H23L14.3917 10.5223L21.8001 2H19.1501L13.1643 8.88578L8 2ZM17 20L5 4H7L19 20H17Z"></path>
+              </svg></a>
+            <div class="pl-[24px]"></div>
+            <div class="border border-mavi opacity-10"></div>
+            <div class="pr-[24px]"></div>
+            <a href="https://www.linkedin.com/company/turkiyekatilimbankalaribirligi/" target="_blank"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="23" width="23" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6.94048 4.99993C6.94011 5.81424 6.44608 6.54702 5.69134 6.85273C4.9366 7.15845 4.07187 6.97605 3.5049 6.39155C2.93793 5.80704 2.78195 4.93715 3.1105 4.19207C3.43906 3.44699 4.18654 2.9755 5.00048 2.99993C6.08155 3.03238 6.94097 3.91837 6.94048 4.99993ZM7.00048 8.47993H3.00048V20.9999H7.00048V8.47993ZM13.3205 8.47993H9.34048V20.9999H13.2805V14.4299C13.2805 10.7699 18.0505 10.4299 18.0505 14.4299V20.9999H22.0005V13.0699C22.0005 6.89993 14.9405 7.12993 13.2805 10.1599L13.3205 8.47993Z"></path>
+              </svg></a>
+            <div class="pl-[24px]"></div>
+            <div class="border border-mavi opacity-10"></div>
+            <div class="pr-[24px]"></div>
+            <a href="https://www.youtube.com/channel/UCMaeftVh75lxuWK0QZpjTSQ/featured" target="_blank"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="23" width="23" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12.2439 4C12.778 4.00294 14.1143 4.01586 15.5341 4.07273L16.0375 4.09468C17.467 4.16236 18.8953 4.27798 19.6037 4.4755C20.5486 4.74095 21.2913 5.5155 21.5423 6.49732C21.942 8.05641 21.992 11.0994 21.9982 11.8358L21.9991 11.9884L21.9991 11.9991C21.9991 11.9991 21.9991 12.0028 21.9991 12.0099L21.9982 12.1625C21.992 12.8989 21.942 15.9419 21.5423 17.501C21.2878 18.4864 20.5451 19.261 19.6037 19.5228C18.8953 19.7203 17.467 19.8359 16.0375 19.9036L15.5341 19.9255C14.1143 19.9824 12.778 19.9953 12.2439 19.9983L12.0095 19.9991L11.9991 19.9991C11.9991 19.9991 11.9956 19.9991 11.9887 19.9991L11.7545 19.9983C10.6241 19.9921 5.89772 19.941 4.39451 19.5228C3.4496 19.2573 2.70692 18.4828 2.45587 17.501C2.0562 15.9419 2.00624 12.8989 2 12.1625V11.8358C2.00624 11.0994 2.0562 8.05641 2.45587 6.49732C2.7104 5.51186 3.45308 4.73732 4.39451 4.4755C5.89772 4.05723 10.6241 4.00622 11.7545 4H12.2439ZM9.99911 8.49914V15.4991L15.9991 11.9991L9.99911 8.49914Z"></path>
+              </svg></a>
+            <div class="pl-[24px]"></div>
+            <div class="border border-mavi opacity-10"></div>
+            <div class="pr-[24px]"></div>
+            <a href="https://www.instagram.com/tkbborgtr/" target="_blank"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="23" width="23" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13.0281 2.00098C14.1535 2.00284 14.7238 2.00879 15.2166 2.02346L15.4107 2.02981C15.6349 2.03778 15.8561 2.04778 16.1228 2.06028C17.1869 2.10944 17.9128 2.27778 18.5503 2.52528C19.2094 2.77944 19.7661 3.12278 20.3219 3.67861C20.8769 4.23444 21.2203 4.79278 21.4753 5.45028C21.7219 6.08694 21.8903 6.81361 21.9403 7.87778C21.9522 8.14444 21.9618 8.36564 21.9697 8.58989L21.976 8.78397C21.9906 9.27672 21.9973 9.8471 21.9994 10.9725L22.0002 11.7182C22.0003 11.8093 22.0003 11.9033 22.0003 12.0003L22.0002 12.2824L21.9996 13.0281C21.9977 14.1535 21.9918 14.7238 21.9771 15.2166L21.9707 15.4107C21.9628 15.6349 21.9528 15.8561 21.9403 16.1228C21.8911 17.1869 21.7219 17.9128 21.4753 18.5503C21.2211 19.2094 20.8769 19.7661 20.3219 20.3219C19.7661 20.8769 19.2069 21.2203 18.5503 21.4753C17.9128 21.7219 17.1869 21.8903 16.1228 21.9403C15.8561 21.9522 15.6349 21.9618 15.4107 21.9697L15.2166 21.976C14.7238 21.9906 14.1535 21.9973 13.0281 21.9994L12.2824 22.0002C12.1913 22.0003 12.0973 22.0003 12.0003 22.0003L11.7182 22.0002L10.9725 21.9996C9.8471 21.9977 9.27672 21.9918 8.78397 21.9771L8.58989 21.9707C8.36564 21.9628 8.14444 21.9528 7.87778 21.9403C6.81361 21.8911 6.08861 21.7219 5.45028 21.4753C4.79194 21.2211 4.23444 20.8769 3.67861 20.3219C3.12278 19.7661 2.78028 19.2069 2.52528 18.5503C2.27778 17.9128 2.11028 17.1869 2.06028 16.1228C2.0484 15.8561 2.03871 15.6349 2.03086 15.4107L2.02457 15.2166C2.00994 14.7238 2.00327 14.1535 2.00111 13.0281L2.00098 10.9725C2.00284 9.8471 2.00879 9.27672 2.02346 8.78397L2.02981 8.58989C2.03778 8.36564 2.04778 8.14444 2.06028 7.87778C2.10944 6.81278 2.27778 6.08778 2.52528 5.45028C2.77944 4.79194 3.12278 4.23444 3.67861 3.67861C4.23444 3.12278 4.79278 2.78028 5.45028 2.52528C6.08778 2.27778 6.81278 2.11028 7.87778 2.06028C8.14444 2.0484 8.36564 2.03871 8.58989 2.03086L8.78397 2.02457C9.27672 2.00994 9.8471 2.00327 10.9725 2.00111L13.0281 2.00098ZM12.0003 7.00028C9.23738 7.00028 7.00028 9.23981 7.00028 12.0003C7.00028 14.7632 9.23981 17.0003 12.0003 17.0003C14.7632 17.0003 17.0003 14.7607 17.0003 12.0003C17.0003 9.23738 14.7607 7.00028 12.0003 7.00028ZM12.0003 9.00028C13.6572 9.00028 15.0003 10.3429 15.0003 12.0003C15.0003 13.6572 13.6576 15.0003 12.0003 15.0003C10.3434 15.0003 9.00028 13.6576 9.00028 12.0003C9.00028 10.3434 10.3429 9.00028 12.0003 9.00028ZM17.2503 5.50028C16.561 5.50028 16.0003 6.06018 16.0003 6.74943C16.0003 7.43867 16.5602 7.99944 17.2503 7.99944C17.9395 7.99944 18.5003 7.43954 18.5003 6.74943C18.5003 6.06018 17.9386 5.49941 17.2503 5.50028Z"></path>
+              </svg></a>
+          </div>
+          <div class="flex sm:flex-row flex-col justify-center">
+            <div class="flex text-mavi opacity-60 items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail">
+                <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+              </svg><a href="mailto:bilgi@tkbb.org.tr" class="pl-4">bilgi@tkbb.org.tr</a>
+            </div>
+            <div class="border-l border-mavi mx-6 opacity-10"></div>
+            <div class="flex text-mavi opacity-60 items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-printer">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect width="12" height="8" x="6" y="14"></rect>
+              </svg><span class="pl-4">+90 (216) 636 95 49</span>
+            </div>
+            <div class="border-l border-mavi mx-6 opacity-10"></div>
+            <div class="flex text-mavi opacity-60 items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-phone">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg><a href="tel:+902166369500" class="pl-4">+90 (216) 636 95 00</a>
+            </div>
+            <div class="border-l border-mavi mx-6 opacity-10"></div>
+            <div class="flex text-mavi opacity-60 items-center">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18.3327 11.6628H16.666V6.02769L10.0592 11.9444L3.33268 6.00938V15.8294H11.666V17.4961H2.49935C2.03912 17.4961 1.66602 17.123 1.66602 16.6628V3.32943C1.66602 2.86919 2.03912 2.49609 2.49935 2.49609H17.4994C17.9596 2.49609 18.3327 2.86919 18.3327 3.32943V11.6628ZM3.7589 4.16276L10.0509 9.71443L16.2502 4.16276H3.7589ZM15.8327 18.3294L12.8864 15.3832L14.0649 14.2047L15.8327 15.9724L18.7789 13.0261L19.9574 14.2047L15.8327 18.3294Z" fill="#1D398D"></path>
+              </svg><a href="mailto:tkbb@hs03.kep.tr" class="pl-4">tkbb@hs03.kep.tr</a>
+            </div>
+          </div>
+          <div class="cursor-pointer flex flex-row lg:justify-center items-center text-center">
+            <img src="/assets/eds-icon.svg" width="150" />
+          </div>
+        </div>
+        <div class="flex justify-between py-4 px-[10%] bg-gri">
+          <div>
+            <p class="text-left">
+              Copyright © 2024 TKBB Tüm Hakları Saklıdır.            </p>
+          </div>
+          <div class="flex items-center">
+            <div class="">
+              <a href="/kullanim-sartlari">
+                <p>Kullanım Şartları</p>
+              </a>
+            </div>
+            <div class="ml-4 font-bold">
+              <a href="/cerez-politikasi">
+                <p class="text-right">Çerez Politikası</p>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>
