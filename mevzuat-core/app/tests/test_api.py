@@ -110,7 +110,8 @@ def test_approve_freezes_units_records_learning_and_outbox(settings, env, client
         ob = s.scalars(select(Outbox)).one()
         assert ob.event_type == "record.approved" and ob.payload["units"] == ["RISK_YONETIMI"]
     # ikinci karar: 409; birim değişikliği de kapalı
-    again = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "reject"})
+    again = c.post(f"/api/v1/regulations/{reg_id}/decision",
+                   json={"decision": "reject", "rejection_reason": "duplicate"})
     assert again.status_code == 409 and again.json()["error"]["code"] == "already_decided"
     assert c.put(f"/api/v1/regulations/{reg_id}/units", json={"unit_codes": ["HAZINE"]}).status_code == 409
 
@@ -173,11 +174,30 @@ def test_unknown_unit_and_reject(settings, env, client):  # noqa: F811
     c, sf = client
     r = c.put(f"/api/v1/regulations/{reg_id}/units", json={"unit_codes": ["HUKUK_ISLERI"]})
     assert r.status_code == 400 and r.json()["error"]["details"] == {"unit_codes": ["HUKUK_ISLERI"]}
-    r = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "reject"})
+    r = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "reject", "rejection_reason": "duplicate"})
     assert r.json()["status"] == "Reddedildi" and r.json()["auditTrail"][-1]["icon"] == "x-circle"
+    assert r.json()["auditTrail"][-1]["rejectionReason"] == "duplicate"
     with sf() as s:
-        assert s.scalars(select(Outbox)).one().event_type == "record.rejected"
+        event = s.scalars(select(AuditEvent).where(AuditEvent.event_type == "rejected")).one()
+        assert event.payload["rejection_reason"] == "duplicate"
+        outbox = s.scalars(select(Outbox)).one()
+        assert outbox.event_type == "record.rejected" and outbox.payload["rejection_reason"] == "duplicate"
         assert s.scalars(select(FewshotExample)).first() is None
+
+
+def test_rejection_feedback_requires_reason_and_other_details(settings, env, client):  # noqa: F811
+    reg_id = _ready(settings, env)
+    c, _ = client
+    missing_reason = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "reject"})
+    assert missing_reason.status_code == 422
+    missing_details = c.post(f"/api/v1/regulations/{reg_id}/decision",
+                             json={"decision": "reject", "rejection_reason": "other", "note": "  "})
+    assert missing_details.status_code == 422
+    accepted_other = c.post(f"/api/v1/regulations/{reg_id}/decision",
+                            json={"decision": "reject", "rejection_reason": "other", "note": "Kurum kapsamı dışında."})
+    assert accepted_other.status_code == 200
+    assert accepted_other.json()["decisionNote"] == "Kurum kapsamı dışında."
+    assert accepted_other.json()["auditTrail"][-1]["rejectionReason"] == "other"
 
 
 def test_audit_is_append_only(settings, env, client):  # noqa: F811

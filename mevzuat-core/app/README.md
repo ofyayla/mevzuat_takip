@@ -300,7 +300,7 @@ uvicorn app.api.main:app --port 8000      # portal: http://localhost:8000/   API
 | GET | `/api/v1/regulations/stats` | Metrik kartları (filtrelerden bağımsız) |
 | GET | `/api/v1/regulations/{id}` | Detay: özet, kanıtlar, kaldırılan ifadeler, birim önerileri, güven, kaynak bağlantıları, denetim izi, YZ alanları; `ETag` |
 | POST | `/api/v1/regulations/{id}/views` | "İncelemeye alındı" (kullanıcı başına bir kez) |
-| POST | `/api/v1/regulations/{id}/decision` | `{"decision": "approve"\|"reject", "note"?}`; yalnızca `Bekliyor` (aksi 409); `If-Match` (aksi 412) |
+| POST | `/api/v1/regulations/{id}/decision` | `{"decision": "approve"\|"reject", "note"?, "rejection_reason"?}`; reddetmede neden: `not_banking_related`, `outdated`, `duplicate`, `other` zorunlu; `other` için `note` zorunlu; yalnızca `Bekliyor` (aksi 409); `If-Match` (aksi 412) |
 | PUT | `/api/v1/regulations/{id}/units` | `{"unit_codes": [...], "note"?}`; YZ gerekçesi korunur, yeni birim "Uzman tarafından manuel olarak atandı." |
 | GET | `/api/v1/units`, `/sources`, `/sources/health`, `/me` | Seçenekler, kaynak sağlığı (durum çubuğu + uyarı şeridi), kullanıcı |
 | GET/PUT | `/api/v1/admin/settings` | Çalışma zamanı eşikleri (admin) |

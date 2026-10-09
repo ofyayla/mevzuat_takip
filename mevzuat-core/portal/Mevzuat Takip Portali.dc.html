@@ -361,6 +361,9 @@
                         <div style="padding-bottom:22px; min-width:0;">
                           <div style="font-size:13.5px; font-weight:500; color:var(--foreground); margin-bottom:2px;">{{ ev.action }}</div>
                           <div style="font-size:12.5px; color:var(--muted-foreground); margin-bottom:4px;">{{ ev.actor }} · {{ ev.timestamp }}</div>
+                          <sc-if value="{{ ev.rejectionReasonLabel }}" hint-placeholder-val="{{ false }}">
+                            <div style="font-size:13px; color:var(--foreground); background:var(--muted); border-radius:var(--radius-sm); padding:8px 10px; max-width:440px; margin-bottom:4px;">Reddetme nedeni: {{ ev.rejectionReasonLabel }}</div>
+                          </sc-if>
                           <sc-if value="{{ ev.note }}" hint-placeholder-val="{{ false }}">
                             <div style="font-size:13px; color:var(--foreground); background:var(--muted); border-radius:var(--radius-sm); padding:8px 10px; max-width:440px;">{{ ev.note }}</div>
                           </sc-if>
@@ -479,10 +482,30 @@
           <h3 style="font-size:16px; font-weight:600; margin:0; color:var(--foreground);">{{ confirmTitle }}</h3>
         </div>
         <p style="font-size:13.5px; color:var(--muted-foreground); line-height:1.55; margin:0 0 8px;">{{ confirmBody }} Bu işlem geri alınamaz.</p>
-        <textarea placeholder="Not (isteğe bağlı) — denetim izine yazılır" value="{{ confirmNote }}" onChange="{{ setConfirmNote }}" rows="3" style="width:100%; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground); resize:vertical;"></textarea>
+        <sc-if value="{{ isApproveConfirm }}" hint-placeholder-val="{{ false }}">
+          <textarea placeholder="Not (isteğe bağlı) — denetim izine yazılır" value="{{ confirmNote }}" onChange="{{ setConfirmNote }}" rows="3" style="width:100%; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground); resize:vertical;"></textarea>
+        </sc-if>
+        <sc-if value="{{ isRejectConfirm }}" hint-placeholder-val="{{ false }}">
+          <label style="display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:500; color:var(--foreground);">
+            Reddetme nedeni
+            <select value="{{ rejectionReason }}" onChange="{{ setRejectionReason }}" style="height:40px; padding:0 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);">
+              <option value="">Bir neden seçin</option>
+              <option value="not_banking_related">Bankacılıkla ilişkili değil</option>
+              <option value="outdated">Güncelliğini yitirmiş</option>
+              <option value="duplicate">Mükerrer kayıt</option>
+              <option value="other">Diğer</option>
+            </select>
+          </label>
+          <sc-if value="{{ isOtherRejection }}" hint-placeholder-val="{{ false }}">
+            <label style="display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:500; color:var(--foreground);">
+              Açıklama
+              <textarea placeholder="Reddetme nedeninizi açıklayın" value="{{ confirmNote }}" onChange="{{ setConfirmNote }}" rows="3" maxlength="2000" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground); resize:vertical;"></textarea>
+            </label>
+          </sc-if>
+        </sc-if>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
           <button onClick="{{ closeConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Vazgeç</button>
-          <button onClick="{{ doConfirm }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:{{ confirmBtnBg }}; color:white; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">{{ confirmBtnLabel }}</button>
+          <button onClick="{{ doConfirm }}" disabled="{{ confirmDisabled }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:{{ confirmBtnBg }}; color:white; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans); opacity:{{ confirmOpacity }};">{{ confirmBtnLabel }}</button>
         </div>
       </div>
     </div>
@@ -600,6 +623,7 @@ class Component extends DCLogic {
     sourceHealthOpen: false,
     confirmType: null,
     confirmNote: '',
+    rejectionReason: '',
     unitModalOpen: false,
     unitModalSelected: [],
     unitSearch: '',
@@ -698,10 +722,11 @@ class Component extends DCLogic {
   toggleSourceHealth = () => this.setState({ sourceHealthOpen: !this.state.sourceHealthOpen });
 
   // ------------------------------------------------------------------ karar
-  openApprove = () => this.setState({ confirmType: 'approve', confirmNote: '' });
-  openReject = () => this.setState({ confirmType: 'reject', confirmNote: '' });
+  openApprove = () => this.setState({ confirmType: 'approve', confirmNote: '', rejectionReason: '' });
+  openReject = () => this.setState({ confirmType: 'reject', confirmNote: '', rejectionReason: '' });
   closeConfirm = () => this.setState({ confirmType: null });
   setConfirmNote = (e) => this.setState({ confirmNote: e.target.value });
+  setRejectionReason = (e) => this.setState({ rejectionReason: e.target.value });
   stopProp = (e) => e.stopPropagation();
 
   showToast = (msg) => {
@@ -722,12 +747,12 @@ class Component extends DCLogic {
   };
 
   doConfirm = () => {
-    const { confirmType, selectedId, detailEtag, confirmNote, busy } = this.state;
+    const { confirmType, selectedId, detailEtag, confirmNote, rejectionReason, busy } = this.state;
     if (!selectedId || busy) return;
     this.setState({ busy: true });
     api('/regulations/' + selectedId + '/decision', {
       method: 'POST', headers: detailEtag ? { 'If-Match': detailEtag } : {},
-      body: { decision: confirmType, note: confirmNote || null }
+      body: { decision: confirmType, note: confirmNote || null, rejection_reason: confirmType === 'reject' ? rejectionReason : null }
     }).then(r => this.afterWrite(r, confirmType === 'approve' ? 'Kayıt onaylandı.' : 'Kayıt reddedildi.'))
       .catch(this.writeFailed);
   };
@@ -781,7 +806,7 @@ class Component extends DCLogic {
   };
 
   renderVals() {
-    const { records, total, stats: apiStats, detail, units, sources, health, me, confirmNote, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, contentModalOpen, contentTitleDraft, contentSummaryDraft, busy, toast, sourceHealthOpen, page, pageSize } = this.state;
+    const { records, total, stats: apiStats, detail, units, sources, health, me, confirmNote, rejectionReason, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, contentModalOpen, contentTitleDraft, contentSummaryDraft, busy, toast, sourceHealthOpen, page, pageSize } = this.state;
     // Filtreleme ve sayfalama sunucu tarafında: records yalnızca geçerli sayfadır
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -864,7 +889,8 @@ class Component extends DCLogic {
     let selected = null;
     if (selRaw) {
       const sm = sevMeta(selRaw.severity), stm = statusMeta(selRaw.status), cm = confMeta(selRaw.confidence);
-      const trail = selRaw.auditTrail.map((ev, i) => ({ ...ev, hasLine: i < selRaw.auditTrail.length - 1 }));
+      const reasonLabels = { not_banking_related: 'Bankacılıkla ilişkili değil', outdated: 'Güncelliğini yitirmiş', duplicate: 'Mükerrer kayıt', other: 'Diğer' };
+      const trail = selRaw.auditTrail.map((ev, i) => ({ ...ev, rejectionReasonLabel: reasonLabels[ev.rejectionReason] || '', hasLine: i < selRaw.auditTrail.length - 1 }));
       selected = { ...selRaw, sevBg: sm.bg, sevColor: sm.color, statusBg: stm.bg, statusColor: stm.color, confDots: cm.dots, confColor: cm.color, auditTrail: trail, decidedBy: selRaw.decidedBy || '' };
     }
 
@@ -912,6 +938,11 @@ class Component extends DCLogic {
       contentSaveDisabled: busy || !contentTitleDraft.trim() || (!!selRaw && selRaw.hasSummary && !contentSummaryDraft.trim()),
       contentSaveOpacity: busy || !contentTitleDraft.trim() || (!!selRaw && selRaw.hasSummary && !contentSummaryDraft.trim()) ? 0.5 : 1,
       confirmNote, setConfirmNote: this.setConfirmNote,
+      rejectionReason, setRejectionReason: this.setRejectionReason,
+      isApproveConfirm: confirmType === 'approve', isRejectConfirm: confirmType === 'reject',
+      isOtherRejection: rejectionReason === 'other',
+      confirmDisabled: busy || (confirmType === 'reject' && (!rejectionReason || (rejectionReason === 'other' && !confirmNote.trim()))),
+      confirmOpacity: busy || (confirmType === 'reject' && (!rejectionReason || (rejectionReason === 'other' && !confirmNote.trim()))) ? 0.5 : 1,
       isTabOzet: detailTab === 'ozet', isTabAudit: detailTab === 'audit',
       setTabOzet: this.setTabOzet, setTabAudit: this.setTabAudit,
       tabOzetBg: detailTab === 'ozet' ? 'var(--card)' : 'transparent', tabOzetColor: detailTab === 'ozet' ? 'var(--foreground)' : 'var(--muted-foreground)',

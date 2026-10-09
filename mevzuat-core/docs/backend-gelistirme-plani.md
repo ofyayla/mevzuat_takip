@@ -530,7 +530,7 @@ Kaynak tanımları `config/sources.yaml` dosyasında tutulur. İlk yüklemede `s
 | GET | `/regulations/stats` | `{pending, critical_high_pending, today, upcoming}`. Filtrelerden bağımsız (portal davranışıyla aynı) |
 | GET | `/regulations/{id}` | Detay: özet alanları, kanıtlar, birim önerileri, güven bandı, kaynak bağlantıları, `decided_by`, `audit_trail[]`, `ai_generated_fields[]` (portaldaki YZ etiketleri için) |
 | POST | `/regulations/{id}/views` | İlk görüntülemede "İncelemeye alındı" denetim olayı (kullanıcı başına bir kez) |
-| POST | `/regulations/{id}/decision` | Gövde: `{"decision": "approve"\|"reject", "note": "…"?}`. Yalnızca `Bekliyor` durumunda kabul edilir, aksi hâlde 409. Eşzamanlılık için `If-Match: <version>` (optimistic locking) kullanılır |
+| POST | `/regulations/{id}/decision` | Gövde: `{"decision": "approve"\|"reject", "note": "…"? , "rejection_reason"?}`. Reddetmede `rejection_reason`: `not_banking_related`, `outdated`, `duplicate` veya `other` zorunlu; `other` için `note` zorunlu. Neden audit ve outbox olaylarında saklanır. Yalnızca `Bekliyor` durumunda kabul edilir, aksi hâlde 409. Eşzamanlılık için `If-Match: <version>` (optimistic locking) kullanılır |
 | PUT | `/regulations/{id}/units` | Gövde: `{"unit_codes": ["RISK","MALI_KONTROL"], "note"?}`. En az 1 birim. Eski ve yeni liste denetim izine yazılır; mevcut YZ gerekçesi korunur, yeni eklenen birim için gerekçe "Uzman tarafından manuel olarak atandı." olur |
 | GET | `/units` | Aktif birimler (kod, ad) |
 | GET | `/sources` | Kaynak listesi (filtre seçenekleri için) |

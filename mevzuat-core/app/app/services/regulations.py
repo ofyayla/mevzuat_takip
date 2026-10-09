@@ -252,12 +252,16 @@ def mark_viewed(session: Session, reg: Regulation, actor: Actor) -> bool:
 
 
 def decide(session: Session, reg: Regulation, decision: str, note: str | None, actor: Actor,
-           if_match: str | None) -> None:
+           if_match: str | None, rejection_reason: str | None = None) -> None:
     if decision not in ("approve", "reject"):
         raise ApiError(400, "invalid_decision", "decision: approve | reject")
     _check_version(reg, if_match)
     _require_pending(reg)
     approved = decision == "approve"
+    if not approved and rejection_reason not in ("not_banking_related", "outdated", "duplicate", "other"):
+        raise ApiError(400, "missing_rejection_reason", "reddetme nedeni zorunludur")
+    if not approved and rejection_reason == "other" and not (note or "").strip():
+        raise ApiError(400, "missing_rejection_details", "diğer nedeni için açıklama zorunludur")
     units = [u for u in _units(session, reg.id)]
     reg.review_status = "Onaylandı" if approved else "Reddedildi"
     reg.decided_by, reg.decided_by_title, reg.decided_at = actor.name, actor.title, utcnow()
@@ -275,11 +279,12 @@ def decide(session: Session, reg: Regulation, decision: str, note: str | None, a
     else:
         auto_note = "Kayıt reddedildi, aksiyon alınmayacak."
     full_note = auto_note + (f" Not: {reg.decision_note}" if reg.decision_note else "")
+    rejection_feedback = {"rejection_reason": rejection_reason} if rejection_reason else {}
     add_event(session, reg.id, "approved" if approved else "rejected", actor=actor, note=full_note,
-              payload={"units": [u["code"] for u in units], "user_note": reg.decision_note})
+              payload={"units": [u["code"] for u in units], "user_note": reg.decision_note, **rejection_feedback})
     session.add(Outbox(event_type="record.approved" if approved else "record.rejected", aggregate_id=reg.id,
                        payload={"regulation_id": reg.id, "units": [u["code"] for u in units],
-                                "decided_by": actor.name, "note": reg.decision_note}))
+                                "decided_by": actor.name, "note": reg.decision_note, **rejection_feedback}))
 
 
 def edit_content(session: Session, reg: Regulation, title: str | None, summary: str | None, actor: Actor,

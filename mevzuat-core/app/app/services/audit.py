@@ -102,7 +102,7 @@ def trail(session: Session, reg: Regulation) -> list[dict]:
         label, icon = EVENT_META.get(r.event_type, (r.event_type, "circle"))
         actor = f"{r.actor_name} · {r.actor_title}" if r.actor_title else r.actor_name
         out.append({"action": label, "actor": actor, "timestamp": _iso(r.created_at), "icon": icon, "note": r.note,
-                    "eventType": r.event_type})
+                    "eventType": r.event_type, "rejectionReason": (r.payload or {}).get("rejection_reason")})
     return out
 
 

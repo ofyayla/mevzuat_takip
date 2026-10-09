@@ -14,7 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query,
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -70,6 +70,18 @@ ActorDep = Annotated[Actor, Depends(get_actor)]
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
     note: str | None = Field(default=None, max_length=2000)
+    rejection_reason: Literal["not_banking_related", "outdated", "duplicate", "other"] | None = None
+
+    @model_validator(mode="after")
+    def validate_rejection_feedback(self) -> "DecisionIn":
+        if self.decision == "reject":
+            if self.rejection_reason is None:
+                raise ValueError("reddetme nedeni zorunludur")
+            if self.rejection_reason == "other" and not (self.note or "").strip():
+                raise ValueError("diğer nedeni için açıklama zorunludur")
+        elif self.rejection_reason is not None:
+            raise ValueError("onay kararında reddetme nedeni kullanılamaz")
+        return self
 
 
 class UnitsIn(BaseModel):
@@ -146,7 +158,7 @@ def regulation_decision(reg_id: int, body: DecisionIn, session: SessionDep, sett
                         response: Response, if_match: Annotated[str | None, Header()] = None):
     require(actor, ROLE_EXPERT)
     reg = get_visible(session, reg_id)
-    decide(session, reg, body.decision, body.note, actor, if_match)
+    decide(session, reg, body.decision, body.note, actor, if_match, body.rejection_reason)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
     return serialize(session, reg, settings, detail=True)
