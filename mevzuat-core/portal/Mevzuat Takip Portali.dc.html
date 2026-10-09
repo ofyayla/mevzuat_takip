@@ -949,6 +949,8 @@ class Component extends DCLogic {
       tabAuditBg: detailTab === 'audit' ? 'var(--card)' : 'transparent', tabAuditColor: detailTab === 'audit' ? 'var(--foreground)' : 'var(--muted-foreground)',
       openApprove: this.openApprove, openReject: this.openReject,
       openUnitModal: this.openUnitModal, closeUnitModal: this.closeUnitModal, unitModalOpen, unitSearch, setUnitSearch: this.setUnitSearch, saveUnitChange: this.saveUnitChange, filteredUnitOptions,
+      openContentEditor: this.openContentEditor, closeContentEditor: this.closeContentEditor,
+      setContentTitle: this.setContentTitle, setContentSummary: this.setContentSummary, saveContent: this.saveContent,
       unitsSaveDisabled: unitModalSelected.length === 0, saveOpacity: unitModalSelected.length === 0 ? 0.5 : 1,
       confirmOpen: !!confirmType, confirmTitle: cm2 ? cm2.title : '', confirmBody: cm2 ? cm2.body : '',
       confirmIcon: cm2 ? cm2.icon : '', confirmIconBg: cm2 ? cm2.iconBg : '', confirmIconColor: cm2 ? cm2.iconColor : '',
