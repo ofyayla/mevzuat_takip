@@ -14,6 +14,7 @@ En tipik vaka aynı düzenlemenin Resmî Gazete'de ve kurum sitesinde ayrı ayr�
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -46,6 +47,16 @@ log = logging.getLogger(__name__)
 GENERIC_TITLE_KEYS = {"pdf", "indir", "tıklayınız", "basın duyurusu", "basın açıklaması", "duyuru", "genel bilgi",
                       "kamuoyu duyurusu", "dokuman linki"}
 MIN_TITLE_KEY_LEN = 20
+MAX_KEY_LEN = 600     # regulation_key.key / regulation.canonical_key sütun genişliği (db.py)
+
+
+def fit_key(key: str) -> str:
+    """Sütuna sığmayan anahtarı kısaltır; sonuna tam anahtarın özetini ekler (aynı anahtar → aynı sonuç, farklı
+    anahtarlar çakışmaz). Başlığa sayfa özeti sızan kayıtlar (ör. "… devamını oku") 600 karakteri aşabilir."""
+    if len(key) <= MAX_KEY_LEN:
+        return key
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    return f"{key[:MAX_KEY_LEN - len(digest) - 1]}~{digest}"
 
 
 @dataclass
@@ -125,6 +136,8 @@ def doc_facts(raw: RawDocument) -> DocFacts:
     if len(tf.key) >= MIN_TITLE_KEY_LEN and tf.key not in GENERIC_TITLE_KEYS:
         # bağlı kuruluşun anahtarı üst kurum koduyla üretilir: RG'deki "HMB" ile MASAK sitesindeki kopya eşleşsin
         f.weak_keys.append(f"title:{ISSUER_PARENT.get(issuer, issuer) or '?'}:{tf.key}")
+    f.strong_keys = [fit_key(k) for k in f.strong_keys]
+    f.weak_keys = [fit_key(k) for k in f.weak_keys]
     return f
 
 
