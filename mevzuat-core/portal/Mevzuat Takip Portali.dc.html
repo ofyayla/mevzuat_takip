@@ -19,6 +19,17 @@
     .mtp-fade-in { animation: mtpFadeIn 0.2s cubic-bezier(0.32,0.72,0,1); }
     @keyframes mtpFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes mtpToastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .mtp-detail-backdrop { position:fixed; inset:0; z-index:30; padding:24px; display:flex; align-items:center; justify-content:center; background:oklch(0 0 0 / 0.48); }
+    .mtp-detail-dialog { width:min(1320px, 100%); max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px); overflow-y:auto; background:var(--background); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); padding:28px 32px; }
+    .mtp-detail-grid { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:28px; margin-top:24px; align-items:start; }
+    .mtp-detail-sidebar { display:flex; flex-direction:column; gap:16px; position:sticky; top:0; }
+    @media (max-width: 800px) {
+      .mtp-detail-backdrop { padding:10px; align-items:stretch; }
+      .mtp-detail-dialog { max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); padding:18px; }
+      .mtp-detail-grid { grid-template-columns:minmax(0, 1fr); gap:20px; }
+      .mtp-detail-sidebar { position:static; }
+      .mtp-detail-title { font-size:20px !important; overflow-wrap:anywhere; }
+    }
   </style>
 </helmet>
 
@@ -239,11 +250,17 @@
       </sc-if>
 
       <sc-if value="{{ isDetailView }}" hint-placeholder-val="{{ false }}">
-        <div class="mtp-fade-in">
-          <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; border:none; background:transparent; color:var(--muted-foreground); font-size:13px; cursor:pointer; padding:0; margin-bottom:16px; font-family:var(--font-sans);">
-            <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
-            Kayıtlara dön
-          </button>
+        <div class="mtp-detail-backdrop" onClick="{{ goToList }}">
+          <section class="mtp-detail-dialog mtp-fade-in" role="dialog" aria-modal="true" aria-labelledby="detail-title" onClick="{{ stopProp }}">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px;">
+              <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; border:none; background:transparent; color:var(--muted-foreground); font-size:13px; cursor:pointer; padding:0; font-family:var(--font-sans);">
+                <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                Kayıtlara dön
+              </button>
+              <button onClick="{{ goToList }}" aria-label="Detayı kapat" title="Detayı kapat" autofocus style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:0 0 36px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer;">
+                <i data-lucide="x" style="width:16px; height:16px;"></i>
+              </button>
+            </div>
 
           <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:8px;">
             <div>
@@ -253,7 +270,7 @@
                 <span style="font-size:12px; color:var(--muted-foreground);">{{ selected.type }}</span>
               </div>
               <div style="display:flex; align-items:flex-start; gap:10px;">
-                <h1 style="font-size:24px; font-weight:600; margin:0; max-width:620px; color:var(--foreground);">{{ selected.title }}</h1>
+                <h1 id="detail-title" class="mtp-detail-title" style="font-size:24px; font-weight:600; margin:0; max-width:900px; color:var(--foreground);">{{ selected.title }}</h1>
                 <sc-if value="{{ canEditContent }}">
                   <button onClick="{{ openContentEditor }}" aria-label="Başlık ve özeti düzenle" title="Başlık ve özeti düzenle" style="display:flex; align-items:center; justify-content:center; width:34px; height:34px; flex:0 0 34px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer;">
                     <i data-lucide="pencil" style="width:15px; height:15px;"></i>
@@ -263,7 +280,7 @@
             </div>
           </div>
 
-          <div style="display:grid; grid-template-columns:1fr 340px; gap:28px; margin-top:24px; align-items:start;">
+          <div class="mtp-detail-grid">
             <div style="min-width:0;">
               <div style="display:inline-flex; padding:3px; background:var(--muted); border-radius:var(--radius-pill); gap:2px; margin-bottom:20px;">
                 <button onClick="{{ setTabOzet }}" style="height:34px; padding:0 16px; border-radius:var(--radius-pill); border:none; font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans); background:{{ tabOzetBg }}; color:{{ tabOzetColor }};">Özet</button>
@@ -355,7 +372,7 @@
               </sc-if>
             </div>
 
-            <div style="display:flex; flex-direction:column; gap:16px; position:sticky; top:76px;">
+            <div class="mtp-detail-sidebar">
               <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; display:flex; flex-direction:column; gap:14px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                   <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Yayımlayan kurum</span>
@@ -422,6 +439,8 @@
               </div>
             </div>
           </div>
+        </div>
+          </section>
         </div>
       </sc-if>
     </div>
@@ -598,7 +617,16 @@ class Component extends DCLogic {
     busy: false
   };
 
+  handleKeyDown = (event) => {
+    if (event.key !== 'Escape') return;
+    if (this.state.unitModalOpen) this.closeUnitModal();
+    else if (this.state.confirmType) this.closeConfirm();
+    else if (this.state.contentModalOpen) this.closeContentEditor();
+    else if (this.state.view === 'detail') this.goToList();
+  };
+
   componentDidMount() {
+    window.addEventListener('keydown', this.handleKeyDown);
     this.renderIcons();
     this.loadMeta();
     this.loadList();
@@ -606,6 +634,7 @@ class Component extends DCLogic {
     const m = /^#kayit=(\d+)$/.exec(location.hash);
     if (m) { history.replaceState(null, '', location.pathname); this.openDetail(Number(m[1])); }
   }
+  componentWillUnmount() { window.removeEventListener('keydown', this.handleKeyDown); }
   componentDidUpdate() { this.renderIcons(); }
   renderIcons() { if (window.lucide) window.lucide.createIcons(); }
 
@@ -856,7 +885,7 @@ class Component extends DCLogic {
     const cm2 = confirmType ? confirmMeta[confirmType] : null;
 
     return {
-      isListView: view === 'list', isDetailView: view === 'detail',
+      isListView: view === 'list' || view === 'detail', isDetailView: view === 'detail',
       filters, unitOptions: units, sourceOptions: sources, hasActiveFilters,
       setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,
       setFilterStatus: this.setFilterStatus, setFilterUnit: this.setFilterUnit, setFilterDate: this.setFilterDate, clearFilters: this.clearFilters,
