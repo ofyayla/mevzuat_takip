@@ -252,7 +252,14 @@
                 <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 10px; border-radius:var(--radius-pill); background:{{ selected.statusBg }}; color:{{ selected.statusColor }};">{{ selected.status }}</span>
                 <span style="font-size:12px; color:var(--muted-foreground);">{{ selected.type }}</span>
               </div>
-              <h1 style="font-size:24px; font-weight:600; letter-spacing:-0.01em; margin:0; max-width:620px; color:var(--foreground);">{{ selected.title }}</h1>
+              <div style="display:flex; align-items:flex-start; gap:10px;">
+                <h1 style="font-size:24px; font-weight:600; margin:0; max-width:620px; color:var(--foreground);">{{ selected.title }}</h1>
+                <sc-if value="{{ canEditContent }}">
+                  <button onClick="{{ openContentEditor }}" aria-label="Başlık ve özeti düzenle" title="Başlık ve özeti düzenle" style="display:flex; align-items:center; justify-content:center; width:34px; height:34px; flex:0 0 34px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer;">
+                    <i data-lucide="pencil" style="width:15px; height:15px;"></i>
+                  </button>
+                </sc-if>
+              </div>
             </div>
           </div>
 
@@ -420,6 +427,29 @@
     </div>
   </main>
 
+  <sc-if value="{{ contentModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:oklch(0 0 0 / 0.4); display:flex; align-items:center; justify-content:center; z-index:40; padding:16px;" onClick="{{ closeContentEditor }}">
+      <div onClick="{{ stopProp }}" style="width:min(620px, 100%); max-height:90vh; overflow-y:auto; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); padding:24px; display:flex; flex-direction:column; gap:14px;">
+        <h3 style="font-size:16px; font-weight:600; margin:0; color:var(--foreground);">Kayıt bilgilerini düzenle</h3>
+        <label style="display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:500; color:var(--foreground);">
+          Başlık
+          <input type="text" value="{{ contentTitleDraft }}" onChange="{{ setContentTitle }}" maxlength="1000" style="width:100%; height:40px; box-sizing:border-box; padding:0 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:14px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+        </label>
+        <label style="display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:500; color:var(--foreground);">
+          Yapay zekâ özeti
+          <textarea value="{{ contentSummaryDraft }}" onChange="{{ setContentSummary }}" rows="8" maxlength="20000" disabled="{{ contentSummaryDisabled }}" placeholder="Özet henüz hazır değil" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border); font-size:14px; line-height:1.6; font-family:var(--font-sans); background:var(--background); color:var(--foreground); resize:vertical;"></textarea>
+        </label>
+        <sc-if value="{{ contentSummaryUnavailable }}" hint-placeholder-val="{{ false }}">
+          <p style="font-size:12.5px; color:var(--muted-foreground); margin:-8px 0 0;">YZ özeti hazır olduğunda düzenlenebilir.</p>
+        </sc-if>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px; padding-top:14px; border-top:1px solid var(--border);">
+          <button onClick="{{ closeContentEditor }}" disabled="{{ busy }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">Vazgeç</button>
+          <button onClick="{{ saveContent }}" disabled="{{ contentSaveDisabled }}" style="height:38px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--font-sans); opacity:{{ contentSaveOpacity }};">Kaydet</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed; inset:0; background:oklch(0 0 0 / 0.4); display:flex; align-items:center; justify-content:center; z-index:40;" onClick="{{ closeConfirm }}">
       <div onClick="{{ stopProp }}" style="width:420px; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); padding:24px; display:flex; flex-direction:column; gap:6px;">
@@ -510,6 +540,7 @@ function toRecord(r) {
     issuer: r.issuer || '—', type: r.type || '—', severity: r.severity || '—', confidence: r.confidence || 'Düşük',
     publishDateIso: r.publishDate, publishDate: fmtDate(r.publishDate),
     effectiveDate: r.effectiveDate ? fmtDate(r.effectiveDate) : '—',
+    hasSummary: !!r.summary,
     summary: r.summary || ('Özet henüz hazır değil (' + (r.analysisStatus || 'analiz sürüyor') + ').'),
     topics: r.topics || [], suggestedUnits: r.suggestedUnits || [], decidedBy: decided,
     sourceUrl: r.sourceUrl || '#',
@@ -553,6 +584,9 @@ class Component extends DCLogic {
     unitModalOpen: false,
     unitModalSelected: [],
     unitSearch: '',
+    contentModalOpen: false,
+    contentTitleDraft: '',
+    contentSummaryDraft: '',
     toast: null,
     records: [],
     total: 0,
@@ -606,9 +640,9 @@ class Component extends DCLogic {
   update = (patch) => { this.setState(patch); this.loadList(patch); };
 
   // ------------------------------------------------------------------ gezinme ve filtreler
-  goToList = () => { this.setState({ view: 'list', unitModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
+  goToList = () => { this.setState({ view: 'list', unitModalOpen: false, contentModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
   openDetail = (id) => {
-    this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, detail: null });
+    this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, contentModalOpen: false, detail: null });
     api('/regulations/' + id).then(r => this.setState({ detail: toRecord(r.data), detailEtag: r.etag })).catch(this.fail);
     api('/regulations/' + id + '/views', { method: 'POST' }).catch(() => {});
   };
@@ -653,7 +687,7 @@ class Component extends DCLogic {
     this.loadStats(); this.loadList();
   };
   writeFailed = (e) => {
-    this.setState({ busy: false, confirmType: null, unitModalOpen: false });
+    this.setState({ busy: false, confirmType: null, unitModalOpen: false, contentModalOpen: false });
     this.showToast(e.status === 409 || e.status === 412 ? e.message + ' Kayıt yenilendi.' : 'Hata: ' + e.message);
     if (this.state.selectedId) this.openDetail(this.state.selectedId);
   };
@@ -689,8 +723,36 @@ class Component extends DCLogic {
     }).then(r => this.afterWrite(r, 'Birim güncellendi.')).catch(this.writeFailed);
   };
 
+  openContentEditor = () => {
+    const detail = this.state.detail;
+    if (!detail) return;
+    this.setState({ contentModalOpen: true, contentTitleDraft: detail.title,
+      contentSummaryDraft: detail.hasSummary ? detail.summary : '' });
+  };
+  closeContentEditor = () => { if (!this.state.busy) this.setState({ contentModalOpen: false }); };
+  setContentTitle = (e) => this.setState({ contentTitleDraft: e.target.value });
+  setContentSummary = (e) => this.setState({ contentSummaryDraft: e.target.value });
+  saveContent = () => {
+    const { selectedId, detail, detailEtag, contentTitleDraft, contentSummaryDraft, busy } = this.state;
+    if (!selectedId || !detail || busy) return;
+    const body = {};
+    const title = contentTitleDraft.trim(), summary = contentSummaryDraft.trim();
+    if (title !== detail.title) body.title = title;
+    if (detail.hasSummary && summary !== detail.summary) body.summary = summary;
+    if (!Object.keys(body).length) { this.setState({ contentModalOpen: false }); return; }
+    this.setState({ busy: true });
+    api('/regulations/' + selectedId + '/content', {
+      method: 'PATCH', headers: detailEtag ? { 'If-Match': detailEtag } : {}, body
+    }).then(r => {
+      this.setState({ detail: toRecord(r.data), detailEtag: r.etag, busy: false, contentModalOpen: false });
+      this.showToast(body.title && body.summary ? 'Başlık ve YZ özeti güncellendi.' :
+        body.title ? 'Başlık güncellendi.' : 'YZ özeti güncellendi.');
+      this.loadStats(); this.loadList();
+    }).catch(this.writeFailed);
+  };
+
   renderVals() {
-    const { records, total, stats: apiStats, detail, units, sources, health, confirmNote, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, toast, sourceHealthOpen, page, pageSize } = this.state;
+    const { records, total, stats: apiStats, detail, units, sources, health, me, confirmNote, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, contentModalOpen, contentTitleDraft, contentSummaryDraft, busy, toast, sourceHealthOpen, page, pageSize } = this.state;
     // Filtreleme ve sayfalama sunucu tarafında: records yalnızca geçerli sayfadır
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -814,6 +876,12 @@ class Component extends DCLogic {
       showHealthBanner: overallStatus !== 'healthy', bannerText,
       sourceHealthOpen, toggleSourceHealth: this.toggleSourceHealth, sourceList,
       selected, isPending: !!selected && selected.status === 'Bekliyor', isDecided: !!selected && selected.status !== 'Bekliyor',
+      canEditContent: !!selected && selected.status === 'Bekliyor' && !!me && me.canDecide,
+      contentModalOpen, contentTitleDraft, contentSummaryDraft,
+      contentSummaryDisabled: !selRaw || !selRaw.hasSummary,
+      contentSummaryUnavailable: !!selRaw && !selRaw.hasSummary,
+      contentSaveDisabled: busy || !contentTitleDraft.trim() || (!!selRaw && selRaw.hasSummary && !contentSummaryDraft.trim()),
+      contentSaveOpacity: busy || !contentTitleDraft.trim() || (!!selRaw && selRaw.hasSummary && !contentSummaryDraft.trim()) ? 0.5 : 1,
       confirmNote, setConfirmNote: this.setConfirmNote,
       isTabOzet: detailTab === 'ozet', isTabAudit: detailTab === 'audit',
       setTabOzet: this.setTabOzet, setTabAudit: this.setTabAudit,

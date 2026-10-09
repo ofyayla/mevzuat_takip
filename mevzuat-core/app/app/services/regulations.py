@@ -282,6 +282,52 @@ def decide(session: Session, reg: Regulation, decision: str, note: str | None, a
                                 "decided_by": actor.name, "note": reg.decision_note}))
 
 
+def edit_content(session: Session, reg: Regulation, title: str | None, summary: str | None, actor: Actor,
+                 if_match: str | None) -> None:
+    if title is None and summary is None:
+        raise ApiError(400, "empty_update", "başlık veya özet güncellenmelidir")
+    _check_version(reg, if_match)
+    _require_pending(reg)
+
+    title = title.strip() if title is not None else None
+    summary = summary.strip() if summary is not None else None
+    if title == "" or summary == "":
+        raise ApiError(400, "empty_content", "başlık ve özet boş bırakılamaz")
+
+    current = current_summary(session, reg.id) if summary is not None else None
+    if summary is not None and current is None:
+        raise ApiError(409, "summary_unavailable", "henüz düzenlenebilir bir YZ özeti yok")
+
+    fields = []
+    payload = {"fields": fields}
+    if title is not None and title != reg.title:
+        payload["old_title"], payload["new_title"] = reg.title, title
+        reg.title = title
+        fields.append("title")
+
+    if summary is not None and current is not None and summary != current.short_content:
+        latest_version = session.scalar(select(func.max(RegulationSummary.version)).where(
+            RegulationSummary.regulation_id == reg.id)) or current.version
+        current.is_current = False
+        next_version = latest_version + 1
+        session.add(RegulationSummary(
+            regulation_id=reg.id, version=next_version, is_current=True, short_content=summary,
+            short_content_evidence=[], relevant_topics=current.relevant_topics,
+            effective_date_evidence=current.effective_date_evidence, grounding_score=0.0,
+            unverified_claims=[], source_links=current.source_links, method="manual", prompt_version="manual",
+            llm_call_ids=[]))
+        payload["previous_summary_version"], payload["summary_version"] = current.version, next_version
+        fields.append("summary")
+
+    if not fields:
+        return
+
+    reg.row_version += 1
+    labels = [label for key, label in (("title", "Başlık"), ("summary", "YZ özeti")) if key in fields]
+    add_event(session, reg.id, "content_edited", actor=actor, note=f"{', '.join(labels)} güncellendi.",
+              payload=payload)
+
+
 def change_units(session: Session, reg: Regulation, unit_codes: list[str], note: str | None, actor: Actor,
                  if_match: str | None) -> None:
     codes = list(dict.fromkeys(c for c in unit_codes if c))

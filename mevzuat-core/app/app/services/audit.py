@@ -19,6 +19,7 @@ EVENT_META = {
     "approved": ("Onaylandı", "check-circle-2"),
     "rejected": ("Reddedildi", "x-circle"),
     "units_changed": ("Birim değiştirildi", "shuffle"),
+    "content_edited": ("Kayıt bilgileri güncellendi", "pencil"),
     "summary_regenerated": ("Özet yeniden üretildi", "refresh-cw"),
     "reprocessed": ("Yeniden işlendi", "rotate-cw"),
 }

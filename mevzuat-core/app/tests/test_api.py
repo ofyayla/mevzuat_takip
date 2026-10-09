@@ -17,7 +17,7 @@ from app.ai.llm_client import FakeLLM
 from app.ai.summary import summarize_pending
 from app.ai.unit_matching import match_pending
 from app.api.main import create_app
-from app.db import AuditEvent, FewshotExample, Outbox, Regulation, UnitSuggestion
+from app.db import AuditEvent, FewshotExample, Outbox, Regulation, RegulationSummary, UnitSuggestion
 from app.services.regulations import today
 from tests.test_processing import env  # noqa: F401
 from tests.test_summary import GOOD, _relevant_bank_mellat, summary_out
@@ -122,6 +122,27 @@ def test_optimistic_locking(settings, env, client):  # noqa: F811
                headers={"If-Match": '"1"'})
     assert ok.status_code == 200 and ok.json()["version"] == 2
     stale = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "approve"}, headers={"If-Match": '"1"'})
+    assert stale.status_code == 412 and stale.json()["error"]["details"] == {"current_version": 2}
+
+
+def test_edit_title_and_summary_creates_version_and_checks_etag(settings, env, client):  # noqa: F811
+    reg_id = _ready(settings, env)
+    c, sf = client
+    updated = c.patch(f"/api/v1/regulations/{reg_id}/content",
+                      json={"title": "Düzenlenen başlık", "summary": "Düzenlenen YZ özeti."},
+                      headers={"If-Match": '"1"', "X-Demo-User": quote("Ayşe Kaya")})
+    assert updated.status_code == 200 and updated.headers["etag"] == '"2"'
+    assert (updated.json()["title"], updated.json()["summary"], updated.json()["summaryVersion"]) == (
+        "Düzenlenen başlık", "Düzenlenen YZ özeti.", 2)
+    assert updated.json()["auditTrail"][-1]["action"] == "Kayıt bilgileri güncellendi"
+    assert updated.json()["auditTrail"][-1]["note"] == "Başlık, YZ özeti güncellendi."
+    with sf() as s:
+        versions = s.scalars(select(RegulationSummary).where(RegulationSummary.regulation_id == reg_id)
+                             .order_by(RegulationSummary.version)).all()
+        assert [(row.version, row.is_current) for row in versions] == [(1, False), (2, True)]
+        assert versions[1].short_content_evidence == [] and versions[1].grounding_score == 0
+    stale = c.patch(f"/api/v1/regulations/{reg_id}/content", json={"title": "Eski sürüm"},
+                    headers={"If-Match": '"1"'})
     assert stale.status_code == 412 and stale.json()["error"]["details"] == {"current_version": 2}
 
 

@@ -28,6 +28,7 @@ from app.services.regulations import (
     ListQuery,
     change_units,
     decide,
+    edit_content,
     get_visible,
     list_regulations,
     mark_viewed,
@@ -76,6 +77,11 @@ class UnitsIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class ContentIn(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=1000)
+    summary: str | None = Field(default=None, min_length=1, max_length=20000)
+
+
 class SettingsIn(BaseModel):
     values: dict[str, str]
 
@@ -112,6 +118,17 @@ def regulation_stats(session: SessionDep, settings: SettingsDep, actor: ActorDep
 def regulation_detail(reg_id: int, session: SessionDep, settings: SettingsDep, actor: ActorDep, response: Response):
     require(actor, ROLE_VIEWER)
     reg = get_visible(session, reg_id)
+    response.headers["ETag"] = f'"{reg.row_version}"'
+    return serialize(session, reg, settings, detail=True)
+
+
+@api.patch("/regulations/{reg_id}/content")
+def regulation_content(reg_id: int, body: ContentIn, session: SessionDep, settings: SettingsDep,
+                       actor: ActorDep, response: Response, if_match: Annotated[str | None, Header()] = None):
+    require(actor, ROLE_EXPERT)
+    reg = get_visible(session, reg_id)
+    edit_content(session, reg, body.title, body.summary, actor, if_match)
+    session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
     return serialize(session, reg, settings, detail=True)
 
