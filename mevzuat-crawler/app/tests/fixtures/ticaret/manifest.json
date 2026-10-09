@@ -1,0 +1,20 @@
+{
+ "https://ticaret.gov.tr/duyurular": {
+  "file": "4ca80c2789d29ae9.html",
+  "status": 200,
+  "final_url": "https://ticaret.gov.tr/duyurular",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://ticaret.gov.tr/duyurular?s=2": {
+  "file": "8550e74b70c1e2e5.html",
+  "status": 200,
+  "final_url": "https://ticaret.gov.tr/duyurular?s=2",
+  "content_type": "text/html; charset=utf-8"
+ },
+ "https://ticaret.gov.tr/tuketici/mevzuat/teblig-ve-kilavuzlar": {
+  "file": "181efa109bf9a032.html",
+  "status": 200,
+  "final_url": "https://ticaret.gov.tr/tuketici/mevzuat/teblig-ve-kilavuzlar",
+  "content_type": "text/html; charset=utf-8"
+ }
+}

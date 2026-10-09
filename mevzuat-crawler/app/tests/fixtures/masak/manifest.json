@@ -1,0 +1,14 @@
+{
+ "https://masak.hmb.gov.tr/portal/v2/posts?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-08-26T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent": {
+  "file": "4bc8f9be72fe13a8.json",
+  "status": 200,
+  "final_url": "https://masak.hmb.gov.tr/portal/v2/posts?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-08-26T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent",
+  "content_type": "application/json; charset=UTF-8"
+ },
+ "https://masak.hmb.gov.tr/portal/v2/pages?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-08-26T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent": {
+  "file": "e27efa75181639f9.json",
+  "status": 200,
+  "final_url": "https://masak.hmb.gov.tr/portal/v2/pages?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-08-26T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent",
+  "content_type": "application/json; charset=UTF-8"
+ }
+}

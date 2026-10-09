@@ -1,0 +1,32 @@
+{
+ "https://www.kvkk.gov.tr/Icerik/2015/Duyurular": {
+  "file": "ba17a1d511f03bbb.html",
+  "status": 200,
+  "final_url": "https://www.kvkk.gov.tr/Icerik/2015/Duyurular",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.kvkk.gov.tr/Icerik/5419/kurul-kararlari": {
+  "file": "90a67dce4756f138.html",
+  "status": 200,
+  "final_url": "https://www.kvkk.gov.tr/Icerik/5419/kurul-kararlari",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.kvkk.gov.tr/Icerik/5257/yonetmelikler": {
+  "file": "df6dd74322291a1a.html",
+  "status": 200,
+  "final_url": "https://www.kvkk.gov.tr/Icerik/5257/yonetmelikler",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.kvkk.gov.tr/Icerik/5258/tebligler": {
+  "file": "67f1ecc53108b1a6.html",
+  "status": 200,
+  "final_url": "https://www.kvkk.gov.tr/Icerik/5258/tebligler",
+  "content_type": "text/html; charset=UTF-8"
+ },
+ "https://www.kvkk.gov.tr/Icerik/2030/rehberler": {
+  "file": "3abf2b645d612d6b.html",
+  "status": 200,
+  "final_url": "https://www.kvkk.gov.tr/Icerik/2030/rehberler",
+  "content_type": "text/html; charset=UTF-8"
+ }
+}
