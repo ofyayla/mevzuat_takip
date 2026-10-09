@@ -62,11 +62,12 @@ sync_remote() {
   fi
 }
 
-apply_update() {
-  if bash "$START_SCRIPT" update; then
+apply_lifecycle_command() {
+  local command=$1
+  if bash "$START_SCRIPT" "$command"; then
     DEPLOYMENT_PENDING=0
   else
-    log 'Uygulama güncellemesi/başlatması başarısız; sonraki kontrolde yeniden denenecek.'
+    log "jupyterhub/start.sh $command başarısız; sonraki kontrolde yeniden denenecek."
     return 1
   fi
 }
@@ -95,11 +96,12 @@ ensure_application_running() {
     app_running=1
   fi
 
-  if [[ "$DEPLOYMENT_PENDING" == '1' || "$app_running" == '0' ]]; then
-    if [[ "$app_running" == '0' ]]; then
-      log 'Uygulama hazır değil; yerel süreçler jupyterhub/start.sh ile başlatılıyor.'
-    fi
-    apply_update
+  if [[ "$DEPLOYMENT_PENDING" == '1' ]]; then
+    log 'Yeni Git commiti için jupyterhub/start.sh update çalıştırılıyor.'
+    apply_lifecycle_command update
+  elif [[ "$app_running" == '0' ]]; then
+    log 'Uygulama hazır değil; jupyterhub/start.sh start çalıştırılıyor.'
+    apply_lifecycle_command start
   fi
 }
 
