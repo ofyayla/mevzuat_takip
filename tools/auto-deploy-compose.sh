@@ -6,7 +6,8 @@ cd "$REPO_ROOT"
 
 POLL_INTERVAL="${AUTO_UPDATE_INTERVAL:-30}"
 UPSTREAM_REF="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
-DEPLOYMENT_PENDING=1
+START_SCRIPT="$REPO_ROOT/jupyterhub/start.sh"
+DEPLOYMENT_PENDING=0
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -22,8 +23,8 @@ if [[ -z "$UPSTREAM_REF" ]]; then
   exit 2
 fi
 
-if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-  printf 'Docker Compose v2 bulunamadı.\n' >&2
+if [[ ! -f "$START_SCRIPT" ]]; then
+  printf 'Uygulama başlatma scripti bulunamadı: %s\n' "$START_SCRIPT" >&2
   exit 2
 fi
 
@@ -52,7 +53,7 @@ sync_remote() {
         return 1
       fi
 
-      log "Yeni commit alındı ($(git rev-parse --short HEAD)); Compose imajları güncelleniyor."
+      log "Yeni commit alındı ($(git rev-parse --short HEAD)); uygulama süreçleri güncellenecek."
       DEPLOYMENT_PENDING=1
     elif ! git merge-base --is-ancestor "$target_commit" "$current_commit"; then
       log 'Yerel ve uzak branch ayrışmış; otomatik birleştirme yapılmadı.'
@@ -61,28 +62,44 @@ sync_remote() {
   fi
 }
 
-apply_compose() {
-  if docker compose up -d --build; then
+apply_update() {
+  if bash "$START_SCRIPT" update; then
     DEPLOYMENT_PENDING=0
   else
-    log 'Compose güncellemesi başarısız; sonraki kontrolde yeniden denenecek.'
+    log 'Uygulama güncellemesi/başlatması başarısız; sonraki kontrolde yeniden denenecek.'
     return 1
   fi
 }
 
-ensure_api_running() {
-  local api_running running_services
-  running_services="$(docker compose ps --status running --services 2>/dev/null || true)"
-  api_running=0
-  if printf '%s\n' "$running_services" | grep -Fxq 'api'; then
-    api_running=1
+application_is_ready() {
+  local status_output
+  if ! status_output="$(bash "$START_SCRIPT" status 2>&1)"; then
+    log 'Uygulama durumu alınamadı; başlatma/güncelleme denenecek.'
+    return 1
   fi
 
-  if [[ "$DEPLOYMENT_PENDING" == '1' || "$api_running" == '0' ]]; then
-    if [[ "$api_running" == '0' ]]; then
-      log 'API çalışmıyor; Compose uygulaması başlatılıyor.'
+  if grep -Fq 'readyz: yanıt yok' <<< "$status_output"; then
+    return 1
+  fi
+
+  if grep -Fq 'DURUYOR' <<< "$status_output"; then
+    return 1
+  fi
+
+  return 0
+}
+
+ensure_application_running() {
+  local app_running=0
+  if application_is_ready; then
+    app_running=1
+  fi
+
+  if [[ "$DEPLOYMENT_PENDING" == '1' || "$app_running" == '0' ]]; then
+    if [[ "$app_running" == '0' ]]; then
+      log 'Uygulama hazır değil; yerel süreçler jupyterhub/start.sh ile başlatılıyor.'
     fi
-    apply_compose
+    apply_update
   fi
 }
 
@@ -91,6 +108,6 @@ trap 'log "Otomatik güncelleme durduruldu."; exit 0' INT TERM
 
 while true; do
   sync_remote || true
-  ensure_api_running || true
+  ensure_application_running || true
   sleep "$POLL_INTERVAL"
 done
