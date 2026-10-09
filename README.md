@@ -50,19 +50,19 @@ make compose-up                    # kurum topolojisinin yerel kopyası (docker-
 make api-reference                 # uç nokta değişince mevzuat-core/API_REFERENCE.md'yi yeniden üret
 ```
 
-### Compose için otomatik Git güncellemesi
+### JupyterHub için otomatik Git güncellemesi
 
 Linux'ta, upstream'i tanımlı bir Git checkout'unda aşağıdaki komut uzak değişiklikleri her 30 saniyede kontrol eder.
-Yeni commit varsa fast-forward alıp imajları yeniden oluşturur; başlangıçta `api` servisi çalışmıyorsa Compose
-uygulamasını başlatır. Yerel değişiklikleri ezmemek için kirli çalışma ağacında güncellemeyi durdurur.
+Yeni commit'i fast-forward aldıktan sonra `jupyterhub/start.sh update` çalıştırır; uygulama hazır değilse `start`
+komutuyla başlatır. Yerel değişiklikleri ezmemek için kirli çalışma ağacında güncellemeyi durdurur.
 
 ```bash
-bash scripts/auto-deploy-compose.sh
+bash tools/auto-deploy-compose.sh
 ```
 
 Kontrol aralığı `AUTO_UPDATE_INTERVAL=60` gibi saniye cinsinden ayarlanabilir. Scriptin sürekli çalışması ve sunucu
-yeniden başladığında tekrar açılması için bir `systemd` servisi veya süreç yöneticisi altında çalıştırın. Bu script
-yalnızca kök dizindeki yerel Docker Compose dağıtımını yönetir; kurum Kubernetes dağıtımı Argo CD tarafından yönetilir.
+yeniden başladığında tekrar açılması için bir `systemd` servisi veya süreç yöneticisi altında çalıştırın. Yerel Compose
+geliştirme ortamı `make compose-up` ile yönetilir; kurum Kubernetes dağıtımı Argo CD tarafından yönetilir.
 
 Mongo testleri için `make mongo-test`. İki servis için ayrı sanal ortam önerilir (core `.[core,dev]`, crawler `.[dev]`);
 JupyterHub'da tek komutla kurulum: `jupyterhub/start.sh`.
