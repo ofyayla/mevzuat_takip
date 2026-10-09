@@ -17,8 +17,8 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.db import RawDocument, Regulation, RegulationSourceLink, Source, make_sessionmaker
-from app.processing.dedupe import merge_regulations, split_document
+from app.db import RawDocument, Regulation, RegulationKey, RegulationSourceLink, Source, make_sessionmaker
+from app.processing.dedupe import fit_key, merge_regulations, split_document
 from app.processing.extract import extract
 from app.processing.ocr import AzureDocumentIntelligenceOcr, OcrError, OcrResult, page_ranges
 from app.processing.pipeline import DocumentProcessor
@@ -177,6 +177,30 @@ def test_same_source_same_title_is_not_merged(settings, env):
                 content=f"<html><body><p>Duyuru {i}: vatandaşlarımızın dikkatine</p></body></html>".encode())
     DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
     assert len(regs(sf)) == 2
+
+
+def test_overlong_keys_fit_column_width(settings, env):
+    """Başlığa sayfa özeti sızarsa ("… devamını oku") anahtar 600 karakteri aşar; kayıt düşmemeli."""
+    sf, storage = env
+    title = ("Şehitlerimizin Bireysel Finansman ve Kredi Kartı Borçlarının Silinmesine Yönelik Tavsiye Kararı "
+             + "Katılım bankalarının sosyal sorumluluk uygulamasını hayata geçirmeleri tavsiye olunur " * 8
+             + "devamını oku")
+    add_raw(sf, storage, source="KVKK", channel="duyurular", external_id="9", published=date(2026, 9, 19),
+            url="https://www.example.org.tr/kurumsal/duyurular/" + "uzun-slug-" * 70, title=title,
+            content="<html><body><p>Tavsiye kararı metni</p></body></html>".encode())
+    rep = DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
+    assert rep.failed == 0 and rep.linked == 1
+    with sf() as s:
+        keys = [k.key for k in s.scalars(select(RegulationKey))]
+        assert keys and all(len(k) <= 600 for k in keys)
+        assert any(k.startswith("title:") and "~" in k for k in keys)
+        assert all(len(r.canonical_key) <= 600 for r in s.scalars(select(Regulation)))
+
+
+def test_fit_key_is_deterministic_and_distinct():
+    a, b = "title:X:" + "a" * 700, "title:X:" + "a" * 699 + "b"
+    assert fit_key(a) == fit_key(a) and fit_key(a) != fit_key(b) and len(fit_key(a)) == 600
+    assert fit_key("karar:BDDK:11572") == "karar:BDDK:11572"
 
 
 def test_cross_source_title_match_and_issuer_guard(settings, env):
