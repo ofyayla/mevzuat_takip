@@ -95,7 +95,9 @@ Gözlemleyin:
 2. Bir dakika içinde worker logunda `ingest: …` satırı.
 3. Portalda yeni kayıt **görünmemeli**, çünkü ilk tarama BASELINE'dır. `/surec` sayfasında `reg:BASELINE` sayısı
    artar.
-4. Aynı komutu tekrar çalıştırın. `new=0`, istek sayısı yalnızca liste sayfaları kadar olmalı.
+4. Aynı komutu tekrar çalıştırın. Ertelenen öğe kalmadıysa `new=0` olmalı, istek sayısı yalnızca liste sayfaları
+   kadar olmalı. TCMB mevzuat listeleri 200'den fazla öğe içerdiği için ilk kurulumda iki tarama gerekebilir
+   (ikincide ertelenenler hâlâ BASELINE olarak gelir). `new=0` üçüncü taramada görülür.
 
 Mongo olmadan tek süreçte geliştirme: `mevzuat-core/app` içinde `CRAWL_MODE=local`, `mevzuat-collect run TCMB`
 (SQLite + dosya arşivi). Ayrıntı `mevzuat-core/docs/runbook.md` §2.
@@ -189,7 +191,8 @@ for s in load_sources(Path("config/sources.yaml")).sources:
         it = croniter(expr, start - timedelta(seconds=1))
         while (t := it.get_next(datetime)) < end:
             times.add(t)
-    print(f"{s.code:13} {len(times):3}/hafta  pazartesi: {sorted({t:%H:%M} for t in times if t.weekday() == 0)}")
+    monday = sorted(t.strftime("%H:%M") for t in times if t.weekday() == 0)
+    print(f"{s.code:13} {len(times):3}/hafta  pazartesi: {monday}")
 ```
 
 ## 5. Yeni kaynak veya kanal eklemek (adım adım)
@@ -213,7 +216,8 @@ for s in load_sources(Path("config/sources.yaml")).sources:
 7. **Core tarafı (yeni kurum için):**
    - `app/processing/normalize.py:ISSUERS`: kurum kodu, adı, RG'deki adının regex'i. Tekilleştirme ve çapraz
      kontrol için gereklidir.
-   - `config/taxonomy.yaml` → `rules.source_priority` / `issuer_priority`: ilgililik skorundaki kaynak önceliği.
+   - `config/taxonomy.yaml` → `relevance_rules.source_priority` / `relevance_rules.issuer_priority`: ilgililik
+     skorundaki kaynak önceliği.
    - İsteğe bağlı: RG `ilan_issuers` listesi, `CROSS_CHECK_ISSUERS`.
 8. **Eşitle ve doğrula:** `python tools/shared.py sync && make test && make lint`
 9. **Dağıtım:** Crawler ve core imajları. İlk taramada mevcut içerik BASELINE olur, portala düşmez. Bunu iş
@@ -225,8 +229,8 @@ for s in load_sources(Path("config/sources.yaml")).sources:
 |---|---|
 | Kaynak "down" | DMZ'de `podman exec mevzuat-crawler mevzuat-collect check-access KOD`, crawler logu (`journalctl -u mevzuat-crawler`) |
 | Site yapısı değişti (`structure_change`) | `mevzuat-collect probe KOD` → `sources.yaml` seçicilerini düzelt → fixture'ı yeniden kaydet → replay testi |
-| Kesinti sonrası kaçan dönem | Admin API `POST /api/v1/admin/sources/{code}/backfill` (en fazla 62 gün) veya `mevzuat-monitor backfill KOD --from … --to …`; DMZ'de doğrudan `mevzuat-crawler backfill …`. RG gün gün taranır; diğer kaynaklarda backfill = normal tarama (liste sayfası ne gösteriyorsa) |
-| Hemen tarama | Admin API "şimdi tara" (`POST /api/v1/admin/sources/{code}/run`; portal arayüzünde düğme yok) → ≤15 sn içinde crawler alır |
+| Kesinti sonrası kaçan dönem | Admin API `POST /api/v1/admin/sources/{code}/backfill` (fark ≤62 gün) veya `mevzuat-monitor backfill KOD --from … --to …` (sınırsız); DMZ'de doğrudan `mevzuat-crawler backfill …`. RG gün gün taranır; diğer kaynaklarda backfill = normal tarama (liste sayfası ne gösteriyorsa) |
+| Hemen tarama | Admin API "şimdi tara" (`POST /api/v1/admin/sources/{code}/run`; portal arayüzünde düğme yok; kaynak kodunu büyük harfle yazın, bkz. 06 §16) → kaynak meşgul değilse ≤15 sn içinde crawler alır |
 | Bir aşamayı yeniden çalıştırma | `POST /api/v1/admin/reprocess` (`extract \| classify \| summarize \| match`, tarih aralığı) |
 | TLS zincir hatası | `mevzuat-collect ca-fetch HOST` → `config/certs`'e ekle (core'da) → sync → imaj |
 

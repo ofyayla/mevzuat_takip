@@ -72,8 +72,9 @@ görevleri ise kaçan tetiklemeler ve yeniden denemeler için güvenlik ağıdı
 | Desteklenmeyen (.doc, .xlsx …) | Hata sayılmaz. Metin boş kalır, belge başlığıyla bağlanır |
 
 - BASELINE belgeler varsayılan olarak OCR'a **gönderilmez** (`OCR_BASELINE=false`), çünkü yükü azaltır.
-- OCR servisi hatasında belge `EXTRACT_FAILED` olur. Beat (15 dk) en fazla `PROCESS_MAX_ATTEMPTS` (**3**) kez
-  yeniden dener. `ocr_pending_pages` olan belgeler OCR açılınca `reextract` ile tamamlanabilir.
+- OCR servisi hatasında (veya `OSError`, ör. GridFS'te dosya yoksa) belge `EXTRACT_FAILED` olur. Toplam
+  `PROCESS_MAX_ATTEMPTS` (**3**) deneme yapılır (ilk deneme + 2 tekrar). Tekrarlar Beat'in 15 dk'lık görevinden
+  veya ingest'in tetiklediği `process_pending`'den gelir. `ocr_pending_pages` olan belgeler OCR açılınca `reextract` ile tamamlanabilir.
 
 ### 3.2 Tekilleştirme (`processing/dedupe.py:Linker`)
 
@@ -86,7 +87,7 @@ Resmî Gazete'deki aynı karar. Sıra şöyledir:
 | 1 | Aynı `source_code + external_id`'nin önceki sürümü bağlıysa → aynı düzenleme. İçerik güncellemesi `extra.content_updates`'e yazılır | `same_document` |
 | 2 | **Güçlü anahtar** eşleşmesi: kanonik URL, mevzuat.gov.tr kimliği, `karar:<kurum>:<sayı>`, `no:<kurum>:<tür>:<sıra>` | `exact_key` |
 | 3 | **Zayıf anahtar** (normalize başlık + kurum). **Yalnızca farklı kaynaklar arasında**, çünkü aynı kaynak her ay aynı başlıklı duyuru yayımlayabilir | `exact_key` |
-| 4 | **Bulanık skor** (yayım tarihi ±7 gün, son 500 aday, farklı kaynak, uyumlu kurum): `0.6·başlık(token_set) + 0.3·metnin ilk 2000 karakteri + 0.1·kurum`. **≥0.90** otomatik birleştir | `fuzzy_title` |
+| 4 | **Bulanık skor** (yayım tarihi ±7 gün veya tarihsiz, son 500 aday, farklı kaynak, uyumlu kurum): `0.6·başlık(token_set) + 0.3·metnin ilk 2000 karakteri + 0.1·kurum`. Metinlerden biri boşsa `0.85·başlık + 0.15·kurum`. Kurum terimi 1,0 veya 0,5'tir. **≥0.90** otomatik birleştir | `fuzzy_title` |
 | 5 | 0.70–0.90: LLM onayı (`dedupe_confirm`) evet derse birleştir. Yanıt yoksa yeni kayıt + `needs_dedupe_review` | `llm_confirmed` / `new` |
 | 6 | Hiçbiri | `new`: yeni `regulation` (`NEW`, belge baseline ise `BASELINE`) |
 
@@ -198,8 +199,8 @@ yazılır. `ALERT_WEBHOOK_URL` tanımlıysa JSON olarak POST edilir (kurum izlem
 Ayrıntı `mevzuat-core/app/README.md`'dedir. Sunumda bilinmesi gerekenler:
 
 - **İlgililik:** Skor = 0.6·model skoru + 0.3·self-consistency (n=3 örnek oyu) + 0.1·kural sinyalleri. Eşik
-  **0.30**. Yüksek duyarlılık ilkesi: Model tereddüt ederse, oylar bölünürse veya metin yoksa kayıt eşik altında
-  olsa da portala "Düşük güven"le düşer. İlgisizler silinmez (`IRRELEVANT`). Paralel çalışma raporunda izlenir.
+  **0.30**. Yüksek duyarlılık ilkesi: Model (çoğunlukla) tereddüt ederse veya oylar bölünürse kayıt eşik altında
+  olsa da portala "Düşük güven"le düşer. Metin çıkarılamadıysa eşiğin yarısı (0,15) uygulanır. İlgisizler silinmez (`IRRELEVANT`). Paralel çalışma raporunda izlenir.
 - **Önem:** LLM önerisi + kural tabanlı düzeltmeler (Kritik/Yüksek/Orta/Düşük).
 - **Özet:** Her cümle kaynak metinden alıntıyla doğrulanır (`grounding.py`, rapidfuzz ≥90). Doğrulanamayan
   ifade çıkarılır. 36.000 karakterden uzun metinde map-reduce kullanılır. Yürürlük tarihi alıntı + deterministik

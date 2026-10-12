@@ -91,7 +91,8 @@ teyit edilmesi önerilir (06 §3).
 1. `mevzuat-core/app/config/sources.yaml` içinde ilgili kaynağın `schedule` listesini düzenleyin. Kaynak core'dur.
 2. `python tools/shared.py sync && python tools/shared.py check`
 3. `cd mevzuat-crawler/app && pytest -q` (`test_sources_config.py` YAML'ı doğrular)
-4. Crawler imajını derleyin. `config/` imajın içindedir, ortam değişkeniyle ezilmez. DMZ'de imajı güncelleyip
+4. Crawler imajını derleyin. Varsayılan olarak imajdaki `config/sources.yaml` kullanılır (`SOURCES_FILE` ile
+   başka dosya gösterilebilir ama DMZ kurulumunda bağlanmış bir dosya yok). DMZ'de imajı güncelleyip
    `systemctl restart mevzuat-crawler` çalıştırın.
 5. Core da `sources.yaml` okur: izleme toleransları, `content_selector`, yerel mod zamanlaması. Core imajını da
    güncelleyin.

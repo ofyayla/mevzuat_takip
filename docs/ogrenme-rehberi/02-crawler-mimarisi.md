@@ -60,7 +60,8 @@ fazla ifadesi varsa en yakın tetikleme alınır.
 
 `tick()` mantığı (`crawler/service.py`):
 
-1. İlk turda her kaynak için `next_due[kod] = next_fire(şimdi)` hesaplanır. **İlk turda hiçbir şey taranmaz.**
+1. İlk turda her kaynak için `next_due[kod] = next_fire(şimdi)` hesaplanır. **İlk turda zamanlanmış tarama
+   başlatılmaz.** Bekleyen LAN talepleri ise ilk turda alınabilir.
 2. Sonraki turlarda `next_due <= şimdi` ise:
    - kaynak zaten çalışıyorsa (`running` sözlüğünde) bu tetikleme **atlanır** ("önceki tarama sürüyor"),
    - değilse havuza gönderilir.
@@ -113,9 +114,10 @@ insert {kind, source_code,     →  find_one_and_update                →  run_
 ```
 
 - `kind=run`: "şimdi tara", yani admin API `POST /api/v1/admin/sources/{code}/run`. Portal arayüzünde henüz
-  düğmesi yok; API (`/docs`) veya `curl` ile çağrılır. `params`: `channels`, `max_details`.
-- `kind=backfill`: `POST /api/v1/admin/sources/{code}/backfill` (en fazla 62 gün) veya
-  `mevzuat-monitor backfill`. Resmî Gazete'de gün gün tarar, diğer kaynaklarda normal tarama yapar
+  düğmesi yok; API (`/docs`) veya `curl` ile çağrılır. API talebi boş `params` ile bırakır (tüm kanallar,
+  `max_details=200`). `channels`/`max_details` yalnızca talep belgesine elle yazılırsa kullanılır.
+- `kind=backfill`: `POST /api/v1/admin/sources/{code}/backfill` (başlangıç–bitiş farkı ≤62 gün, yani 63 takvim
+  gününe kadar) veya `mevzuat-monitor backfill` (CLI'da sınır yok). Resmî Gazete'de gün gün tarar, diğer kaynaklarda normal tarama yapar
   (`monitoring/reprocess.py:backfill`).
 - Talep **en geç bir yoklama aralığında (≤15 sn)** alınır, kaynak meşgul değilse ve havuzda yer varsa.
 - Tanımsız veya kapalı kaynak için talep hemen `failed` olur.
@@ -160,8 +162,11 @@ flowchart TD
 Önemli kurallar (`runner.py` başlık yorumu):
 
 - **Kanal izolasyonu:** Bir kanaldaki liste hatası diğerlerini durdurmaz. Tarama `partial` olur.
-- **Detay hataları kanal hatası değildir:** Bir öğenin detayı indirilemezse `warnings`'e yazılır ve öğe
-  kaydedilmez. Bir sonraki taramada yeniden denenir. Tüm detaylar başarısız olsa bile tarama `success` olabilir.
+- **Detay hataları kanal hatası değildir:** Bir öğenin detayı `FetchError` ile indirilemezse `warnings`'e yazılır
+  ve öğe kaydedilmez. Bir sonraki taramada yeniden denenir. Tüm detaylar başarısız olsa bile tarama `success`
+  olabilir. **Dikkat:** Yalnızca `FetchError` yakalanır. `_store_items` try bloğunun dışındadır. Başka bir istisna
+  (sarmalanmamış bir httpx hatası, Mongo hatası) taramayı yarıda keser: sonraki kanallar taranmaz, `finish_run`
+  çağrılmaz, `fetch_runs` kaydı `running` kalır.
 - **Ham içerik asla silinmez.**
 
 ### 5.2 Detay bütçesi (`max_details`)
@@ -178,9 +183,9 @@ Her öğe için `_store_items` şu karar tablosunu uygular. `prev` aynı `extern
 
 | Durum | Ne olur | Sayaç |
 |---|---|---|
-| `prev` var, `listing_hash` aynı, yenileme zamanı gelmemiş | **Detay istenmez.** Hiçbir şey yazılmaz | `unchanged` |
-| `prev` var, `listing_hash` aynı, `refresh_after_days` doldu (bütçe varsa) | Detay yeniden indirilir, hash karşılaştırılır | `refreshed` |
-| Bütçe bitti | Atlanır | `deferred` |
+| `prev` var, `listing_hash` aynı, yenileme zamanı gelmemiş (veya yenileme/detay bütçesi yok) | **Detay istenmez.** Hiçbir şey yazılmaz | `unchanged` |
+| `prev` var, `listing_hash` aynı, `refresh_after_days` doldu (bütçe varsa) | Detay yeniden indirilir, hash karşılaştırılır | `refreshed` (+ ardından `unchanged` veya `changed`; aynı öğe iki sayaçta görünür) |
+| Detay gerekiyor ama bütçe bitti | Atlanır | `deferred` |
 | Detay indirildi, içerik `sha256` aynı | `touch_unchanged`: `listing_hash`, `version_key`, `title`, `extra.checked_at` güncellenir. Yeni sürüm yok | `unchanged` |
 | Detay indirildi, `sha256` farklı, `prev` var | **Yeni sürüm** (`version+1`). Eski sürüm `is_latest=False` | `changed` |
 | `prev` yok | Sürüm 1 | `new` |
@@ -264,16 +269,21 @@ parmak izi bozulur.
 
 ### 6.2 Her istekte uygulanan kurallar (`Fetcher.get`)
 
-1. **Host izin listesi:** URL'nin host'u `allowed_hosts`'ta (fnmatch desenleri, `base_url` host'u otomatik eklenir)
-   değilse `HostNotAllowed`. Yanlış yapılandırılmış bir desenin crawler'ı rastgele sitelere götürmesini engeller.
+1. **Host izin listesi:** İstenen URL'nin host'u `allowed_hosts`'ta (fnmatch desenleri, `base_url` host'u otomatik
+   eklenir) değilse `HostNotAllowed`. Yanlış yapılandırılmış bir desenin crawler'ı rastgele sitelere götürmesini
+   engeller. **Sınır:** Yönlendirmeler (3xx) istemci tarafından izlenir ve izin listesine tabi değildir; yalnızca
+   istenen URL denetlenir.
 2. **Kibar tarama:** Aynı host'a ardışık istekler arasında en az `request_delay_s` (kaynakta tanımlıysa, ör. RG
    **3 sn**), yoksa `COLLECT_REQUEST_DELAY_S` (**1,5 sn**) beklenir. Sayaç `Fetcher` nesnesi başınadır, yani
    kaynak taraması başına.
-3. **Yeniden deneme:** Bağlantı hatası, zaman aşımı ve HTTP **429/500/502/503/504** "geçici" sayılır. **Toplam 3
-   deneme**, aralarda üstel bekleme **2 sn, 4 sn** (tenacity: `multiplier=2, min=2, max=30`). Diğer 4xx/5xx hemen
-   `FetchError`.
-4. **Sınırlar:** Zaman aşımı `COLLECT_TIMEOUT_S` (**30 sn**), yanıt boyutu `COLLECT_MAX_BYTES` (**50 MB**).
-5. **Kimlik:** `User-Agent: MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)`, `Accept-Language: tr-TR`.
+3. **Yeniden deneme:** HTTP **429/500/502/503/504** ve istemci hataları "geçici" sayılır: httpx'te
+   `TimeoutException`, `NetworkError` (TLS doğrulama hatası `ConnectError` da dahil), `ProxyError`; curl_cffi'de tüm
+   `RequestsError`. **Toplam 3 deneme**, aralarda üstel bekleme **2 sn, 4 sn** (tenacity: `multiplier=2, min=2,
+   max=30`). Diğer 4xx/5xx hemen `FetchError`. Diğer httpx hataları (`RemoteProtocolError`, `TooManyRedirects`,
+   `DecodingError` …) `FetchError`'a sarmalanmaz, olduğu gibi yükselir (bkz. §5.1 dikkat notu).
+4. **Sınırlar:** Zaman aşımı `COLLECT_TIMEOUT_S` (**30 sn**). Yanıt boyutu `COLLECT_MAX_BYTES` (**50 MB**): yanıt
+   tamamen belleğe alındıktan sonra reddedilir, indirme sınırı değildir.
+5. **Kimlik:** `User-Agent: MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)`, `Accept-Language: tr-TR,tr;q=0.9`.
 6. **Karakter kodlaması:** Önce `Content-Type` charset'i, sonra `<meta charset>`, sonra UTF-8. Çözülemezse
    **windows-1254** (eski Türkçe sayfalar, ör. RG `.htm` dosyaları).
 7. **Kayıt (Recorder):** `probe --record` ile her yanıt `manifest.json` + dosya olarak kaydedilir.
@@ -299,7 +309,8 @@ Her kanalın `strategy` alanı bir sınıfa eşlenir (`strategies/__init__.py`).
 | Strateji | Kullanıldığı yer | Nasıl çalışır | Kimlik (`external_id`) |
 |---|---|---|---|
 | `resmi_gazete` | RG `fihrist` | `/fihrist?tarih=YYYY-MM-DD[&mukerrer=N]`. Bugün + `lookback_days` (1) gün geri. Her gün için asıl sayı + mükerrer 1..4, **ilk boş mükerrerde durur**. Bölüm başlıkları (`.html-title`/`.html-subtitle`) kategori olur. "İLÂN BÖLÜMÜ" atlanır; yalnızca "Çeşitli İlânlar" dizini açılır ve ilan veren kurum adı `ilan_issuers` regex'lerine uyan ilanlar (BDDK, TCMB, SPK, MASAK, TMSF, KVKK, Rekabet, Ticaret, SEDDK, HMB, TKBB/TBB, Borsa/MKK/Takasbank) öğe olur. Gün sınırı İstanbul saatiyle hesaplanır | URL'den `20260925-1`, mükerrer `20260925M1-…`, ilan `20260925-4-25` |
-| `link_pattern` | BDDK (7 kanal), TCMB mevzuat, Ticaret tüketici, Rekabet duyuru, TKBB | Sayfada (`scope` içinde) `href_pattern`'e uyan tüm bağlantılar. Başlık bağlantı metninden. Metin "İncele/Git" gibi anlamsızsa üst elemandan alınır. Tarih `date_selector` veya `date_regex` ile en fazla 4 üst elemana (≤600 karakter) çıkarak aranır. `fields` ile ek alanlar (karar sayısı/tarihi), `group_selector` ile akordeon grubu, `version_pattern` ile sürüm anahtarı (TCMB `CACHEID`). CSS sınıflarına bağlı olmadığı için şablon değişikliğine dayanıklıdır | `id_pattern` grubu, yoksa URL yolu+sorgusu |
+| `link_pattern` | BDDK (7 kanal), TCMB mevzuat, Ticaret tüketici, Rekabet duyuru, TKBB | Sayfada (`scope` içinde) `href_pattern`'e uyan tüm bağlantılar. Başlık bağlantı metninden. Metin "İncele/Git" gibi anlamsızsa üst elemandan alınır. Tarih önce `date_selector` ile öğe kapsayıcısında, bulunamazsa `date_regex` ile kapsayıcı + en fazla 3 üst
+  elemanda (≤600 karakter) aranır. `fields` ile ek alanlar (karar sayısı/tarihi), `group_selector` ile akordeon grubu, `version_pattern` ile sürüm anahtarı (TCMB `CACHEID`). CSS sınıflarına bağlı olmadığı için şablon değişikliğine dayanıklıdır | `id_pattern` grubu, yoksa URL yolu+sorgusu |
 | `css_list` | SPK bülten/basın, KVKK (3), Ticaret duyuru, Rekabet kararlar | `item` seçicisi = öğe kapsayıcısı. İçinden `link`, `title`, `date`, `summary`, `fields`. `pagination` ile `?param=N` ek sayfalar (öğe gelmeyince durur) | `id_pattern` veya URL |
 | `feed` | TCMB basın duyuruları | RSS/Atom (`feedparser`). Türkçe tarihler kendi ayrıştırıcımızla. Çift kaçışlı başlıklar çözülür, http→https. `version_key = updated` | `id_pattern` veya URL |
 | `json_api` | SPK `mevzuat` (`mevzuat.spk.gov.tr/api/Search/All`) | React ön yüzün kullandığı JSON uç noktası. Alan eşlemesi tamamen YAML'da (`{alan}` şablonları), `filter`, `version_fields` | Şablon: `{contentSource}-{contentID}` |
@@ -335,8 +346,10 @@ PostgreSQL'e aktardıktan sonra `synced=true`'yu **yalnızca `rev` değişmemiş
 `crawl_requests(status, created_at)`, `raw.files(filename, uploadDate)`.
 
 **Yetki** (`mevzuat-core/deploy/mongo/init-users.js`): `mevzuat_crawler` yalnızca `mevzuat_crawl`'a yazar.
-Belge **silemez**, GridFS'e yalnızca ekleyebilir, başka veritabanını göremez. DMZ ele geçirilse bile arşiv
-silinemez. `mevzuat_core` taranan veriyi değiştiremez; yalnızca `synced` işareti koyar ve talep ekler.
+Belge **silemez**, GridFS'e yalnızca ekleyebilir, başka veritabanını göremez. DMZ ele geçirilse bile ham arşiv
+silinemez (meta koleksiyonlarda `update` yetkisi vardır). `mevzuat_core` belge silemez ve ham içeriği (GridFS)
+değiştiremez. Meta koleksiyonlarda `update` yetkisi vardır; yalnızca `synced` alanını yazması bir **kod
+sözleşmesidir**, Mongo yetkisiyle zorlanmaz. Ayrıca talep ekler.
 
 ## 9. Hata durumlarında davranış
 
@@ -345,10 +358,10 @@ silinemez. `mevzuat_core` taranan veriyi değiştiremez; yalnızca `synced` işa
 | Bir kanalın liste sayfası hata verdi | Kanal `error`, diğer kanallar sürer. Hepsi hatalıysa `failed` | `fetch_runs.errors`; core `fetch_error` alarmı |
 | Detay sayfası indirilemedi | Uyarı. Öğe yazılmaz, sonraki taramada yeniden denenir | `fetch_runs.channels.<k>.warnings` |
 | 429/5xx/zaman aşımı | 3 deneme, sonra hata | log |
-| İzin listesi dışı host | Liste/detayda `HostNotAllowed`; ekte sessizce atlanır | log |
-| MongoDB erişilemiyor | `tick()` hata loglar, döngü sürer. Canlılık dosyası güncellenmez → ~2 dk sonra healthcheck başarısız → konteyner yeniden başlatılır. Açılışta `ensure_indexes` başarısızsa süreç çıkar ve systemd yeniden başlatır | `journalctl -u mevzuat-crawler`; core `crawler_down` |
+| İzin listesi dışı host | Liste URL'sinde `HostNotAllowed` (kanal hatası). Detayda istek atılmaz, liste anlık görüntüsü saklanır (§5.6). Ekte atlanır (info log) | log |
+| MongoDB erişilemiyor | `tick()` hata loglar, döngü sürer. Canlılık dosyası güncellenmez ve ~2 dk'da bayatlar. 60 sn aralıklı 3 ardışık başarısız kontrolden sonra (≈4–5 dk) Quadlet/K8s konteyneri yeniden başlatır; compose'da `restart: always` sağlıksız konteyneri yeniden başlatmaz. Açılışta `ensure_indexes` başarısızsa süreç çıkar ve systemd yeniden başlatır | `journalctl -u mevzuat-crawler`; core `crawler_down` |
 | Tarama sırasında süreç öldü | O ana kadar yazılan sürümler kalır (sonraki tarama onları "aynı" görür). `fetch_runs` kaydı `running`'de kalır. Kilit TTL dolana kadar (≤1 sa) kaynak "meşgul" görünebilir | 06 §1 |
-| SIGTERM (durdurma/güncelleme) | Yeni iş alınmaz, süren taramalar beklenir. Quadlet `TimeoutStopSec=150`, compose `stop_grace_period: 2m`. Daha uzun süren tarama öldürülür | log: "durduruluyor; süren taramalar bekleniyor" |
+| SIGTERM (durdurma/güncelleme) | Yeni iş alınmaz. Süren taramalar **ve havuz kuyruğunda bekleyen işler** çalıştırılıp beklenir (`shutdown(wait=True)`, `cancel_futures` yok). Süre sınırı: K8s `terminationGracePeriodSeconds: 150`, compose `stop_grace_period: 2m`. Quadlet'te `TimeoutStopSec=150` yalnızca systemd'nin sınırıdır; podman'ın kendi durdurma süresi (`StopTimeout=` verilmediği için varsayılan 10 sn olabilir) daha kısa olabilir, bkz. 06 §4. Süreyi aşan tarama öldürülür | log: "durduruluyor; süren taramalar bekleniyor" |
 
 ## 10. Komutlar (özet)
 

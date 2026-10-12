@@ -9,7 +9,7 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 | # | Konu | Alan | Öncelik |
 |---|---|---|---|
 | 1 | CI'da testler çalışmıyor | Süreç | **Yüksek** |
-| 2 | Yeniden başlatma sonrası sahipsiz talepler ve kilitler | Crawler | **Yüksek** (doğrulanmalı) |
+| 2 | Yeniden başlatma sonrası bayat kilitler ve sahipsiz talepler | Crawler | **Yüksek** |
 | 3 | Uzun backfill sırasında aynı kaynağın zamanlanmış taramaları atlanır | Crawler | Orta |
 | 4 | Durdurma süresi uzun taramalardan kısa | Crawler/dağıtım | Orta |
 | 5 | Hafta sonu ve gece tarama boşlukları | İş kararı | Orta |
@@ -23,6 +23,11 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 | 13 | `API_REFERENCE.md` güncel değil | Belge | Düşük |
 | 14 | Ortak kodun kopyalanarak paylaşılması | Mimari | Düşük (uzun vade) |
 | 15 | GridFS arşiv büyümesi | Kapasite | Düşük (izlenmeli) |
+| 16 | Küçük harfli kaynak koduyla tarama talebi başarısız olur | API/Crawler | Düşük |
+| 17 | Yönlendirmeler host izin listesine tabi değil | Güvenlik | Orta |
+| 18 | Aynı içerikli iki ek taramayı yarıda keser | Crawler | Orta |
+| 19 | Yalnızca `FetchError` yakalanıyor; diğer hatalar taramayı keser | Crawler | Orta |
+| 20 | Tükenmiş hatalı kayıtlar güvenlik ağı görevlerini tıkayabilir | Core | Düşük |
 
 ---
 
@@ -36,32 +41,41 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 - **Öneri:** Push'tan önce bir test aşaması ekleyin: `make test` eşdeğeri (`pytest -q` + `tools/shared.py check` +
   `ruff check`). Mongo testleri için pipeline'da `mongo:7` servis konteyneri.
 
-## 2. Yeniden başlatma sonrası sahipsiz talepler ve kilitler — Yüksek (doğrulanmalı)
+## 2. Yeniden başlatma sonrası bayat kilitler ve sahipsiz talepler — Yüksek
+
+İki ayrı sorun var:
+
+**a) Bayat kilit (host adından bağımsız, kesin):**
+
+- **Kanıt:** `mongo.acquire_lock` kilidi yalnızca `{_id, expires_at < şimdi}` filtresiyle alır, sahibine
+  bakmaz. TTL 3600 sn ve tarama boyunca yenilenmez.
+- **Etki:** Tarama sırasında süreç ölürse (güncelleme, healthcheck `kill`, sunucu yeniden başlatma) kilit
+  bırakılmaz. Yeni süreç, host adı aynı olsa bile, o kaynağı kilit süresi dolana kadar (≤1 sa) "başka bir tarama
+  sürüyor" diye atlar. BDDK gibi saatlik bir kaynakta bir tur kaçar. Kesilen `fetch_runs` kaydı `running`'de kalır.
+
+**b) Sahipsiz talep (host adı değişiyorsa):**
 
 - **Kanıt:** Süreç kimliği host adıdır (`mongo.worker_id()` → `socket.gethostname()`). Açılışta yalnızca **aynı
-  host adına** ait `running` talepler geri alınır (`requeue_orphaned_requests`: `claimed_by == owner`). Kilit
-  devralma yalnızca TTL dolunca olur (`acquire_lock`, 3600 sn). Quadlet dosyasında `HostName=` yok
-  (`deploy/dmz/mevzuat-crawler.container`). Podman'da varsayılan host adı konteyner kimliğidir ve Quadlet her
-  başlatmada konteyneri yeniden oluşturur. Kubernetes'te yeni pod yeni ad alır.
-- **Etki:** Tarama sırasında konteyner yeniden başlarsa (güncelleme, healthcheck `kill`, sunucu yeniden başlatma):
-  - O an işlenen "şimdi tara"/backfill talebi sonsuza dek `running` kalır. İzleme yalnızca `pending > 30 dk` ve
-    `failed` talepleri raporladığı için (`monitoring/crawler.py`) bu durum alarm üretmez.
-  - Kesilen taramanın kaynağı, kilit süresi dolana kadar (≤1 sa) "başka bir tarama sürüyor" diye atlanır. BDDK
-    gibi saatlik bir kaynakta bir tur kaçar.
-  - Kesilen `fetch_runs` kaydı `running`'de kalır.
+  host adına** ait `running` talepler geri alınır (`requeue_orphaned_requests`: `claimed_by == owner`). Quadlet
+  dosyasında `HostName=` yok. Podman'da varsayılan host adı konteyner kimliğidir ve Quadlet her başlatmada
+  konteyneri yeniden oluşturur. Kubernetes'te yeni pod yeni ad alır.
+- **Etki:** O an işlenen "şimdi tara"/backfill talebi sonsuza dek `running` kalır. İzleme yalnızca
+  `pending > 30 dk` ve `failed` talepleri raporladığı için (`monitoring/crawler.py`) alarm da üretilmez. Host adı
+  sabit olsa bile talep geri alınır ama (a) yüzünden hemen `SourceBusy` ile `failed` olur.
 - **Nasıl doğrulanır:** DMZ'de `podman exec mevzuat-crawler hostname` → `systemctl restart mevzuat-crawler` →
-  tekrar `hostname`. Değer değişiyorsa sorun geçerlidir. Mongo'da 05 §4.1'deki "takılı kalmış" sorguları.
-- **Öneri (düşük maliyetli):** Quadlet'e `HostName=mevzuat-crawler` ekleyin. Chart'ta da sabit bir kimlik verin.
-  Daha sağlamı: Crawler tek örnek olduğu için açılışta **tüm** `running` talepleri geri al, tüm `collect:*`
-  kilitlerini bırak, eski `running` taramaları `failed (interrupted)` işaretle. İzlemeye "1 saatten uzun `running`
-  talep" kontrolü ekleyin.
+  tekrar `hostname`. Mongo'da 05 §4.1'deki "takılı kalmış" sorguları.
+
+**Öneri:** Crawler tek örnek olduğu için açılışta (1) tüm `collect:*` kilitlerini bırakın, (2) tüm `running`
+talepleri `pending`'e geri alın, (3) eski `running` taramaları `failed (interrupted)` işaretleyin. Ek olarak
+Quadlet'e `HostName=mevzuat-crawler` ekleyin, uzun işlerde kilidi periyodik yenileyin ve izlemeye "1 saatten uzun
+`running` talep" kontrolü ekleyin.
 
 ## 3. Uzun backfill sırasında aynı kaynağın zamanlanmış taramaları atlanır — Orta
 
 - **Kanıt:** Backfill talebi `running[kod]`'a yazılır. Bu sürede o kaynağın tüm zamanlanmış tetiklemeleri
   "önceki tarama sürüyor" diye atlanır (`CrawlerService.tick`). RG backfill'i gün gün, her gün için detaylar
-  dahil tam tarama yapar (`monitoring/reprocess.py:backfill`). Sayfalar arası 3 sn beklenir. API 62 güne kadar
-  aralık kabul eder.
+  dahil tam tarama yapar (`monitoring/reprocess.py:backfill`). Sayfalar arası 3 sn beklenir. API 62 gün farka kadar
+  aralık kabul eder, `mevzuat-monitor backfill`'de sınır yoktur.
 - **Etki (tahmin):** Uzun bir RG backfill'i saatler sürebilir. Bu sürede **günün Resmî Gazetesi taranmaz.**
   Ayrıca 1 saatlik kilit TTL'i backfill sırasında dolar. Aynı süreçte koruma `running` ile sürse de süreçler
   arası koruma kalkar.
@@ -70,13 +84,19 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 
 ## 4. Durdurma süresi uzun taramalardan kısa — Orta
 
-- **Kanıt:** SIGTERM'de süren taramalar beklenir (`pool.shutdown(wait=True)`), ama Quadlet `TimeoutStopSec=150`,
-  compose `stop_grace_period: 2m`. İlk kurulumda (200 detay × 1,5–3 sn) veya yeni RG sayısında tarama bu süreyi
-  aşabilir. Tarama döngüsü durdurma bayrağını kontrol etmiyor.
+- **Kanıt:** SIGTERM'de süren taramalar **ve havuz kuyruğunda bekleyen işler** beklenir
+  (`pool.shutdown(wait=True)`, `cancel_futures` yok). K8s `terminationGracePeriodSeconds: 150`, compose
+  `stop_grace_period: 2m`. Quadlet'te `TimeoutStopSec=150` yalnızca systemd'nin sınırıdır; konteyner podman
+  tarafından durdurulur ve unit'te `StopTimeout=` olmadığı için podman'ın varsayılan durdurma süresi (10 sn)
+  geçerli olabilir. İlk kurulumda (200 detay × 1,5–3 sn) veya yeni RG sayısında tarama bu süreleri aşar. Tarama
+  döngüsü durdurma bayrağını kontrol etmiyor.
+- **Nasıl doğrulanır:** `systemctl cat mevzuat-crawler` (üretilen `ExecStop`) ve
+  `podman inspect mevzuat-crawler --format '{{.Config.StopTimeout}}'`.
 - **Etki:** Güncelleme anında tarama yarıda kesilir ve madde 2'deki durumlar oluşur. Veri tutarlılığı korunur:
   yazılan sürümler kalır, sonraki tarama devam eder.
-- **Öneri:** `_store_items` döngüsünde durdurma bayrağına bakıp temiz çıkış (taramayı `partial` kapat, kilidi
-  bırak) yapın. Güncellemeleri tarama pencereleri dışına planlayın (05 §4.1'deki `next_due`).
+- **Öneri:** Quadlet'e `StopTimeout=140` ekleyin. `_store_items` döngüsünde durdurma bayrağına bakıp temiz çıkış
+  yapın (taramayı `partial` kapat, kilidi bırak). Kapanışta `shutdown(cancel_futures=True)` kullanın. Güncellemeleri
+  tarama pencereleri dışına planlayın (05 §4.1'deki `next_due`).
 
 ## 5. Hafta sonu ve gece tarama boşlukları — Orta (iş kararı)
 
@@ -94,13 +114,16 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
   indirme hatası (`FetchError`) `deferred`'ı artırmaz, öğe yalnızca atlanır (`_store_items`).
 - **Etki:** İlk taramada detayı geçici olarak indirilemeyen eski bir öğe, baseline kapandıktan sonra
   indirildiğinde `is_baseline=False` olur. YZ hattına ve portala "yeni düzenleme" olarak düşer (yanlış pozitif).
-- **Öneri:** Baseline modunda detay hatalarını da "ertelenen" sayın. Ya da öğenin liste tarihini kanalın ilk
+- **İkinci, daha güçlü yol:** Bir kanalın **ilk** taraması hatasız ama boş liste dönerse (`deferred=0`)
+  `baseline_complete=True` olur ve hiçbir şey arşivlenmemiştir. Sonraki taramada sitedeki tüm birikim
+  baseline olmayan "yeni" öğe olarak YZ hattına girer (ör. yeni eklenen bir kanalın seçicisi ilk gün hatalıysa).
+- **Öneri:** Baseline modunda detay hatalarını da "ertelenen" sayın. Boş listeyle baseline'ı kapatmayın. Ya da öğenin liste tarihini kanalın ilk
   tarama tarihiyle karşılaştırarak eski içeriği baseline'a alın.
 
 ## 7. Sürekli hata veren detaylar her taramada yeniden deneniyor — Düşük
 
 - **Kanıt:** Detayı 404 veren bir öğe hiç kaydedilmediği için (`prev is None`) her taramada yeniden indirilmeye
-  çalışılır. Hem istek hem detay bütçesi harcar, `warnings` büyür.
+  çalışılır. Hem istek hem detay bütçesi harcar, aynı uyarı her taramada tekrar yazılır.
 - **Öneri:** Hata sayısını öğe bazında tutun (ör. Mongo'da küçük bir koleksiyon) ve üstel geri çekilme uygulayın.
   N denemeden sonra liste anlık görüntüsü (`role=listing`) olarak kaydedin.
 
@@ -133,7 +156,7 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 
 ## 11. Ara sertifika son kullanma tarihleri — Orta (takvimli)
 
-- **Kanıt:** `config/certs/geotrust-tls-rsa-ca-g1.pem` (Resmî Gazete) **2027-11-02**,
+- **Kanıt:** `config/certs/geotrust-tls-rsa-ca-g1.pem` (Resmî Gazete ve mevzuat.gov.tr; ortak sertifika) **2027-11-02**,
   `globalsign-rsa-ov-ssl-ca-2018.pem` (BDDK) **2028-11-21**. `test_intermediate_certificates_valid` süresi geçen
   sertifikada test kırar. Siteler yaprak sertifikalarını yenilerken ara sertifikayı daha erken değiştirebilir.
 - **Öneri:** Takvime hatırlatma koyun (bitişten 60 gün önce). `check-access` başarısız olursa `ca-fetch` ile
@@ -169,13 +192,61 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 - **Öneri:** Aylık `db.raw.files.aggregate([{$group: {_id: null, gb: {$sum: {$divide: ["$length", 1073741824]}}}}])`
   ile büyümeyi izleyin. Yedekleme süresini (runbook §8) buna göre planlayın.
 
+## 16. Küçük harfli kaynak koduyla tarama talebi başarısız olur — Düşük
+
+- **Kanıt:** API kaynağı büyük/küçük harf duyarsız doğrular (`SourcesFile.get`), ama talebi yazıldığı gibi
+  Mongo'ya bırakır (`api/main.py:admin_run_source`, `admin_backfill`). Crawler `source_code`'u duyarlı karşılaştırır
+  (`CrawlerService.tick`: `req["source_code"] not in self.sources`).
+- **Etki:** `POST /api/v1/admin/sources/bddk/run` 202 döner, crawler talebi "kaynak tanımlı değil" diye `failed`
+  yapar.
+- **Öneri:** API'de kodu kanonik hale getirin (`load_sources(...).get(code).code`).
+
+## 17. Yönlendirmeler host izin listesine tabi değil — Orta
+
+- **Kanıt:** İzin listesi yalnızca istenen URL'de denetlenir (`Fetcher.get`). httpx (`follow_redirects=True`) ve
+  curl_cffi (`allow_redirects=True`) yönlendirmeleri denetimsiz izler.
+- **Etki:** İzinli bir sitedeki açık yönlendirme veya ele geçirilmiş bir sayfa, crawler'ı DMZ'den başka bir
+  host'a götürebilir. İzin listesinin güvenlik vaadi zayıflar.
+- **Öneri:** Yönlendirmeleri elle izleyin (`follow_redirects=False` + döngü) ve her adımda `host_allowed`
+  denetleyin, ya da en azından `final_url` host'unu denetleyip reddedin.
+
+## 18. Aynı içerikli iki ek taramayı yarıda keser — Orta
+
+- **Kanıt:** Ek kimliği `"<ana_id>#<sha256[:12]>"`, sürümü ana belgeninkiyle aynıdır (`runner._store_items`).
+  Detay sayfasında farklı URL'lerden aynı dosyaya iki bağlantı varsa iki ek aynı `(source_code, external_id,
+  version)` üçlüsünü alır. Bu üçlü tekil indekslidir, `insert_many` `BulkWriteError` verir
+  (`MongoCrawlStore.add_version`). Ana sürüm o noktada zaten yazılmıştır.
+- **Etki:** Tarama yarıda kesilir (madde 19). Sonraki taramada ana belge "aynı" görüldüğü için o sürümün ekleri
+  kalıcı olarak kaybolur. Ayrıca yeni sürüm yazıldığında eski sürümün ekleri `is_latest=True` kalır.
+- **Öneri:** Ekleri içerik hash'ine göre tekilleştirin. Yeni sürümde eski eklerin `is_latest`'ini de düşürün.
+
+## 19. Yalnızca `FetchError` yakalanıyor; diğer hatalar taramayı keser — Orta
+
+- **Kanıt:** `SourceCollector.run` yalnızca liste aşamasını try içine alır. Detayda yalnızca `FetchError`
+  yakalanır. Sarmalanmayan httpx hataları (`RemoteProtocolError`, `TooManyRedirects` …) ve Mongo hataları
+  `_store_items`'tan yükselir.
+- **Etki:** Kalan kanallar taranmaz, `finish_run` çağrılmaz, `fetch_runs` kaydı `running` kalır. İzleme
+  `running` taramaları dikkate almadığı için `fetch_error` alarmı da oluşmaz.
+- **Öneri:** Backend'lerde tüm `httpx.HTTPError`'ları `FetchError`'a sarmalayın. `run()`'da kanal başına
+  `_store_items`'ı da try içine alın ve `finish_run`'ı `finally`'de çağırın.
+
+## 20. Tükenmiş hatalı kayıtlar güvenlik ağı görevlerini tıkayabilir — Düşük
+
+- **Kanıt:** `process_pending` ve `classify_pending` adayları id sırasıyla ve limitle seçer. Deneme hakkı tükenmiş
+  `EXTRACT_FAILED`/`AI_FAILED` kayıtlar sorguya dahildir, ancak döngüde atlanır (`processing/pipeline.py`,
+  `ai/classify.py`).
+- **Etki:** Bu kayıtlar limit kadar birikirse Beat'in güvenlik ağı turu daha yeni kayıtlara hiç ulaşmaz. Normal
+  akışta `.delay()` zinciri id listesiyle çalıştığı için etkisi yalnızca kaçan tetiklemelerde görülür.
+- **Öneri:** Deneme sayısını sorgu filtresine taşıyın (`extra->>'extract_attempts'` veya ayrı sütun).
+
 ---
 
 ## Önerilen ilk adımlar (küçükten büyüğe)
 
 1. CI'a test aşaması (madde 1). Bir günlük iş, en yüksek getiri.
-2. DMZ'de host adı doğrulaması. Gerekirse `HostName=` ve açılış temizliği (madde 2). Küçük kod değişikliği +
+2. Açılışta kilit/talep/tarama temizliği, `HostName=` ve `StopTimeout=` (madde 2, 4). Küçük kod değişikliği +
    test.
-3. `ALERT_WEBHOOK_URL` bağlantısı ve sertifika hatırlatmaları (madde 10, 11).
-4. Başkanlıkla tarama SLA'sı görüşmesi (madde 5).
-5. Baseline/detay hatası düzeltmesi ve detay hata geri çekilmesi (madde 6, 7).
+3. Tarama sağlamlığı: hata sarmalama ve `finish_run` garantisi, ek tekilleştirme (madde 18, 19).
+4. `ALERT_WEBHOOK_URL` bağlantısı ve sertifika hatırlatmaları (madde 10, 11).
+5. Başkanlıkla tarama SLA'sı görüşmesi (madde 5).
+6. Baseline/detay hatası düzeltmesi, detay hata geri çekilmesi ve yönlendirme denetimi (madde 6, 7, 17).

@@ -11,9 +11,9 @@ açılış sunumu depo kökünde: `Mevzuat_Takip_Otomasyonu_Proje_Acilis_Sunumu.
 | Haftalık tarama | **≈210** (RG 49, BDDK 65, SPK 17, KVKK 17, MASAK 17, TCMB 15, Ticaret/Rekabet/TKBB 10'ar) | 03 §1 |
 | Resmî Gazete | Her gün **7 pencere**, bugün + dün, asıl + 4'e kadar mükerrer | 03 §1, 02 §7 |
 | BDDK | Hafta içi **saat başı 08–20** | 03 §1 |
-| "Şimdi tara" gecikmesi | **≤15 sn** içinde crawler alır | 02 §4 |
+| "Şimdi tara" gecikmesi | Kaynak meşgul değilse ve havuzda yer varsa **≤15 sn** içinde crawler alır | 02 §4 |
 | Crawler → portal veritabanı | **≤1 dk** (ingest her dakika) | 04 §2 |
-| Crawler durursa alarm | **30 dk** içinde `crawler_down` | 04 §6 |
+| Crawler durursa alarm | **30–40 dk** içinde `crawler_down` (sinyal eşiği 30 dk, izleme 10 dk'da bir) | 04 §6 |
 | Kibar tarama | Host başına istekler arası **1,5 sn** (RG 3 sn), en fazla 3 kaynak paralel | 02 §6 |
 | Tekilleştirme eşikleri | ≥0,90 otomatik, 0,70–0,90 LLM onayı | 04 §3.2 |
 | İlgililik | 3 örnekli self-consistency, eşik 0,30, düşük güvenliler de portala düşer | 04 §7 |
@@ -50,12 +50,13 @@ Doğrulanmamış sayı söylemeyin. Tarama süreleri ve LLM gecikmeleri kurum or
 
 ### 2.3 Güvenlik / BT altyapı (15 dakika)
 
-- İnternete çıkan tek bileşen crawler'dır. Yalnızca `allowed_hosts` listesindeki kurum sitelerine gider (kodda
-  zorlanır).
+- İnternete çıkan tek bileşen crawler'dır. Yalnızca `allowed_hosts` listesindeki kurum sitelerine istek atar (kodda
+  zorlanır; yönlendirmeler bu denetime tabi değildir, bkz. 06 §17).
 - DMZ'de LLM/OCR/PostgreSQL/Redis ayarı veya anahtarı **yoktur** (`crawler.env.example`). Konteyner salt okunur,
   `NoNewPrivileges`, root olmayan kullanıcı (uid 10001).
-- Mongo en az yetki: crawler kullanıcısı yalnızca `mevzuat_crawl`'a yazar, **silemez**. Core kullanıcısı taranan
-  veriyi değiştiremez (`deploy/mongo/init-users.js`).
+- Mongo en az yetki: crawler kullanıcısı yalnızca `mevzuat_crawl`'a yazar, belge **silemez**. Core kullanıcısı
+  belge silemez ve ham içeriği değiştiremez; meta veride yalnızca `synced` yazması kod sözleşmesidir
+  (`deploy/mongo/init-users.js`).
 - TLS doğrulaması kapatılmaz. Eksik ara sertifikalar AIA'dan indirilip köke karşı doğrulanarak eklenir.
 - LLM kurum içi vLLM'dir, veri dışarı çıkmaz. Her çağrı `llm_call`'da izlenir.
 - Denetim izi yalnızca eklemeye açıktır, hash zinciriyle korunur (`mevzuat-monitor audit-verify`).
@@ -90,7 +91,7 @@ kaçırma oranını ölçer (`/api/v1/evaluation/report`).
 
 **"Site tasarımı değişirse?"** İmza değişikliği erken uyarı verir, boş liste alarm üretir. Düzeltme genellikle
 yalnızca `sources.yaml` seçicisidir. Kayıtlı sayfalarla (fixture) test edilip dağıtılır. Mümkün olan yerde HTML
-yerine RSS/JSON API kullanıldığı için (TCMB, SPK mevzuat, MASAK) kırılganlık azdır.
+yerine RSS/JSON API kullanıldığı için (TCMB basın duyuruları, SPK mevzuat, MASAK) kırılganlık azdır.
 
 **"Aynı düzenleme hem RG'de hem BDDK'da çıkarsa iki kayıt mı olur?"** Hayır. Karar sayısı, mevzuat.gov.tr
 kimliği, URL gibi kesin anahtarlarla, gerekirse başlık+metin benzerliği ve LLM onayıyla tek kayıtta birleşir (04
