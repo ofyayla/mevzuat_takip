@@ -90,8 +90,9 @@ jupyterhub/start.sh      JupyterHub geliştirme sunucusunda iki servisi yerel s�
 
 ### Ortak kod kuralı (çok önemli)
 
-`settings.py`, `db.py`, `storage.py`, `mongo.py`, `collectors/`, `crawler/`, `config/sources.yaml`, `config/certs/`
-ve ortak testler/fixture'lar **iki serviste de** bulunur, çünkü servisler ayrı repolara gider. **Kaynak
+`settings.py`, `db.py`, `storage.py`, `mongo.py`, `collectors/`, `crawler/`, `monitoring/reprocess.py`,
+`config/sources.yaml`, `config/certs/` ve ortak testler/fixture'lar **iki serviste de** bulunur (tam liste:
+`tools/shared.py`), çünkü servisler ayrı repolara gider. **Kaynak
 `mevzuat-core`'dur:**
 
 ```bash

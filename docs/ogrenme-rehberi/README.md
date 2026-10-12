@@ -56,7 +56,7 @@ Aşağıdaki soruları koda bakmadan cevaplayabiliyorsanız crawler'a hakimsiniz
 8. `refresh_after_days` hangi kaynaklarda ve neden var? (02 §5.5, 03 §2)
 9. KVKK listesindeki bir bağlantı Resmî Gazete'ye gidiyorsa crawler ne saklar? (02 §5.6)
 10. `impersonate` istemcisi neden gerekli? Eksik TLS ara sertifikası nasıl çözülüyor? (02 §6)
-11. Crawler'ın MongoDB'de yazdığı 6 koleksiyon ve GridFS kovası hangileri? `synced`/`rev` kuralı nedir? (02 §7)
+11. Crawler'ın MongoDB'de yazdığı 6 koleksiyon ve GridFS kovası hangileri? `synced`/`rev` kuralı nedir? (02 §8)
 12. Crawler durursa LAN tarafı bunu kaç dakikada fark eder, hangi alarmla? (04 §6)
 13. Resmî Gazete günde kaç kez, BDDK haftada kaç kez taranıyor? (03 §1)
 14. Bir site şablonunu değiştirirse bunu hangi sinyaller yakalar? (02 §5.7, 04 §6)
