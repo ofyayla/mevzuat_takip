@@ -79,6 +79,8 @@ değişince yeniden üretilir: servis imajını derleyip `docker run --rm <imaj>
 
 ## Belgeler
 
+- **Geliştirici öğrenme rehberi** (crawler'dan başlayarak uçtan uca mimari, tarama takvimi, uygulamalı
+  alıştırmalar, geliştirme noktaları, sunum): `docs/ogrenme-rehberi/README.md`
 - Kurumda devreye alma: `mevzuat-core/docs/kurum-devreye-alma.md`
 - İşletim ve olay müdahalesi: `mevzuat-core/docs/runbook.md`
 - Mimari ve geliştirme planı: `mevzuat-core/docs/backend-gelistirme-plani.md`
