@@ -100,8 +100,8 @@ config/sources.yaml ──► SourceConfig ──► kanal başına Strategy ─
 |---|---|---|
 | `resmi_gazete` | Fihrist (asıl + mükerrer, bugün + dün) + Çeşitli İlânlar'dan kurum filtreli ilanlar | Resmî Gazete |
 | `feed` | RSS/Atom | TCMB basın duyuruları |
-| `wordpress_api` | WP REST, `modified_after` ile artımlı | MASAK |
-| `json_api` | JSON liste uç noktası, alan eşlemesi YAML'da | SPK Mevzuat Sistemi |
+| `wordpress_api` | WP REST, `modified_after` ile artımlı | MASAK, HMB |
+| `json_api` | JSON liste uç noktası (GET/POST), alan eşlemesi YAML'da | SPK Mevzuat Sistemi, GİB |
 | `css_list` | CSS seçicili liste (tarih, özet, ek alan regex'leri, sayfalama) | SPK, KVKK, Ticaret, Rekabet kararları |
 | `link_pattern` | href deseni, başlık üst elemandan, CSS'e bağımsız; grup başlığı ve ek alanlar | TCMB mevzuat, TKBB, Rekabet duyuruları, BDDK, Ticaret tüketici mevzuatı |
 

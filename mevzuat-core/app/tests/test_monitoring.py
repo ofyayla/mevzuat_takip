@@ -246,9 +246,9 @@ def test_reprocess_classify_with_audit(settings, env):  # noqa: F811
 def test_admin_alert_endpoints(settings, env):  # noqa: F811
     sf, _ = env
     c = TestClient(create_app(settings.model_copy(update={"cors_origins": ""}), sf))
-    assert c.post("/api/v1/admin/monitor/run").json()["opened"] == 9          # 9 kaynak henüz taranmadı
+    assert c.post("/api/v1/admin/monitor/run").json()["opened"] == 12         # 12 kaynak henüz taranmadı
     alerts = c.get("/api/v1/admin/alerts").json()
-    assert len(alerts) == 9 and {a["type"] for a in alerts} == {"fetch_error"}
+    assert len(alerts) == 12 and {a["type"] for a in alerts} == {"fetch_error"}
     assert c.post("/api/v1/admin/reprocess", json={"stage": "extract", "from": "2026-09-10",
                                                    "to": "2026-09-01"}).status_code == 400
     assert c.post("/api/v1/admin/sources/YOK/backfill", json={"from": "2026-09-01", "to": "2026-09-02"}

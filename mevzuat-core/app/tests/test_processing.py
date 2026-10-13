@@ -415,3 +415,43 @@ def test_masak_communique_in_rg_matches_masak_site(settings, env):
     [reg] = regs(sf)
     assert reg.issuer == "MASAK" and reg.reg_type == "Tebliğ"
     assert links(sf)[2].matched_key == "no:MASAK:tebliğ:34"
+
+
+def test_gib_communique_matches_rg_and_sira_nolu_titles_stay_apart(settings, env):
+    """GİB tebliğ başlıkları "596 SIRA NOLU …" biçiminde: sıra numarası "LU" sanılırsa bütün GİB tebliğleri tek
+    güçlü anahtara (no:GIB:tebliğ:lu) düşüp birbirine bağlanır. GİB'de numaralar seriler arasında da tekrar ettiği
+    için (Tahsilat "Seri A Sıra No 1" ↔ YMM tasdik "Sıra No: 1") başlık numarasından güçlü anahtar üretilmez.
+    RG'deki kopya "Hazine ve Maliye Bakanlığından:" satırıyla yayımlanır; GİB→HMB üst kurum ilişkisiyle site kopyası
+    RG kaydına bağlanmalı."""
+    sf, storage = env
+    with sf() as s:
+        s.add(Source(code="GIB", name="GIB"))
+        s.commit()
+    body = ("<p>Hazine ve Maliye Bakanlığından:</p><p>VERGİ USUL KANUNU GENEL TEBLİĞİ (SIRA NO: {n})</p>"
+            "<p>MADDE 1- 4/1/1961 tarihli ve 213 sayılı Vergi Usul Kanununun {m} inci maddesine göre …</p>")
+    add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20261011-3",
+            url="https://www.resmigazete.gov.tr/eskiler/2026/10/20261011-3.htm",
+            title="–– Vergi Usul Kanunu Genel Tebliği (Sıra No: 596)", published=date(2026, 10, 11),
+            content=f"<html><body>{body.format(n=596, m=257)}</body></html>".encode())
+    for n, m, day in ((596, 257, 11), (595, 242, 5)):
+        add_raw(sf, storage, source="GIB", channel="tebligler", external_id=f"teblig-{11884 - 596 + n}",
+                url=f"https://gib.gov.tr/mevzuat/kanun/434/teblig/{11884 - 596 + n}",
+                title=f"{n} SIRA NOLU VERGİ USUL KANUNU GENEL TEBLİĞİ", published=date(2026, 10 if n == 596 else 9, day),
+                content=f"<html><body><h1>{n} SIRA NOLU VERGİ USUL KANUNU GENEL TEBLİĞİ</h1>{body.format(n=n, m=m)}"
+                        f"</body></html>".encode())
+    for i, title in enumerate(("SERİ: A SIRA NO :1 TAHSİLAT GENEL TEBLİĞİ",
+                               "Yeminli Mali Müşavirlik Tasdik Raporlarına Eklenen Tablolar Hakkında Genel Tebliğ "
+                               "(Sıra No: 1)")):
+        add_raw(sf, storage, source="GIB", channel="tebligler", external_id=f"teblig-{10297 + i}",
+                url=f"https://gib.gov.tr/mevzuat/kanun/442/teblig/{10297 + i}", title=title,
+                published=date(2026, 9, 1 + i), content=f"<html><body><h1>{title}</h1><p>metin {i}</p></body></html>".encode())
+    DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
+    by_title = {r.title: r for r in regs(sf)}
+    assert len(by_title) == 4, list(by_title)                     # 595, Tahsilat ve YMM ayrı kalır
+    with sf() as s:
+        keys = set(s.scalars(select(RegulationKey.key)))
+        sources_596 = set(s.scalars(select(RawDocument.source_code).where(
+            RawDocument.regulation_id == next(r.id for r in by_title.values() if "596" in r.title))))
+    assert not any(k.startswith(("no:GIB:", "karar:GIB:")) for k in keys)
+    assert "no:HMB:tebliğ:596" in keys                            # RG tarafı numara anahtarını korur
+    assert sources_596 == {"RESMI_GAZETE", "GIB"}

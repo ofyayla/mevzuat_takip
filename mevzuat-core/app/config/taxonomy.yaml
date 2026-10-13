@@ -95,8 +95,9 @@ severity_rules:
 # Kural tabanlı ilgililik sinyalleri (güven skorunda ağırlık 0.1)
 relevance_rules:
   source_priority: {BDDK: 1.0, TKBB: 1.0, TCMB: 0.9, MASAK: 0.9, KVKK: 0.7, SPK: 0.6, TICARET: 0.5, REKABET: 0.4,
-                    RESMI_GAZETE: 0.5}
+                    RESMI_GAZETE: 0.5, HMB: 0.7, GIB: 0.7, KGK: 0.6}
   # RG'de yayımlayan kuruma göre öncelik (issuer kodu)
-  issuer_priority: {BDDK: 1.0, TCMB: 0.9, MASAK: 0.9, HMB: 0.8, TMSF: 0.9, KVKK: 0.7, SPK: 0.6, CB: 0.6, TBMM: 0.6}
+  issuer_priority: {BDDK: 1.0, TCMB: 0.9, MASAK: 0.9, HMB: 0.8, TMSF: 0.9, GIB: 0.7, KVKK: 0.7, KGK: 0.6, SPK: 0.6, CB: 0.6,
+                    TBMM: 0.6}
   bank_keywords: ["bankalar", "katılım bankaları", "kredi kuruluşları", "finansal kuruluşlar", "finansal kurumlar",
                   "faizsiz", "katılma hesabı", "kredi kartı", "ödeme hizmet", "elektronik para"]

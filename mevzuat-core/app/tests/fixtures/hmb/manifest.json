@@ -1,0 +1,14 @@
+{
+ "https://www.hmb.gov.tr/portal/v2/posts?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-09-13T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent&categories_exclude=20": {
+  "file": "32b17e9108ca663e.json",
+  "status": 200,
+  "final_url": "https://www.hmb.gov.tr/portal/v2/posts?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-09-13T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent&categories_exclude=20",
+  "content_type": "application/json; charset=UTF-8"
+ },
+ "https://www.hmb.gov.tr/portal/v2/pages?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-09-13T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent": {
+  "file": "06303182a74f9b8f.json",
+  "status": 200,
+  "final_url": "https://www.hmb.gov.tr/portal/v2/pages?per_page=50&page=1&orderby=modified&order=desc&modified_after=2026-09-13T00%3A00%3A00&_fields=id%2Cdate%2Cmodified%2Cslug%2Clink%2Ctitle%2Ccontent%2Cexcerpt%2Ccategories%2Ctype%2Cparent",
+  "content_type": "application/json; charset=UTF-8"
+ }
+}

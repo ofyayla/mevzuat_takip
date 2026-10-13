@@ -1,7 +1,16 @@
 import pytest
 
 from app.collectors.config import SourceConfig
-from app.collectors.http import HostNotAllowed, Recorder, ReplayFetcher, Response
+from app.collectors.http import (
+    Fetcher,
+    FetchError,
+    HostNotAllowed,
+    Recorder,
+    ReplayFetcher,
+    Response,
+    json_body,
+    request_key,
+)
 from tests.conftest import DictFetcher
 
 SRC = SourceConfig.model_validate({
@@ -31,6 +40,46 @@ def test_recorder_replay_roundtrip(settings, tmp_path):
     f.get("https://www.ornek.gov.tr/a", params={"x": 1})
     replay = ReplayFetcher(SRC, settings, tmp_path / "fx")
     assert replay.get("https://www.ornek.gov.tr/a", params={"x": 1}).text == "<p>merhaba</p>"
+
+
+def test_request_key():
+    assert request_key("GET", "https://www.ornek.gov.tr/a?x=1") == "https://www.ornek.gov.tr/a?x=1"  # eski fixture'lar
+    a = request_key("POST", "https://www.ornek.gov.tr/api", json_body({"b": 1, "a": [1, "ş"]}))
+    assert a == request_key("POST", "https://www.ornek.gov.tr/api", json_body({"a": [1, "ş"], "b": 1}))  # kanonik
+    assert a.startswith("POST https://www.ornek.gov.tr/api #")
+    assert a != request_key("POST", "https://www.ornek.gov.tr/api", json_body({"a": [1, "ş"], "b": 2}))
+
+
+def test_post_json_roundtrip(settings, tmp_path):
+    url = "https://www.ornek.gov.tr/api/list?page=0"
+    body = {"status": 2, "kanunId": 434}
+    f = DictFetcher(SRC, settings, {request_key("POST", url, json_body(body)): ('{"ok": 1}', "application/json")})
+    f.recorder = Recorder(tmp_path / "fx")
+    assert f.post_json(url, body).json() == {"ok": 1}
+    with pytest.raises(FetchError):            # farklı gövde → farklı kayıt
+        f.post_json(url, {"status": 2, "kanunId": 433})
+    with pytest.raises(HostNotAllowed):
+        f.post_json("https://kotu.example.com/api", body)
+    replay = ReplayFetcher(SRC, settings, tmp_path / "fx")
+    assert replay.post_json(url, {"kanunId": 434, "status": 2}).json() == {"ok": 1}
+
+
+def test_post_json_sends_body_and_retries(settings, monkeypatch):
+    from tenacity import wait_none
+
+    calls = []
+
+    class Backend:
+        def request(self, method, url, headers, timeout, body=None, max_bytes=None, deadline_s=None):
+            calls.append((method, headers.get("Content-Type"), body))
+            status = 503 if len(calls) == 1 else 200
+            return Response(url, url, status, {"content-type": "application/json"}, b"[]")
+
+    f = Fetcher(SRC, settings, sleep=lambda _: None)
+    f._backend = Backend()
+    monkeypatch.setattr(Fetcher._request_with_retry.retry, "wait", wait_none())   # tenacity beklemesini atla
+    assert f.post_json("https://www.ornek.gov.tr/api", {"a": 1}).json() == []
+    assert calls == [("POST", "application/json", b'{"a":1}')] * 2   # 503 → yeniden deneme, aynı gövde
 
 
 def test_build_ca_bundle_appends_intermediates(tmp_path):
@@ -128,12 +177,13 @@ def test_backend_reads_follows_redirect_and_maps_errors(local_server, name):
 
     backend = dict(_backends())[name]()
     try:
-        r = backend.get(f"{local_server}/ok", {}, 5)
+        r = backend.request("GET", f"{local_server}/ok", {}, 5)
         assert (r.status, r.content, r.final_url) == (200, b"merhaba", f"{local_server}/ok")
-        assert backend.get(f"{local_server}/redir", {}, 5).final_url.endswith("/ok")
-        assert backend.get(f"{local_server}/yok", {}, 5).status == 404          # 4xx yanıtı hata değil, Fetcher karar verir
+        assert backend.request("GET", f"{local_server}/redir", {}, 5).final_url.endswith("/ok")
+        # 4xx yanıtı hata değil, Fetcher karar verir
+        assert backend.request("GET", f"{local_server}/yok", {}, 5).status == 404
         with pytest.raises(FetchError):                                         # sonsuz yönlendirme döngüsü sızmaz
-            backend.get(f"{local_server}/loop", {}, 5)
+            backend.request("GET", f"{local_server}/loop", {}, 5)
     finally:
         backend.close()
 
@@ -144,11 +194,11 @@ def test_backend_rejects_oversized_bodies_before_loading_them(local_server, name
 
     backend = dict(_backends())[name]()
     try:
-        with pytest.raises(FetchError, match="çok büyük"):
-            backend.get(f"{local_server}/big", {}, 5, max_bytes=1024)           # Content-Length ile erken ret
-        with pytest.raises(FetchError, match="çok büyük"):
-            backend.get(f"{local_server}/bomb", {}, 5, max_bytes=1 << 20)       # açılmış boyutla ret (gzip bombası)
-        assert len(backend.get(f"{local_server}/big", {}, 5, max_bytes=1 << 20).content) == 4096
+        with pytest.raises(FetchError, match="çok büyük"):                    # Content-Length ile erken ret
+            backend.request("GET", f"{local_server}/big", {}, 5, max_bytes=1024)
+        with pytest.raises(FetchError, match="çok büyük"):                    # açılmış boyutla ret (gzip bombası)
+            backend.request("GET", f"{local_server}/bomb", {}, 5, max_bytes=1 << 20)
+        assert len(backend.request("GET", f"{local_server}/big", {}, 5, max_bytes=1 << 20).content) == 4096
     finally:
         backend.close()
 
@@ -183,7 +233,7 @@ def test_httpx_protocol_errors_become_fetch_errors(monkeypatch):
 
             monkeypatch.setattr(backend.client, "stream", boom)
             with pytest.raises(expected) as e:
-                backend.get("http://x.test/", {}, 1)
+                backend.request("GET", "http://x.test/", {}, 1)
             assert type(e.value) is expected
     finally:
         backend.close()

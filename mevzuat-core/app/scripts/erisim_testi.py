@@ -4,7 +4,7 @@
 Proje kurulmadan önce firewall/proxy/TLS durumunu görmek için tek dosya olarak kopyalanıp çalıştırılır.
 Kurulumdan sonraki karşılığı: ``mevzuat-collect check-access``.
 
-  python3 erisim_testi.py                                   # 9 kaynak + yardımcı host'lar
+  python3 erisim_testi.py                                   # 12 kaynak + yardımcı host'lar
   python3 erisim_testi.py --proxy http://proxy.kurum:8080   # ortamda HTTPS_PROXY yoksa
   python3 erisim_testi.py --ca-file kurum-kok.pem           # kurum proxy'sinin kök sertifikası
   python3 erisim_testi.py --tcp 10.0.0.5:27017 --tcp 10.144.100.204:8806   # MongoDB, vLLM vb. port testi
@@ -37,6 +37,11 @@ TARGETS = [
     ("TICARET", "https://ticaret.gov.tr/"),
     ("REKABET", "https://www.rekabet.gov.tr/"),
     ("TKBB", "https://www.tkbb.org.tr/"),
+    ("HMB", "https://www.hmb.gov.tr/portal/v2/posts?per_page=1"),
+    # GİB liste uç noktaları yalnız POST kabul eder; erişim testi için GET'e açık olanı kullanılır
+    ("GIB", "https://gib.gov.tr/api/gibportal/search/mevzuatLastAdded"),
+    ("GIB_EKLER", "https://cdn.gib.gov.tr/"),
+    ("KGK", "https://www.kgk.gov.tr/"),
     ("MEVZUAT_GOV", "https://www.mevzuat.gov.tr/"),
 ]
 # Bu siteler tarayıcı olmayan TLS imzasını engelleyebilir; asıl crawler curl_cffi (impersonate) ile bağlanır.

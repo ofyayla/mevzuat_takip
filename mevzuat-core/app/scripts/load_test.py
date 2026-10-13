@@ -31,7 +31,7 @@ from app.db import (
 )
 from app.settings import BACKEND_DIR, Settings
 
-SOURCES = ["RESMI_GAZETE", "BDDK", "SPK", "TCMB", "KVKK", "MASAK", "TICARET", "REKABET", "TKBB"]
+SOURCES = ["RESMI_GAZETE", "BDDK", "SPK", "TCMB", "KVKK", "MASAK", "TICARET", "REKABET", "TKBB", "HMB", "GIB", "KGK"]
 SEV = ["Kritik", "Yüksek", "Orta", "Düşük"]
 WORDS = ("kredi kart sermaye likidite yönetmelik tebliğ karar ödeme elektronik para katılım faizsiz kişisel veri "
          "rapor muhasebe kambiyo döviz zorunlu karşılık sukuk kira sertifika tüketici ücret").split()

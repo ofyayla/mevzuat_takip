@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.collectors.config import SourceConfig, load_sources
-from app.collectors.http import Fetcher, FetchError, Response
+from app.collectors.http import Fetcher, FetchError, Response, request_key
 from app.settings import BACKEND_DIR, Settings
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -28,18 +28,22 @@ def sources():
 
 
 class DictFetcher(Fetcher):
-    """URL → (içerik, content-type[, status, final_url]) sözlüğünden yanıt veren sahte istemci."""
+    """Anahtar → (içerik, content-type[, status, final_url]) sözlüğünden yanıt veren sahte istemci.
+
+    Anahtar ``request_key`` ile üretilir: GET'te URL'nin kendisi, POST'ta ``"POST <url> #<gövde sha1>"``.
+    """
 
     def __init__(self, source: SourceConfig, settings: Settings, pages: dict):
         super().__init__(source, settings, sleep=lambda _: None)
         self.pages = pages
         self.requested: list[str] = []
 
-    def _get_with_retry(self, url, headers):
-        self.requested.append(url)
-        if url not in self.pages:
+    def _request_with_retry(self, method, url, headers, body):
+        key = request_key(method, url, body)
+        self.requested.append(key)
+        if key not in self.pages:
             raise FetchError(url, "yok", 404)
-        entry = self.pages[url]
+        entry = self.pages[key]
         content, ctype = entry[0], entry[1]
         status = entry[2] if len(entry) > 2 else 200
         final = entry[3] if len(entry) > 3 else url

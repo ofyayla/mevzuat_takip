@@ -16,6 +16,10 @@ params:
   fields: {ad: json_alanı} — extra'ya kopyalanacak alanlar
   version_fields: sürüm anahtarını oluşturan alanlar (liste satırında değişirse içerik yeniden indirilir)
   filter: {json_alanı: [izin verilen değerler]} (opsiyonel)
+  method: GET (varsayılan) | POST — POST'ta istek gövdesi ``body`` JSON olarak gönderilir (GİB API'si GET'e 405 döner)
+  body: {..} veya [{..}, ..] — liste ise her adres × gövde için ayrı istek (ör. GİB tebliğleri kanun başına)
+  inline_html: öğedeki HTML gövde alanı (ör. description) — içerik olarak saklanır, detay adresi indirilmez
+               (istemci tarafında oluşan SPA detay sayfaları için); ekler bu HTML'den attachment_pattern ile alınır
 """
 from __future__ import annotations
 
@@ -25,7 +29,7 @@ from typing import Any
 
 from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import parse_iso_datetime, parse_tr_date
-from app.collectors.strategies._html import clean
+from app.collectors.strategies._html import clean, inline_document
 
 
 def _fill(template: str, item: dict) -> str:
@@ -58,8 +62,15 @@ class JsonApiStrategy:
         seen: set[str] = set()
         pages = 0
         allowed = {k: set(v) for k, v in (p.get("filter") or {}).items()}
-        for url in p["urls"]:
-            resp = ctx.fetcher.get(url, accept="application/json")
+        post = str(p.get("method", "GET")).upper() == "POST"
+        bodies = p.get("body", {})
+        bodies = bodies if isinstance(bodies, list) else [bodies]
+        requests = [(url, body) for url in p["urls"] for body in (bodies if post else [None])]
+        for url, body in requests:
+            if post:
+                resp = ctx.fetcher.post_json(url, body)
+            else:
+                resp = ctx.fetcher.get(url, accept="application/json")
             pages += 1
             data = _dig(resp.json(), p.get("items_path"))
             if not isinstance(data, list):
@@ -90,7 +101,9 @@ class JsonApiStrategy:
         version = "|".join(str(obj.get(f) or "") for f in p.get("version_fields", [])) or None
         category = clean(str(obj.get(p["category"]) or "")) if p.get("category") else None
         summary = clean(str(obj.get(p["summary"]) or "")) if p.get("summary") else None
+        inline = inline_document(title, str(obj.get(p["inline_html"]) or "")) if p.get("inline_html") else None
         return ItemRef(source=ctx.source.code, channel=ctx.channel.name, external_id=_fill(p["id"], obj),
                        url=_fill(p["url"], obj), title=title, published_at=published,
                        category=category or ctx.channel.category, summary=summary or None,
-                       version_key=version, extra=extra)
+                       version_key=version, extra=extra, inline_content=inline,
+                       inline_content_type="text/html" if inline is not None else None)

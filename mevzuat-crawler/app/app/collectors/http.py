@@ -7,6 +7,8 @@
 - Host izin listesi (sources.yaml → allowed_hosts) uygulama seviyesinde zorlanır.
 - Host başına istek aralığı (kibar tarama) ve geçici hatalarda üstel geri çekilmeli yeniden deneme.
 - ``Recorder`` ile tüm yanıtlar diske yazılabilir; ``ReplayFetcher`` bu kayıtları testlerde ağ olmadan oynatır.
+- ``post_json``: yalnız POST kabul eden JSON API'ler (GİB). Kayıt anahtarı GET'te URL'nin kendisi, POST'ta
+  ``"POST <url> #<gövde sha1>"`` olur (``request_key``); mevcut GET fixture'ları aynen geçerli kalır.
 """
 from __future__ import annotations
 
@@ -89,6 +91,18 @@ def build_url(url: str, params: dict[str, Any] | None) -> str:
     return url + ("&" if "?" in url else "?") + urlencode(params)
 
 
+def json_body(data: Any) -> bytes:
+    """Kanonik JSON gövde: aynı veri her zaman aynı bayt dizisini (ve kayıt anahtarını) üretir."""
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def request_key(method: str, url: str, body: bytes | None = None) -> str:
+    """Recorder/Replay anahtarı. GET için yalnız URL (eski fixture'larla uyumlu)."""
+    if method == "GET":
+        return url
+    return f"{method} {url} #{hashlib.sha1(body or b'').hexdigest()[:12]}"
+
+
 def build_ca_bundle(base: str | bool, extra: list[Path], out_dir: Path) -> str:
     """Temel CA paketi (ayar/ortam ya da certifi) + ek ara sertifikalardan birleşik bir PEM dosyası üretir.
 
@@ -133,8 +147,8 @@ def _read_capped(url: str, chunks, max_bytes: int | None, deadline_s: float | No
 
 
 class _Backend:
-    def get(self, url: str, headers: dict[str, str], timeout: float, max_bytes: int | None = None,
-            deadline_s: float | None = None) -> Response:  # pragma: no cover
+    def request(self, method: str, url: str, headers: dict[str, str], timeout: float, body: bytes | None = None,
+                max_bytes: int | None = None, deadline_s: float | None = None) -> Response:  # pragma: no cover
         raise NotImplementedError
 
     def close(self) -> None:
@@ -152,10 +166,10 @@ class _HttpxBackend(_Backend):
             verify = ssl.create_default_context(cafile=verify)
         self.client = httpx.Client(proxy=proxy, verify=verify, follow_redirects=True, trust_env=proxy is None)
 
-    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
+    def request(self, method, url, headers, timeout, body=None, max_bytes=None, deadline_s=None):
         httpx = self._httpx
         try:
-            with self.client.stream("GET", url, headers=headers, timeout=timeout) as r:
+            with self.client.stream(method, url, headers=headers, content=body, timeout=timeout) as r:
                 declared = r.headers.get("content-length", "")
                 if max_bytes is not None and declared.isdigit() and int(declared) > max_bytes:
                     raise _too_big(url, max_bytes)
@@ -178,12 +192,13 @@ class _ImpersonateBackend(_Backend):
         self.session = cffi_requests.Session(impersonate=profile, verify=verify,
                                              proxies={"https": proxy, "http": proxy} if proxy else None)
 
-    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
+    def request(self, method, url, headers, timeout, body=None, max_bytes=None, deadline_s=None):
         # curl_cffi tarayıcı başlıklarını kendisi üretir; yalnızca UA dışındakileri geçiriyoruz ki parmak izi bozulmasın
         extra = {k: v for k, v in headers.items() if k.lower() != "user-agent"}
         r = None
         try:
-            r = self.session.get(url, headers=extra, timeout=timeout, allow_redirects=True, stream=True)
+            r = self.session.request(method, url, headers=extra, data=body, timeout=timeout, allow_redirects=True,
+                                     stream=True)
             declared = r.headers.get("content-length", "")
             if max_bytes is not None and declared.isdigit() and int(declared) > max_bytes:
                 raise _too_big(url, max_bytes)
@@ -211,7 +226,9 @@ class _BrowserBackend(_Backend):
             launch["proxy"] = {"server": proxy}
         self.browser = self._pw.chromium.launch(**launch)
 
-    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
+    def request(self, method, url, headers, timeout, body=None, max_bytes=None, deadline_s=None):
+        if method != "GET":
+            raise NotImplementedError("browser istemcisi yalnızca GET destekler")
         page = self.browser.new_page()
         try:
             resp = page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
@@ -243,14 +260,16 @@ class Recorder:
         if mf.exists():
             self.manifest = json.loads(mf.read_text(encoding="utf-8"))
 
-    def save(self, resp: Response) -> None:
+    def save(self, resp: Response, key: str | None = None) -> None:
+        """``key``: ``request_key`` (POST'ta gövdeyi de içerir); verilmezse yanıtın URL'si."""
+        key = key or resp.url
         ext = {"text/html": ".html", "application/pdf": ".pdf", "application/json": ".json",
                "application/xml": ".xml", "text/xml": ".xml", "application/atom+xml": ".xml",
                "application/rss+xml": ".xml"}.get(resp.content_type, ".bin")
-        name = hashlib.sha1(resp.url.encode()).hexdigest()[:16] + ext
+        name = hashlib.sha1(key.encode()).hexdigest()[:16] + ext
         (self.directory / name).write_bytes(resp.content)
-        self.manifest[resp.url] = {"file": name, "status": resp.status, "final_url": resp.final_url,
-                                   "content_type": resp.headers.get("content-type", "")}
+        self.manifest[key] = {"file": name, "status": resp.status, "final_url": resp.final_url,
+                              "content_type": resp.headers.get("content-type", "")}
         (self.directory / "manifest.json").write_text(json.dumps(self.manifest, ensure_ascii=False, indent=1),
                                                       encoding="utf-8")
 
@@ -299,15 +318,28 @@ class Fetcher:
 
     def get(self, url: str, *, params: dict[str, Any] | None = None, accept: str | None = None,
             allow_status: tuple[int, ...] = ()) -> Response:
+        return self._request("GET", url, params=params, accept=accept, allow_status=allow_status)
+
+    def post_json(self, url: str, data: Any, *, params: dict[str, Any] | None = None,
+                  accept: str | None = "application/json", allow_status: tuple[int, ...] = ()) -> Response:
+        """JSON gövdeli POST (yalnız POST kabul eden liste API'leri, ör. GİB)."""
+        return self._request("POST", url, params=params, accept=accept, allow_status=allow_status,
+                             body=json_body(data), content_type="application/json")
+
+    def _request(self, method: str, url: str, *, params: dict[str, Any] | None, accept: str | None,
+                 allow_status: tuple[int, ...], body: bytes | None = None,
+                 content_type: str | None = None) -> Response:
         url = build_url(url, params)
         if not self.source.host_allowed(url):
             raise HostNotAllowed(url, f"host izin listesinde değil ({self.source.code}.allowed_hosts)")
         headers = {"User-Agent": self.settings.http_user_agent, "Accept-Language": "tr-TR,tr;q=0.9"}
         if accept:
             headers["Accept"] = accept
-        resp = self._get_with_retry(url, headers)
+        if content_type:
+            headers["Content-Type"] = content_type
+        resp = self._request_with_retry(method, url, headers, body)
         if self.recorder:
-            self.recorder.save(resp)
+            self.recorder.save(resp, request_key(method, url, body))
         if resp.final_url != url and not self.source.host_allowed(resp.final_url):
             # İzin listesi yalnızca ilk URL'de değil, yönlendirmenin vardığı yerde de geçerli olmalı: aksi halde
             # izinli bir sitedeki açık yönlendirme, başka bir host'un içeriğini arşive ve YZ hattına sokar.
@@ -323,12 +355,13 @@ class Fetcher:
 
     @retry(retry=retry_if_exception(lambda e: isinstance(e, TransientFetchError)),
            stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30), reraise=True)
-    def _get_with_retry(self, url: str, headers: dict[str, str]) -> Response:
+    def _request_with_retry(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
         self._throttle(urlparse(url).hostname or "")
         self.request_count += 1
-        log.debug("GET %s", url)
-        resp = self._get_backend().get(url, headers, self.timeout, max_bytes=self.settings.collect_max_bytes,
-                                       deadline_s=self.settings.collect_total_timeout_s)
+        log.debug("%s %s", method, url)
+        resp = self._get_backend().request(method, url, headers, self.timeout, body,
+                                           max_bytes=self.settings.collect_max_bytes,
+                                           deadline_s=self.settings.collect_total_timeout_s)
         if resp.status in _RETRY_STATUSES:
             raise TransientFetchError(url, f"HTTP {resp.status}", resp.status)
         return resp
@@ -347,8 +380,8 @@ class ReplayFetcher(Fetcher):
         self.directory = directory
         self.manifest: dict[str, dict[str, Any]] = json.loads((directory / "manifest.json").read_text("utf-8"))
 
-    def _get_with_retry(self, url: str, headers: dict[str, str]) -> Response:
-        entry = self.manifest.get(url)
+    def _request_with_retry(self, method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
+        entry = self.manifest.get(request_key(method, url, body))
         if entry is None:
             raise FetchError(url, "kayıtlı yanıt yok (fixture eksik)", 404)
         self.request_count += 1

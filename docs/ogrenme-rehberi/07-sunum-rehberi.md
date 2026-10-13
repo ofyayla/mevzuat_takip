@@ -7,7 +7,7 @@ açılış sunumu depo kökünde: `Mevzuat_Takip_Otomasyonu_Proje_Acilis_Sunumu.
 
 | Sayı | Değer | Kaynak |
 |---|---|---|
-| İzlenen kaynak / kanal | **9 kaynak, 23 kanal** | `config/sources.yaml`, `test_sources_replay.py` |
+| İzlenen kaynak / kanal | **12 kaynak, 36 kanal** | `config/sources.yaml`, `test_sources_replay.py` |
 | Haftalık tarama | **≈210** (RG 49, BDDK 65, SPK 17, KVKK 17, MASAK 17, TCMB 15, Ticaret/Rekabet/TKBB 10'ar) | 03 §1 |
 | Resmî Gazete | Her gün **7 pencere**, bugün + dün, asıl + 4'e kadar mükerrer | 03 §1, 02 §7 |
 | BDDK | Hafta içi **saat başı 08–20** | 03 §1 |

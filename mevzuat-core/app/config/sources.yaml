@@ -390,3 +390,254 @@ sources:
             - "https://www.tkbb.org.tr/mevzuat/birligimiz-duzenlemeleri/mesleki-duzenlemeler"
           href_pattern: "birligimiz-duzenlemeleri-details/\\d+|/upload/.+\\.(pdf|docx?)$"
           id_pattern: "details/(\\d+)|/upload/(.+)$"
+
+  # =============================================================================================
+  # Kapsam genişletme (kaynak-listesi-analizi-2026-10.md, Grup I: #8 HMB, #11 GİB, #40 KGK)
+  # ---------------------------------------------------------------------------------------------
+  - code: HMB
+    name: Hazine ve Maliye Bakanlığı
+    base_url: https://www.hmb.gov.tr
+    allowed_hosts: ["www.hmb.gov.tr", "hmb.gov.tr", "ms.hmb.gov.tr"]
+    verified: "2026-10-13"
+    schedule: ["0 9 * * 1-5", "0 14 * * 1-5", "0 19 * * *"]
+    expected: {silence_tolerance_hours: 168, business_days_only: true, min_items_per_run: 0}
+    notes: >
+      MASAK ile aynı platform: React ön yüz, içerik WordPress REST API'sinden (/portal/v2/). Artımlı tarama
+      (modified_after); sessiz günlerde boş liste normaldir. API 'link' alanı iç host'u (api.hmb.gov.tr/YYYY/MM/DD/slug/)
+      gösterdiği için ön yüz adresi şablondan üretilir (/duyuru/{slug} haber yazılarını da açar). Haberler dahil,
+      Sınav Duyuruları (kategori 20) hariç. Kategori kimlikleri /portal/v2/site → categories[].term_id.
+      Mevzuat sayfalarındaki (/kanunlar, /yonetmelikler) mevzuat.gov.tr bağlantıları dış host olduğundan yalnız
+      sayfanın kendi sürümü izlenir; ms.hmb.gov.tr ekleri indirilir.
+    channels:
+      - name: duyurular
+        strategy: wordpress_api
+        category: Duyuru
+        attachment_pattern: "ms\\.hmb\\.gov\\.tr/uploads/.+\\.(pdf|docx?|xlsx?)$"
+        params:
+          api_base: "https://www.hmb.gov.tr/portal/v2/"
+          endpoints: [posts]
+          query: {posts: {categories_exclude: "20"}}
+          public_url: {posts: "https://www.hmb.gov.tr/duyuru/{slug}"}
+          category_map:
+            "35": Kamu Finansmanı
+            "36": Kamu Sermayeli Kuruluş ve İşletmeler
+            "37": Dış Ekonomik İlişkiler
+            "744": Kamu Mali Yönetim ve Dönüşüm
+            "778": Finansal Piyasalar ve Kambiyo
+            "866": Ekonomik Programlar ve Araştırmalar
+            "1061": Strateji Geliştirme
+            "776": İç Denetim Koordinasyon Kurulu
+            "781": Devlet Muhasebesi Standartları Kurulu
+            "436": Vergi Denetim Kurulu
+            "18": Bakanlık Duyurusu
+            "19": Basın Duyurusu
+            "22": Haber
+          per_page: 50
+          max_pages: 3
+          lookback_days: 30
+      - name: sayfalar
+        strategy: wordpress_api
+        category: Mevzuat/Sayfa
+        attachment_pattern: "ms\\.hmb\\.gov\\.tr/uploads/.+\\.(pdf|docx?|xlsx?)$"
+        params:
+          api_base: "https://www.hmb.gov.tr/portal/v2/"
+          endpoints: [pages]
+          public_url: {pages: "https://www.hmb.gov.tr/{slug}"}
+          per_page: 50
+          max_pages: 3
+          lookback_days: 30
+
+  # ---------------------------------------------------------------------------------------------
+  - code: GIB
+    name: Gelir İdaresi Başkanlığı
+    base_url: https://gib.gov.tr
+    allowed_hosts: ["gib.gov.tr", "www.gib.gov.tr", "cdn.gib.gov.tr"]
+    request_delay_s: 2
+    verified: "2026-10-13"
+    schedule: ["30 8 * * *", "0 13 * * 1-5", "0 18 * * 1-5", "30 22 * * *"]
+    expected: {silence_tolerance_hours: 120, business_days_only: true, min_items_per_run: 1}
+    notes: >
+      Site bir Next.js uygulaması; detay sayfaları istemcide oluşur (HTML'de metin yok). İçerik ön yüzün kullandığı
+      /api/gibportal/ JSON API'sinden alınır; uç noktalar yalnızca POST + JSON gövde kabul eder (GET → 405). Metin
+      'description' alanında gelir (inline), ekler cdn.gib.gov.tr'den indirilir. Tebliğ listesi yalnız kanunId
+      verildiğinde tarihe göre sıralanır; tebliğlerin %98'ini içeren 17 kanun ayrı ayrı sorgulanır (13.10.2026 sayımı).
+      Konsolide (tümgüncel) güncellemeler yalnız listenin başında kalan kayıtlar için yakalanır (tebliğde kanun başına
+      RG tarihine göre ilk 5, yönetmelikte en yeni 20 kayıt).
+      BİLİNÇLİ OLARAK İZLENMEYENLER (13.10.2026 kararı): BKK (2018'den beri yeni yok), Genel Yazılar (durağan),
+      KKDF ve uluslararası mevzuat, kanun gerekçeleri ve madde metinleri, Sistem/Uygulama, Sınav/Kariyer, Diğer
+      ve Defterdarlık duyuruları.
+    channels:
+      - name: ozelgeler
+        strategy: json_api
+        category: Özelge
+        attachment_pattern: &gib_ek "cdn\\.gib\\.gov\\.tr/api/gibportal-file/file/getFile"
+        params: &gib
+          method: POST
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC"]
+          body: {status: 2}
+          items_path: resultContainer.content
+          id: "ozelge-{id}"
+          url: "{siteLink}"
+          title: title
+          date: [ozelgeTarih]
+          inline_html: description
+          version_fields: [updated_at]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, ozelge_no: ozelgeNo}
+      - name: sirkulerler
+        strategy: json_api
+        category: Sirküler
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/sirkuler/list?page=0&size=20&sortFieldName=sirkulerTarih&sortType=DESC"]
+          id: "sirkuler-{id}"
+          date: [sirkulerTarih]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, sirkuler_no: sirkulerNo}
+      - name: tebligler
+        strategy: json_api
+        category: Tebliğ
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC"]
+          body:   # 193 GVK, 213 VUK, 5520 KVK, 3065 KDV, 4760 ÖTV, … (kanunId → kanun: /mevzuat/kanun/filterList)
+            - {kanunId: 433, status: 2, deleted: false}
+            - {kanunId: 434, status: 2, deleted: false}
+            - {kanunId: 435, status: 2, deleted: false}
+            - {kanunId: 436, status: 2, deleted: false}
+            - {kanunId: 437, status: 2, deleted: false}
+            - {kanunId: 438, status: 2, deleted: false}
+            - {kanunId: 439, status: 2, deleted: false}
+            - {kanunId: 440, status: 2, deleted: false}
+            - {kanunId: 441, status: 2, deleted: false}
+            - {kanunId: 442, status: 2, deleted: false}
+            - {kanunId: 443, status: 2, deleted: false}
+            - {kanunId: 444, status: 2, deleted: false}
+            - {kanunId: 445, status: 2, deleted: false}
+            - {kanunId: 446, status: 2, deleted: false}
+            - {kanunId: 447, status: 2, deleted: false}
+            - {kanunId: 449, status: 2, deleted: false}
+            - {kanunId: 638, status: 2, deleted: false}
+          id: "teblig-{id}"
+          date: [resmiGazeteTarih]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, resmi_gazete_sayi: resmiGazeteSayi, teblig_grubu: tebligGroupId}
+      - name: cbk
+        strategy: json_api
+        category: Cumhurbaşkanı Kararı
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/cbk/list?page=0&size=20&sortFieldName=resmiGazeteTarih&sortType=DESC"]
+          id: "cbk-{id}"
+          date: [resmiGazeteTarih]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, karar_sayisi: "no", resmi_gazete_sayi: resmiGazeteSayi}
+      - name: ic_genelgeler
+        strategy: json_api
+        category: İç Genelge
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/icGenelge/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          id: "icgenelge-{id}"
+          date: [tarih]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, sayi: sayi}
+      - name: yonetmelikler
+        strategy: json_api
+        category: Yönetmelik
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          # RG tarihine göre sıralama desteklenmiyor, id'ye göre çalışıyor. Tüm liste (66 kayıt) tam metinlerle
+          # 1,7 MB olduğu için yalnız son eklenenler okunur
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/yonetmelikler/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          id: "yonetmelik-{id}"
+          date: [resmiGazeteTarih]
+          fields: {kanun_no: kanunNo, kanun: kanunTitle, resmi_gazete_sayi: resmiGazeteSayi}
+      - name: taslaklar
+        strategy: json_api
+        category: Düzenleme Taslağı
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/taslak/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          body: {}
+          id: "taslak-{id}"
+          url: "https://gib.gov.tr/mevzuat/taslak/{id}"   # öğede siteLink yok; ön yüz adresi
+          date: [timePublishedAt, ts]
+          fields: {}
+      - name: mevzuat_duyurulari
+        strategy: json_api
+        category: Duyuru
+        attachment_pattern: *gib_ek
+        params:
+          <<: *gib
+          urls: ["https://gib.gov.tr/api/gibportal/duyuru/listPublish?page=0&size=20&sortFieldName=startdate&sortType=DESC"]
+          body: {type: 1, ilkodu: UNIVERSAL}   # 1 = "Mevzuat" duyuru kategorisi
+          id: "duyuru-{id}"
+          url: "https://gib.gov.tr/duyuru-arsivi/guncel/{slug}"
+          date: [startdate]
+          version_fields: [updated_at, stopdate]
+          fields: {}
+
+  # ---------------------------------------------------------------------------------------------
+  - code: KGK
+    name: Kamu Gözetimi, Muhasebe ve Denetim Standartları Kurumu
+    base_url: https://www.kgk.gov.tr
+    allowed_hosts: ["www.kgk.gov.tr", "kgk.gov.tr"]
+    verified: "2026-10-13"
+    schedule: ["0 10 * * 1-5", "0 17 * * 1-5"]
+    expected: {silence_tolerance_hours: 336, business_days_only: true, min_items_per_run: 1}
+    notes: >
+      Sunucu tarafı HTML (ASP.NET). Duyuru listesindeki bağlantılar detay sayfasına, doğrudan PDF'e
+      (/Portalv2Uploads/) ya da Resmî Gazete'ye gider; RG'ye gidenler yalnız liste satırı olarak saklanır.
+      "Son Yayımlananlar" standart ve kurul kararı yayımlarını içerir; ortak öğeler kimlikle tekilleşir.
+      Mevzuat ağacı sayfaları alt sayfalara href yerine data-href ile bağlanır (link_pattern href_attrs).
+      Yaprak sayfalardaki belge değişikliği liste satırını değiştirmediği için mevzuat kanalı haftalık yenilenir.
+      İzlenmeyen: TMS/TFRS ve TDS standart ağaçlarının tamamı (yeni yayımlar Son Yayımlananlar'dan gelir).
+    channels:
+      - name: duyurular
+        strategy: css_list
+        category: Duyuru
+        content_selector: "#content-detail"
+        # Üst menüdeki "Banka Hesabı ve Ücretler" PDF'i her sayfada var (menü <nav> değil) → ek sayılmaz
+        attachment_pattern: &kgk_ek "/Portalv2Uploads/(?!files/Duyurular/v2/BankaHesap/).+\\.(pdf|docx?|xlsx?)$"
+        params: &kgk_liste
+          urls: ["https://www.kgk.gov.tr/Assignments/1/0/Duyurular-"]
+          item: ".v2-announcement-item"
+          link: ".v2-assignment-title a[href]"
+          date: ".v2-anouncement-item-date"
+          # Kimlikte sayfa türü korunur (ContentAssignmentDetail/5141 ile DynamicContentDetail/5141 farklı belgeler);
+          # dış sitelere (RG, bdsm.kgk.gov.tr başvuru ekranı) giden öğelerde kimlik tam adres olur
+          id_pattern: &kgk_id "^https://(?:www\\.)?kgk\\.gov\\.tr/(\\w+Detail/\\d+)|^https://(?:www\\.)?kgk\\.gov\\.tr(/Portalv2Uploads/.+)$|^https?://(.+)$"
+      - name: son_yayimlananlar
+        strategy: css_list
+        category: Yayım
+        content_selector: "#content-detail"
+        attachment_pattern: *kgk_ek
+        params:
+          <<: *kgk_liste
+          urls: ["https://www.kgk.gov.tr/Assignments/2/0/Son-Yay%C4%B1mlananlar"]
+      - name: mevzuat
+        strategy: link_pattern
+        category: Mevzuat
+        content_selector: ".v2-page-content"
+        attachment_pattern: *kgk_ek
+        refresh_after_days: 7
+        params:
+          urls:
+            - "https://www.kgk.gov.tr/DynamicContentDetail/4089/Kanunlar-Kanun-H%C3%BCkm%C3%BCnde-Kararnameler"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/10422/Cumhurba%C5%9Fkan%C4%B1-Kararlar%C4%B1"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/5106/Y%C3%B6netmelikler"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/5114/Tebli%C4%9Fler"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/5290/Kurul-Kararlar%C4%B1"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/6694/E%C4%9Fitim-ve-Yetkilendirme"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/11750/G%C3%B6zetim"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/6695/Di%C4%9Fer"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/5117/Kurumsal-D%C3%BCzenlemeler"
+            - "https://www.kgk.gov.tr/DynamicContentDetail/5118/Uluslararas%C4%B1-D%C3%BCzenlemeler"
+          scope: ".v2-page-content"
+          link_selector: "a[href], a[data-href]"
+          href_attrs: [href, data-href]
+          href_pattern: "/(DynamicContentDetail|ContentAssignmentDetail)/\\d+|/Portalv2Uploads/|mevzuat\\.gov\\.tr/|resmigazete\\.gov\\.tr/"
+          id_pattern: *kgk_id
+          date_regex: null

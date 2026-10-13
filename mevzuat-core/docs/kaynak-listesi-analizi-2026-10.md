@@ -89,10 +89,10 @@ Durum: ✅ mevcut · 🟡 mevcut kaynakta yeni kanal/doğrulama · 🆕 yeni kur
 | 5 | SPK | spk.gov.tr | ✅ | | bülten, basın duyurusu, mevzuat API |
 | 6 | Helal Akreditasyon Kurumu | hak.gov.tr | 🆕 | B | Faizsiz finans standartlarıyla ilgisi Başkanlıkla netleşmeli |
 | 7 | TCMB | tcmb.gov.tr | ✅ | | Atom + mevzuat listeleri |
-| 8 | Hazine ve Maliye Bakanlığı | hmb.gov.tr | 🆕 | A | Tebliğler RG'den geliyor; site duyuruları + yaptırım/borçlanma duyuruları |
+| 8 | Hazine ve Maliye Bakanlığı | hmb.gov.tr | ✅ (13.10) | A | `HMB/duyurular` (WP REST, haberler dahil, sınav hariç), `HMB/sayfalar`. Bkz. §8 |
 | 9 | MASAK | masak.hmb.gov.tr | ✅ | | WordPress REST |
 | 10 | MASAK — Sıkça Sorulan Sorular | masak.hmb.gov.tr/sikca-sorulan-sorular | 🟡 | A | `pages` uç noktası + `modified_after` ile muhtemelen kapsanıyor; **SSS değişikliğinin yakalandığı doğrulanmalı**, gerekirse içerik-hash'li ayrı kanal |
-| 11 | Gelir İdaresi Başkanlığı | gib.gov.tr | 🆕 | A | Tebliğler RG'de; sirküler, özelge, duyuru sitede |
+| 11 | Gelir İdaresi Başkanlığı | gib.gov.tr | ✅ (13.10) | A | 8 kanal (JSON API): özelge, sirküler, tebliğ, CBK, iç genelge, yönetmelik, taslak, mevzuat duyuruları. Bkz. §8 |
 | 12 | Ticaret Bakanlığı | ticaret.gov.tr | ✅ | | duyurular + tüketici mevzuatı |
 | 13 | Rekabet Kurumu | rekabet.gov.tr | ✅ | | |
 | 14 | KVKK | kvkk.gov.tr | ✅ | | |
@@ -121,7 +121,7 @@ Durum: ✅ mevcut · 🟡 mevcut kaynakta yeni kanal/doğrulama · 🆕 yeni kur
 | 37 | Çalışma ve Sosyal Güvenlik Bakanlığı | csgb.gov.tr | 🆕 | B | |
 | 38 | Sanayi ve Teknoloji Bakanlığı | sanayi.gov.tr | 🆕 | B | |
 | 39 | BTK | btk.gov.tr | 🆕 | A/B | Elektronik haberleşme, uzaktan kimlik doğrulama ile kesişim |
-| 40 | KGK | kgk.gov.tr | 🆕 | B | TFRS/denetim standartları |
+| 40 | KGK | kgk.gov.tr | ✅ (13.10) | B | `KGK/duyurular`, `KGK/son_yayimlananlar` (standart/kurul kararı yayımları), `KGK/mevzuat`. Bkz. §8 |
 | 41 | Kredi Kayıt Bürosu | kkb.com.tr | 🆕 | B | |
 | 42 | Bankalararası Kart Merkezi | bkm.com.tr | 🆕 | B | |
 | 43 | "Fintech" | fintechistanbul.org | 🆕 | D | Haber/topluluk sitesi |
@@ -231,3 +231,32 @@ Kesin tahmin, Faz 2'nin ilk 3–4 kaynağındaki keşif sonuçlarından sonra g�
    başlıklarında içtihat takibi mi isteniyor?
 5. FATF/BIS için özetler Türkçe mi üretilsin?
 6. §4'teki mükerrer/eski satırlar için karar.
+
+## 8. Devreye alınanlar (13.10.2026): HMB, GİB, KGK
+
+Keşif bu tarihte Türkiye'den canlı yapıldı; fixture'lar aynı gün kaydedildi (`tests/fixtures/{hmb,gib,kgk}`). Kanal
+ayrıntıları `config/sources.yaml`, takvim `docs/ogrenme-rehberi/03-tarama-takvimi-ve-kaynaklar.md`.
+
+| Kurum | Site / veri kaynağı | İzlenen | Bilinçli olarak izlenmeyen |
+|---|---|---|---|
+| HMB | React SPA, WordPress REST (`/portal/v2/`, MASAK ile aynı platform) | Tüm yazılar (Bakanlık/Basın duyuruları, Kamu Finansmanı/KİT/BUMKO alt kategorileri, **Haberler**), WP sayfaları (mevzuat sayfaları dahil) | Sınav Duyuruları (kategori 20); alt birim siteleri (`kmyd.hmb.gov.tr` vb.) |
+| GİB | Next.js SPA, `/api/gibportal/` JSON API (yalnız POST) | Özelge, sirküler, tebliğ (17 kanun), CBK, iç genelge, yönetmelik, taslak, "Mevzuat" duyuruları | BKK (2018'den beri yeni yok), Genel Yazılar (durağan), KKDF ve uluslararası mevzuat, kanun gerekçeleri ve madde metinleri, Sistem/Uygulama, Sınav/Kariyer, Diğer ve Defterdarlık duyuruları |
+| KGK | Sunucu tarafı HTML (ASP.NET) | Duyurular, Son Yayımlananlar, mevzuat ağacı (kanun/KHK, CBK, yönetmelik, tebliğ, kurul kararları, kurumsal ve uluslararası düzenlemeler) | TMS/TFRS ve TDS standart ağaçlarının tamamı (yeni yayımlar Son Yayımlananlar'dan gelir) |
+
+Kod tarafında üç genel ve geriye uyumlu genişletme gerekti; kurum özelinde sınıf yazılmadı. `Fetcher.post_json`
+ile `json_api` için `method`/`body`/`inline_html`, `wordpress_api` için `query`/`public_url`/`category_map`,
+`link_pattern` için `href_attrs` eklendi. Ayrıca GİB başlıklarındaki "596 SIRA NOLU" biçiminin sıra numarasını
+"LU" sanması düzeltildi (`normalize._SEQ`). Bu hatayla bütün GİB tebliğleri tek güçlü anahtara düşüp birbirine
+bağlanırdı. Canlı veriyle yapılan işleme denemesinde ayrıca GİB'in seriler arası tekrar eden numaraları farklı
+belgeleri birleştirdi. Örnekler: Tahsilat "Seri A Sıra No 1" ↔ YMM tasdik "Sıra No: 1"; VUK ↔ KDV iç genelgesi
+"2025/1"; aynı BKK'ya atıf yapan farklı CBK'lar. Bu yüzden GİB belgelerinde başlık numarasından güçlü anahtar
+(`no:`/`karar:`) üretilmez (`dedupe.NO_TITLE_NUMBER_KEYS`). RG eşleşmesi başlık/bulanık eşleşmeyle olur.
+Kurum tanıma: `ISSUERS`'a GIB ve KGK, `ISSUER_PARENT`'a GIB→HMB eklendi.
+
+Bilinen sınırlamalar:
+- GİB tebliğ ve yönetmelik listelerinde yerinde (konsolide) güncellemeler yalnız listenin başında kalan kayıtlarda
+  yakalanır (tebliğde kanun başına RG tarihine göre ilk 5, yönetmelikte en yeni 20).
+- GİB çapraz kontrol listesine (`CROSS_CHECK_ISSUERS`) eklenmedi. RG'deki vergi tebliğleri "Hazine ve Maliye
+  Bakanlığından:" satırıyla HMB adına yayımlanır ve GİB başlıkları farklı biçimdedir ("596 SIRA NOLU …" ↔
+  "… (Sıra No: 596)"). Eşleşme bulanık skora kaldığı için yanlış "RG'de görülmedi" alarmı üretebilir; birkaç haftalık
+  canlı veriyle değerlendirilmeli.

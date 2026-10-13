@@ -106,7 +106,8 @@ _DECISION = [
     re.compile(r"(?P<no>\d+)\s*sayılı\s+(?:kurul\s+)?kararı?", re.I),
 ]
 _SEQ = [
-    re.compile(r"sıra\s*no\s*:?\s*(?P<no>[\w/.\-]+)\)?", re.I),
+    # \b: GİB'in "596 SIRA NOLU …" biçiminde "LU" sıra numarası sanılmasın (tüm bu tebliğler aynı anahtara düşerdi)
+    re.compile(r"sıra\s*no\b\s*:?\s*(?P<no>[\w/.\-]+)\)?", re.I),
     re.compile(r"\((?P<no>[IVX]+-[\d.]+[a-zçğış]?)\)"),              # SPK "(II-27.3)", "(III-45.2.a)"
     re.compile(r"(?P<no>\d{4}/\d+)\s*sayılı\s*(?:tebliğ|genelge|yönetmelik)", re.I),  # TCMB "2020/4 Sayılı Tebliğ"
 ]
@@ -175,7 +176,11 @@ ISSUERS: dict[str, tuple[str, str]] = {
     "REKABET": ("Rekabet Kurumu", r"rekabet kur"),
     "TKBB": ("Türkiye Katılım Bankaları Birliği", r"katılım bankaları birliği"),
     "TBB": ("Türkiye Bankalar Birliği", r"türkiye bankalar birliği"),
+    # GİB, HMB'den önce: GİB belgeleri "Hazine ve Maliye Bakanlığı Gelir İdaresi Başkanlığı" başlığıyla başlar
+    "GIB": ("Gelir İdaresi Başkanlığı", r"gelir idaresi başkanlığı"),
     "HMB": ("Hazine ve Maliye Bakanlığı", r"hazine ve maliye bakanlığı"),
+    "KGK": ("Kamu Gözetimi, Muhasebe ve Denetim Standartları Kurumu",
+            r"kamu gözetimi,? muhasebe ve denetim standartları kur"),
     "SEDDK": ("Sigortacılık ve Özel Emeklilik Düzenleme ve Denetleme Kurumu",
               r"sigortacılık ve özel emeklilik düzenleme"),
     "TMSF": ("Tasarruf Mevduatı Sigorta Fonu", r"tasarruf mevduatı sigorta fonu"),
@@ -183,9 +188,9 @@ ISSUERS: dict[str, tuple[str, str]] = {
     "TBMM": ("Türkiye Büyük Millet Meclisi", r"türkiye büyük millet meclisi"),
 }
 
-# Bağlı kuruluş → üst kurum. RG'de bağlı kuruluşun düzenlemesi üst kurum adıyla yayımlanır (MASAK genel tebliğleri
-# "Hazine ve Maliye Bakanlığından:" satırıyla başlar); eşleştirmede ikisi uyumlu sayılır.
-ISSUER_PARENT = {"MASAK": "HMB"}
+# Bağlı kuruluş → üst kurum. RG'de bağlı kuruluşun düzenlemesi üst kurum adıyla yayımlanır (MASAK ve GİB'in vergi
+# tebliğleri "Hazine ve Maliye Bakanlığından:" satırıyla başlar); eşleştirmede ikisi uyumlu sayılır.
+ISSUER_PARENT = {"MASAK": "HMB", "GIB": "HMB"}
 
 
 def issuers_compatible(a: str | None, b: str | None) -> bool:
