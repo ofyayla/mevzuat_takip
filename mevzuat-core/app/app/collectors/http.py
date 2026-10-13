@@ -329,7 +329,7 @@ class Fetcher:
     def _request(self, method: str, url: str, *, params: dict[str, Any] | None, accept: str | None,
                  allow_status: tuple[int, ...], body: bytes | None = None,
                  content_type: str | None = None) -> Response:
-        url = build_url(url, params)
+        url = self.source.request_url(build_url(url, params))
         if not self.source.host_allowed(url):
             raise HostNotAllowed(url, f"host izin listesinde değil ({self.source.code}.allowed_hosts)")
         headers = {"User-Agent": self.settings.http_user_agent, "Accept-Language": "tr-TR,tr;q=0.9"}

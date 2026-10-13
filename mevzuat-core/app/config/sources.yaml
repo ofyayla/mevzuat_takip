@@ -452,6 +452,7 @@ sources:
     name: Gelir İdaresi Başkanlığı
     base_url: https://www.gib.gov.tr
     allowed_hosts: ["gib.gov.tr", "www.gib.gov.tr", "cdn.gib.gov.tr"]
+    host_aliases: {gib.gov.tr: www.gib.gov.tr}   # www'siz adres bazı ağlarda bağlantıyı resetliyor; siteLink www'siz
     request_delay_s: 2
     verified: "2026-10-13"
     schedule: ["30 8 * * *", "0 13 * * 1-5", "0 18 * * 1-5", "30 22 * * *"]
@@ -584,6 +585,7 @@ sources:
     name: Kamu Gözetimi, Muhasebe ve Denetim Standartları Kurumu
     base_url: https://www.kgk.gov.tr
     allowed_hosts: ["www.kgk.gov.tr", "kgk.gov.tr"]
+    host_aliases: {kgk.gov.tr: www.kgk.gov.tr}   # www'siz adres bazı ağlarda bağlantıyı resetliyor; ekler www'siz gelebiliyor
     verified: "2026-10-13"
     schedule: ["0 10 * * 1-5", "0 17 * * 1-5"]
     expected: {silence_tolerance_hours: 336, business_days_only: true, min_items_per_run: 1}

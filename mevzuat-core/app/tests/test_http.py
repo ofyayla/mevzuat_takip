@@ -27,6 +27,16 @@ def test_host_allowlist(settings):
         f.get("https://kotu.example.com/")
 
 
+def test_host_aliases_rewrite_request_url(settings):
+    src = SRC.model_copy(update={"host_aliases": {"ornek.gov.tr": "www.ornek.gov.tr"}})
+    assert src.request_url("https://ornek.gov.tr/a b.pdf?x=1") == "https://www.ornek.gov.tr/a b.pdf?x=1"
+    assert src.request_url("https://ornek.gov.tr:8443/a") == "https://www.ornek.gov.tr:8443/a"
+    assert src.request_url("https://x.alt.gov.tr/b") == "https://x.alt.gov.tr/b"
+    f = DictFetcher(src, settings, {"https://www.ornek.gov.tr/ek.pdf": ("pdf", "application/pdf")})
+    assert f.get("https://ornek.gov.tr/ek.pdf").status == 200
+    assert f.requested == ["https://www.ornek.gov.tr/ek.pdf"]
+
+
 def test_windows_1254_decoding():
     body = "<meta charset=Windows-1254>Yönetmelik Değişikliği".encode("windows-1254")
     r = Response("u", "u", 200, {"content-type": "text/html"}, body)
