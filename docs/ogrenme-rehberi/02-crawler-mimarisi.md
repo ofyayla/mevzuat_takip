@@ -183,12 +183,14 @@ Her tarama bitince `finish_run`, kanal başına bir `ChannelReport` özetini `fe
 
 `previous_channel_stats` bu kayıtlardan bir sözlük kurar:
 
-1. Kaynağın `status` değeri `success` veya `partial` olan **en yeni 50** taraması, yeniden eskiye sıralanır.
-   (`partial` da dahildir, çünkü o taramada başarılı olan kanalların istatistiği geçerlidir.)
-2. `merge_channel_stats` bunları sırayla gezer ve her kanal adı için **ilk gördüğü, yani en yeni** kaydı alır
-   (`setdefault`). Sonuç `{kanal_adı: o kanalın en son istatistiği}` olur.
+1. Kaynağın `status` değeri `success` veya `partial` olan taramaları yeniden eskiye okunur (en fazla
+   `CHANNEL_STATS_MAX_RUNS` = 1000). (`partial` da dahildir, çünkü o taramada başarılı olan kanalların istatistiği
+   geçerlidir.)
+2. `merge_channel_stats` bunları sırayla gezer ve her kanal adı için **ilk gördüğü, yani en yeni** kaydı alır.
+   Sonuç `{kanal_adı: o kanalın en son istatistiği}` olur. `run()` bu taramada çalışacak kanalların adlarını
+   verir; hepsi bulununca okuma durur. Normal durumda ilk kayıtta durulur.
 
-Neden tek bir tarama değil de 50? Her tarama her kanalı kapsamayabilir: `run(channels=[...])` ile yalnızca bazı
+Neden tek bir tarama değil? Her tarama her kanalı kapsamayabilir: `run(channels=[...])` ile yalnızca bazı
 kanallar taranabilir veya bir kanal `enabled: false` yapılmış olabilir. En son tarama bir kanalı içermiyorsa, o
 kanalın bilgisi daha eski bir taramadan alınır.
 
@@ -201,12 +203,12 @@ kanalın bilgisi daha eski bir taramadan alınır.
 
 Dikkat edilecek iki durum:
 
-- **50 taramalık pencere:** Bir kanal son 50 `success`/`partial` taramanın hiçbirinde yoksa (uzun süre kapalı kalıp
-  yeniden açıldıysa) `prev` boş gelir. Kanal yeniden baseline moduna girer: o taramada ilk kez görülen öğeler
-  `is_baseline=True` ile arşivlenir ve YZ'ye gitmez.
+- **Uzun süre görülmeyen kanal:** Kanal kapalı kalıp yeniden açıldığında önceki durumu (son 1000 tarama içinde)
+  bulunur; baseline'ı tamamlanmışsa yeniden baseline'a girmez. Arada yayımlanıp o taramada ilk kez görülen öğeler
+  yeni sayılır ve YZ'ye gider. Yalnızca 1000 taramadan eski kanallar ve hiç taranmamış kanallar baseline ile başlar.
 - **Hatalı kanalın kaydı:** Liste hatası alan bir kanalın özeti de yazılır. `baseline_complete` önceki değerden
-  taşınır, ama `signature` boş (`""`) kalır. Bu yüzden bir sonraki taramada o kanal için yapı karşılaştırması bir
-  kez atlanır.
+  taşınır, `signature` boş (`""`) kalır. `merge_channel_stats` boş imzayı atlayıp son 50 tarama içindeki boş olmayan
+  en son imzayı kullanır; böylece hata (veya boş liste) sonrası taramada yapı karşılaştırması atlanmaz.
 
 Önemli kurallar (`runner.py` başlık yorumu):
 
