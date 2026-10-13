@@ -269,11 +269,11 @@ class FlakyFetcher(DictFetcher):
         super().__init__(source, settings, pages)
         self.errors = errors
 
-    def _get_with_retry(self, url, headers):
+    def _request_with_retry(self, method, url, headers, body):
         if url in self.errors:
             self.requested.append(url)
             raise self.errors[url]
-        return super()._get_with_retry(url, headers)
+        return super()._request_with_retry(method, url, headers, body)
 
 
 def flaky(settings, source, pages, errors, **kw):
