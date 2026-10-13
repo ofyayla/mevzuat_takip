@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import re
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -19,6 +20,13 @@ GENERIC_LINK_TEXTS = {"incele", "git", "devamını oku", "devamını gör", "gö
 
 def clean(text: str | None) -> str:
     return _WS.sub(" ", text or "").strip(" –-–—\t\n")
+
+
+def inline_document(title: str, body_html: str) -> bytes:
+    """API'den gelen HTML gövdeyi (WordPress content, GİB description) başlıklı tam bir belgeye sarar."""
+    t = html.escape(title)
+    return (f"<html><head><meta charset='utf-8'><title>{t}</title></head><body>"
+            f"<h1>{t}</h1>{body_html}</body></html>").encode("utf-8")
 
 
 def parse_html(text: str, *, strip_chrome: bool = True) -> HTMLParser:
