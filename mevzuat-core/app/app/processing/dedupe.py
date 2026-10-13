@@ -48,6 +48,11 @@ GENERIC_TITLE_KEYS = {"pdf", "indir", "tıklayınız", "basın duyurusu", "bası
                       "kamuoyu duyurusu", "dokuman linki"}
 MIN_TITLE_KEY_LEN = 20
 MAX_KEY_LEN = 600     # regulation_key.key / regulation.canonical_key sütun genişliği (db.py)
+# Başlıktaki sıra/karar numarasından güçlü anahtar (no:/karar:) üretilmeyen kaynaklar. GİB'de numaralar seriler
+# arasında tekrar eder (Tahsilat "Seri A Sıra No 1", ÖTV "Seri No 1"; VUK ve KDV iç genelgeleri "2025/1") ve
+# başlıklar başka kararlara atıf yapar ("2009/14592 sayılı BKK eki…"): canlı veride farklı belgeleri birleştirdi.
+# Bu anahtarlar RG'yle zaten eşleşemez (RG kopyası HMB adına yayımlanır); RG eşleşmesi başlık/bulanık eşleşmeyle olur.
+NO_TITLE_NUMBER_KEYS = {"GIB"}
 
 
 def fit_key(key: str) -> str:
@@ -129,10 +134,11 @@ def doc_facts(raw: RawDocument) -> DocFacts:
     f.strong_keys.append("url:" + canonical_url(raw.url))
     if raw.external_id.startswith("mevzuat.gov.tr:"):
         f.strong_keys.append(raw.external_id)
-    if issuer and tf.decision_no:
-        f.strong_keys.append(f"karar:{issuer}:{tf.decision_no.lower()}")
-    if issuer and tf.seq_no and tf.reg_type:
-        f.strong_keys.append(f"no:{issuer}:{tr_lower(tf.reg_type)}:{tf.seq_no.lower()}")
+    if raw.source_code not in NO_TITLE_NUMBER_KEYS:
+        if issuer and tf.decision_no:
+            f.strong_keys.append(f"karar:{issuer}:{tf.decision_no.lower()}")
+        if issuer and tf.seq_no and tf.reg_type:
+            f.strong_keys.append(f"no:{issuer}:{tr_lower(tf.reg_type)}:{tf.seq_no.lower()}")
     if len(tf.key) >= MIN_TITLE_KEY_LEN and tf.key not in GENERIC_TITLE_KEYS:
         # bağlı kuruluşun anahtarı üst kurum koduyla üretilir: RG'deki "HMB" ile MASAK sitesindeki kopya eşleşsin
         f.weak_keys.append(f"title:{ISSUER_PARENT.get(issuer, issuer) or '?'}:{tf.key}")
