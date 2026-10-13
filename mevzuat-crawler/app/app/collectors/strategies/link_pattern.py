@@ -9,6 +9,8 @@ params:
   exclude_pattern: hariç tutulacak href regex'i (opsiyonel)
   scope: aramanın yapılacağı kapsayıcı (CSS, opsiyonel; varsayılan tüm gövde)
   link_selector: aday bağlantıların CSS seçicisi (varsayılan 'a[href]'; ör. yalnızca başlık bağlantıları)
+  href_attrs: bağlantı adresinin okunacağı öznitelikler, ilk dolu olan kullanılır (varsayılan [href];
+              KGK alt sayfaları JS ile açılan <a data-href=...> kullanıyor → [href, data-href])
   group_selector: öğenin üst elemanlarında aranan grup başlığı (ör. akordeon alt kategori) → extra.group
   group_strip: grup başlığından silinecek regex (ör. "\\(\\d+\\)$" öğe sayısı)
   fields: {ad: regex} — öğe metninden ek alanlar (ör. karar sayısı); title_strip'ten önce uygulanır
@@ -44,6 +46,7 @@ class LinkPatternStrategy:
         href_rx = re.compile(p["href_pattern"])
         exclude_rx = re.compile(p["exclude_pattern"]) if p.get("exclude_pattern") else None
         pag = p.get("pagination") or {}
+        href_attrs = p.get("href_attrs", ["href"])
         items: list[ItemRef] = []
         seen: set[str] = set()
         signatures: list[str] = []
@@ -63,9 +66,10 @@ class LinkPatternStrategy:
                 containers = []
                 found = 0
                 for a in root.css(p.get("link_selector", "a[href]")):
-                    if not a.attributes.get("href"):
+                    href = next((v for attr in href_attrs if (v := (a.attributes.get(attr) or "").strip())), None)
+                    if not href:
                         continue
-                    link = absolutize(resp.final_url, a.attributes["href"])
+                    link = absolutize(resp.final_url, href)
                     if not href_rx.search(link) or (exclude_rx and exclude_rx.search(link)) or link in seen:
                         continue
                     ref, container = self._item(ctx, a, link)
