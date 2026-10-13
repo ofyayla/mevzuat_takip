@@ -311,14 +311,18 @@ Uyum açısından en riskli durum, sitenin açılması ama içeriğin gelmemesid
 
 | İstemci | Kütüphane | Kullanan | Neden |
 |---|---|---|---|
-| `httpx` (varsayılan) | httpx | SPK, TCMB, KVKK, MASAK, Rekabet, TKBB | Standart |
+| `httpx` (varsayılan) | httpx | SPK, TCMB, KVKK, MASAK, Rekabet, TKBB, HMB, GİB, KGK | Standart |
 | `impersonate` | `curl_cffi` (Chrome TLS parmak izi) | **Resmî Gazete, BDDK, Ticaret** | Bu siteler tarayıcı olmayan istemcileri TLS el sıkışma imzasından tanıyıp engelliyor |
 | `browser` | Playwright/Chromium | Hiçbiri | Yalnızca JS ile render edilen ve API'si olmayan sayfalar için son çare. Bağımlılık imajda yok |
 
 `impersonate` modunda User-Agent başlığı gönderilmez. curl_cffi tarayıcı başlıklarını kendisi üretir, aksi halde
 parmak izi bozulur.
 
-### 6.2 Her istekte uygulanan kurallar (`Fetcher.get`)
+### 6.2 Her istekte uygulanan kurallar (`Fetcher.get` / `Fetcher.post_json`)
+
+`post_json(url, veri)` yalnız POST kabul eden JSON API'ler içindir (GİB `/api/gibportal/…` GET'e 405 döner). Gövde
+kanonik JSON'dur (`json_body`: anahtarlar sıralı, boşluksuz); aşağıdaki kuralların hepsi POST'ta da aynen geçerlidir.
+`browser` istemcisi POST desteklemez.
 
 1. **Host izin listesi:** İstenen URL'nin host'u `allowed_hosts`'ta (fnmatch desenleri, `base_url` host'u otomatik
    eklenir) değilse `HostNotAllowed`. Yanlış yapılandırılmış bir desenin crawler'ı rastgele sitelere götürmesini
@@ -338,7 +342,9 @@ parmak izi bozulur.
 6. **Karakter kodlaması:** Önce `Content-Type` charset'i, sonra `<meta charset>`, sonra UTF-8. Çözülemezse
    **windows-1254** (eski Türkçe sayfalar, ör. RG `.htm` dosyaları).
 7. **Kayıt (Recorder):** `probe --record` ile her yanıt `manifest.json` + dosya olarak kaydedilir.
-   `ReplayFetcher` testlerde bu kayıtları ağsız oynatır.
+   `ReplayFetcher` testlerde bu kayıtları ağsız oynatır. Manifest anahtarı `request_key`'dir: GET'te URL'nin
+   kendisi (eski fixture'lar geçerli), POST'ta `"POST <url> #<gövde sha1'inin ilk 12 hanesi>"`. Aynı adrese farklı
+   gövdeyle (ör. GİB tebliğleri kanun başına) yapılan istekler ayrı kaydedilir.
 
 ### 6.3 Proxy ve TLS
 
@@ -361,11 +367,11 @@ Her kanalın `strategy` alanı bir sınıfa eşlenir (`strategies/__init__.py`).
 |---|---|---|---|
 | `resmi_gazete` | RG `fihrist` | `/fihrist?tarih=YYYY-MM-DD[&mukerrer=N]`. Bugün + `lookback_days` (1) gün geri. Her gün için asıl sayı + mükerrer 1..4, **ilk boş mükerrerde durur**. Bölüm başlıkları (`.html-title`/`.html-subtitle`) kategori olur. "İLÂN BÖLÜMÜ" atlanır; yalnızca "Çeşitli İlânlar" dizini açılır ve ilan veren kurum adı `ilan_issuers` regex'lerine uyan ilanlar (BDDK, TCMB, SPK, MASAK, TMSF, KVKK, Rekabet, Ticaret, SEDDK, HMB, TKBB/TBB, Borsa/MKK/Takasbank) öğe olur. Gün sınırı İstanbul saatiyle hesaplanır | URL'den `20260925-1`, mükerrer `20260925M1-…`, ilan `20260925-4-25` |
 | `link_pattern` | BDDK (7 kanal), TCMB mevzuat, Ticaret tüketici, Rekabet duyuru, TKBB | Sayfada (`scope` içinde) `href_pattern`'e uyan tüm bağlantılar. Başlık bağlantı metninden. Metin "İncele/Git" gibi anlamsızsa üst elemandan alınır. Tarih önce `date_selector` ile öğe kapsayıcısında, bulunamazsa `date_regex` ile kapsayıcı + en fazla 3 üst
-  elemanda (≤600 karakter) aranır. `fields` ile ek alanlar (karar sayısı/tarihi), `group_selector` ile akordeon grubu, `version_pattern` ile sürüm anahtarı (TCMB `CACHEID`). CSS sınıflarına bağlı olmadığı için şablon değişikliğine dayanıklıdır | `id_pattern` grubu, yoksa URL yolu+sorgusu |
-| `css_list` | SPK bülten/basın, KVKK (3), Ticaret duyuru, Rekabet kararlar | `item` seçicisi = öğe kapsayıcısı. İçinden `link`, `title`, `date`, `summary`, `fields`. `pagination` ile `?param=N` ek sayfalar (öğe gelmeyince durur) | `id_pattern` veya URL |
+  elemanda (≤600 karakter) aranır. `fields` ile ek alanlar (karar sayısı/tarihi), `group_selector` ile akordeon grubu, `version_pattern` ile sürüm anahtarı (TCMB `CACHEID`). `href_attrs` ile adres başka öznitelikten okunabilir (KGK mevzuat ağacı: `<a data-href=…>`). CSS sınıflarına bağlı olmadığı için şablon değişikliğine dayanıklıdır | `id_pattern` grubu, yoksa URL yolu+sorgusu |
+| `css_list` | SPK bülten/basın, KVKK (3), Ticaret duyuru, Rekabet kararlar, KGK duyuru/son yayımlananlar | `item` seçicisi = öğe kapsayıcısı. İçinden `link`, `title`, `date`, `summary`, `fields`. `pagination` ile `?param=N` ek sayfalar (öğe gelmeyince durur) | `id_pattern` veya URL |
 | `feed` | TCMB basın duyuruları | RSS/Atom (`feedparser`). Türkçe tarihler kendi ayrıştırıcımızla. Çift kaçışlı başlıklar çözülür, http→https. `version_key = updated` | `id_pattern` veya URL |
-| `json_api` | SPK `mevzuat` (`mevzuat.spk.gov.tr/api/Search/All`) | React ön yüzün kullandığı JSON uç noktası. Alan eşlemesi tamamen YAML'da (`{alan}` şablonları), `filter`, `version_fields` | Şablon: `{contentSource}-{contentID}` |
-| `wordpress_api` | MASAK (`/portal/v2/` posts + pages) | WP REST API, **artımlı:** `modified_after = son başarılı tarama − 6 sa` (saate yuvarlanır). İlk taramada `lookback_days` (30) gün. 50'lik sayfalar, en fazla 3 sayfa/uç nokta. İçerik yanıtla gelir (detay isteği yok). İç host (`api-masak…`) kamuya açık adrese çevrilir | `posts:123` |
+| `json_api` | SPK `mevzuat` (`mevzuat.spk.gov.tr/api/Search/All`), GİB (8 kanal, `gib.gov.tr/api/gibportal/…`) | React/Next.js ön yüzün kullandığı JSON uç noktası. Alan eşlemesi tamamen YAML'da (`{alan}` şablonları), `filter`, `version_fields`. `method: POST` + `body` (liste ise adres × gövde başına bir istek) ve `inline_html` (öğedeki HTML alanı içerik olarak saklanır; istemci tarafında oluşan SPA detay sayfası indirilmez, ekler bu HTML'den alınır) | Şablon: `{contentSource}-{contentID}`, GİB `ozelge-{id}` |
+| `wordpress_api` | MASAK, HMB (`/portal/v2/` posts + pages) | WP REST API, **artımlı:** `modified_after = son başarılı tarama − 6 sa` (saate yuvarlanır). İlk taramada `lookback_days` (30) gün. 50'lik sayfalar, en fazla 3 sayfa/uç nokta. İçerik yanıtla gelir (detay isteği yok). İç host (`api-masak…`) kamuya açık adrese çevrilir (`public_link_rewrite`) ya da adres uç nokta başına şablondan üretilir (`public_url`, HMB `/duyuru/{slug}`). `query` uç nokta başına ek sorgu (HMB `categories_exclude`), `category_map` WP kategori kimliğini kategori adına çevirir | `posts:123` |
 
 Ortak yardımcılar:
 
@@ -373,7 +379,8 @@ Ortak yardımcılar:
   Aralık sonu yayınları kaçmasın diye (SPK bülten/basın).
 - `_html.parse_html`: `script/style/noscript/svg`, `nav/footer` ve kısa `header` atılır (Rekabet içeriği `header`
   içine koyduğu için uzun header korunur).
-- `dates.parse_tr_date`: "25 Eylül 2026 Cuma", "17 Eyl 2026", "24.9.2026", ISO, RFC 822.
+- `_html.inline_document`: API'den gelen HTML gövdeyi başlıklı tam belgeye sarar (`wordpress_api`, `json_api`).
+- `dates.parse_tr_date`: "25 Eylül 2026 Cuma", "17 Eyl 2026", "18 EYL. 2026" (KGK), "24.9.2026", ISO, RFC 822.
 
 ## 8. MongoDB sözleşmesi (`mevzuat_crawl`)
 

@@ -57,7 +57,7 @@ tarama talebi). Parolalar kasaya konur.
 7. mevzuat-crawler reposundan: `deploy/dmz/crawler.env.example` → `/etc/mevzuat/crawler.env` (600; `MONGO_URL` =
    `mevzuat_crawler`, gerekiyorsa `HTTPS_PROXY`/`CA_BUNDLE`). `deploy/dmz/mevzuat-crawler.container` → `/etc/containers/systemd/`,
    `systemctl daemon-reload && systemctl start mevzuat-crawler`.
-8. Erişim testi (DMZ'de): `podman exec mevzuat-crawler mevzuat-collect check-access` → 9 kaynak `ok` (hata → §4.2);
+8. Erişim testi (DMZ'de): `podman exec mevzuat-crawler mevzuat-collect check-access` → 12 kaynak `ok` (hata → §4.2);
    `podman exec mevzuat-crawler mevzuat-crawler check` → Mongo erişimi ve indeksler.
 9. İlk tarama: `podman exec mevzuat-crawler mevzuat-crawler run all`. İlk taramada bulunan eski içerik **taban
    çizgisi** (baseline) sayılır, portala düşmez. Sonrasında crawler zamanlamayla kendiliğinden tarar.

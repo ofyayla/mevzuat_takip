@@ -42,7 +42,7 @@ sudo podman load -i mevzuat-crawler.tar          # veya: podman pull 10.54.62.31
 sudo install -d -m 700 /etc/mevzuat && sudo install -m 600 deploy/dmz/crawler.env.example /etc/mevzuat/crawler.env
 sudo install -m 644 deploy/dmz/mevzuat-crawler.container /etc/containers/systemd/
 sudo systemctl daemon-reload && sudo systemctl start mevzuat-crawler
-sudo podman exec mevzuat-crawler mevzuat-collect check-access      # 9 kaynak OK
+sudo podman exec mevzuat-crawler mevzuat-collect check-access      # 12 kaynak OK
 sudo podman exec mevzuat-crawler mevzuat-crawler check              # Mongo erişimi
 sudo podman exec mevzuat-crawler mevzuat-crawler run all            # ilk tarama (mevcut içerik BASELINE)
 ```

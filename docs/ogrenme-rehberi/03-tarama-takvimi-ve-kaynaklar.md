@@ -17,7 +17,10 @@ hesaplandı (12–18 Ekim 2026 haftası). Takvim değişirse 05 §4'teki betikle
 | **Ticaret Bakanlığı** | `0 10 * * 1-5`, `0 16 * * 1-5` | 10:00, 16:00 | Yok | 10 |
 | **Rekabet Kurumu** | `0 10 * * 1-5`, `0 17 * * 1-5` | 10:00, 17:00 | Yok | 10 |
 | **TKBB** | `0 10 * * 1-5`, `0 17 * * 1-5` | 10:00, 17:00 | Yok | 10 |
-| **Toplam** | | | | **≈210 tarama/hafta** |
+| **HMB** | `0 9 * * 1-5`, `0 14 * * 1-5`, `0 19 * * *` | 09:00, 14:00, 19:00 | 19:00 | 17 |
+| **GİB** | `30 8 * * *`, `0 13 * * 1-5`, `0 18 * * 1-5`, `30 22 * * *` | 08:30, 13:00, 18:00, 22:30 | 08:30, 22:30 | 24 |
+| **KGK** | `0 10 * * 1-5`, `0 17 * * 1-5` | 10:00, 17:00 | Yok | 10 |
+| **Toplam** | | | | **≈260 tarama/hafta** |
 
 Notlar:
 
@@ -42,8 +45,13 @@ Notlar:
 | TICARET | `impersonate` | 1,5 sn | `duyurular` (css_list, 2 sayfa), `tuketici_mevzuati` (link_pattern → mevzuat.gov.tr) | `tuketici_mevzuati`: 14 gün |
 | REKABET | `httpx` | 1,5 sn | `duyurular` (link_pattern), `kurul_kararlari` (css_list, karar sayısı/türü alanları) | — |
 | TKBB | `httpx` | 1,5 sn | `duyurular` (link_pattern), `birlik_duzenlemeleri` (link_pattern, PDF/DOC ekleri) | — |
+| HMB | `httpx` | 1,5 sn | `duyurular` (wordpress_api: posts, Sınav Duyuruları hariç, artımlı, ms.hmb.gov.tr ekleri), `sayfalar` (wordpress_api: pages) | — (`modified` sürüm anahtarı) |
+| GIB | `httpx` | **2 sn** | `ozelgeler`, `sirkulerler`, `tebligler` (17 kanun ayrı sorgu), `cbk`, `ic_genelgeler`, `yonetmelikler`, `taslaklar`, `mevzuat_duyurulari` — hepsi json_api (POST, metin inline, cdn.gib.gov.tr ekleri) | — (`updated_at` sürüm anahtarı) |
+| KGK | `httpx` | 1,5 sn | `duyurular`, `son_yayimlananlar` (css_list, PDF ekleri), `mevzuat` (link_pattern, `data-href` alt sayfalar) | `mevzuat`: 7 gün |
 
-Kanal yapıları canlı sitede en son **25.09.2026**'da doğrulandı (`verified` alanı).
+Kanal yapıları canlı sitede en son **25.09.2026**'da (HMB, GİB, KGK: **13.10.2026**) doğrulandı (`verified` alanı).
+GİB'de bilinçli olarak izlenmeyen türler (BKK, Genel Yazılar, KKDF, uluslararası mevzuat, gerekçe/madde metinleri,
+mevzuat dışı duyuru kategorileri) `sources.yaml` → GIB `notes` alanında listelidir.
 
 ### Değişiklik yokken bir tarama kaç istek atar? (yaklaşık)
 
@@ -62,6 +70,9 @@ Değişiklik yoksa yalnızca liste sayfaları istenir (02 §5.3). Aşağıdaki s
 | TICARET | 3 | ~3 sn | Yenileme: ≤20 detay/tarama |
 | REKABET | 2 | ~1,5 sn | |
 | TKBB | 3 | ~3 sn | |
+| HMB | 2–6 (WP sayfalama) | ~1,5 sn | İçerik API yanıtında gelir, detay isteği yok |
+| GIB | 24 (tebliğde 17 kanun) | ~46 sn (2 sn aralık) | İçerik API yanıtında gelir; yalnızca ekler indirilir. Liste yanıtları tam metin içerdiği için tarama başına ~2,5 MB |
+| KGK | 12 | ~16 sn | Yenileme: ≤20 mevzuat sayfası/tarama |
 
 İlk kurulumda durum farklıdır: BASELINE birikimi tarama başına 200 detayla sınırlıdır ve birkaç taramaya yayılır
 (02 §5.2, §5.4).
@@ -79,7 +90,9 @@ Toplam gecikme = **(yayın → bir sonraki tarama)** + **tarama süresi** + **ak
 | TCMB | 5 sa 30 dk | 14 sa | Cuma 19:00 → Pazartesi 09:00 = **62 sa** |
 | KVKK / MASAK | 6 sa | 13 sa | Hafta sonu günde bir (20:00): en uzun 24 sa |
 | TICARET | 6 sa | 18 sa | Cuma 16:00 → Pazartesi 10:00 = **66 sa** |
-| REKABET / TKBB | 7 sa | 17 sa | Cuma 17:00 → Pazartesi 10:00 = **65 sa** |
+| REKABET / TKBB / KGK | 7 sa | 17 sa | Cuma 17:00 → Pazartesi 10:00 = **65 sa** |
+| HMB | 5 sa | 14 sa | Hafta sonu günde bir (19:00): en uzun 24 sa |
+| GIB | 5 sa | 10 sa (22:30→08:30) | Hafta sonu 08:30 ve 22:30: en uzun 14 sa |
 
 **Değerlendirme:** Takvim, keşifte gözlenen yayın alışkanlıklarına göre seçildi (`kaynak-kesif-raporu.md`). Kurum
 siteleri hafta sonu nadiren yayın yapar. Resmî Gazete'de yayımlanan düzenlemeler zaten RG kaynağından gün içinde
@@ -116,6 +129,9 @@ sitenin gözünde yine bir ziyarettir.
 | TICARET | 168 sa | İş günü | 1 |
 | REKABET | 168 sa | İş günü | 1 |
 | TKBB | 336 sa | İş günü | 1 |
+| HMB | 168 sa | İş günü | **0** (artımlı API) |
+| GIB | 120 sa | İş günü | 1 |
+| KGK | 336 sa | İş günü | 1 |
 
 Veri biriktikçe (≥28 gün ve ≥8 yayın aralığı) tolerans, son 90 günün yayın aralıklarının **p95**'inden öğrenilir
 (alt sınır 12 sa). Yukarıdaki değerler başlangıç değerleridir.
