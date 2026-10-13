@@ -164,7 +164,7 @@ Bu aşamada portal açılır ama crawler çalışmadığı için izleme `crawler
 
 1. `mevzuat-crawler check`: "aktarılmayı bekleyen belge" birkaç dakika içinde 0'a iner (ingest her dakika çalışır).
 2. Portal durum çubuğu / `GET /api/v1/sources/health`: `crawler_down` kapanır, kaynaklar `ok`.
-3. Portaldan "şimdi tara" → talep ≤15 sn içinde DMZ'de alınır (`journalctl -u mevzuat-crawler`).
+3. Portaldan "şimdi tara" (kaynak durumu panelinde **Tara**, admin rolü) → talep ≤15 sn içinde DMZ'de alınır (`journalctl -u mevzuat-crawler`).
 4. `kubectl -n artint exec deploy/mevzuat-core -- mevzuat-monitor audit-verify` → `ok`.
 5. İlk günlerde yeni düzenlemelerin portala düştüğü ve YZ alanlarının dolduğu kontrol edilir (runbook §6).
 

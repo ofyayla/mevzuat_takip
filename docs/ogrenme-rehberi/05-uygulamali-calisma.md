@@ -230,7 +230,7 @@ for s in load_sources(Path("config/sources.yaml")).sources:
 | Kaynak "down" | DMZ'de `podman exec mevzuat-crawler mevzuat-collect check-access KOD`, crawler logu (`journalctl -u mevzuat-crawler`) |
 | Site yapısı değişti (`structure_change`) | `mevzuat-collect probe KOD` → `sources.yaml` seçicilerini düzelt → fixture'ı yeniden kaydet → replay testi |
 | Kesinti sonrası kaçan dönem | Admin API `POST /api/v1/admin/sources/{code}/backfill` (fark ≤62 gün) veya `mevzuat-monitor backfill KOD --from … --to …` (sınırsız); DMZ'de doğrudan `mevzuat-crawler backfill …`. RG gün gün taranır; diğer kaynaklarda backfill = normal tarama (liste sayfası ne gösteriyorsa) |
-| Hemen tarama | Admin API "şimdi tara" (`POST /api/v1/admin/sources/{code}/run`; portal arayüzünde düğme yok; kaynak kodunu büyük harfle yazın, bkz. 06 §16) → kaynak meşgul değilse ≤15 sn içinde crawler alır |
+| Hemen tarama | Admin API "şimdi tara" (portalda kaynak durumu panelindeki **Tara** düğmesi, yalnız admin; ya da `POST /api/v1/admin/sources/{code}/run`, kaynak kodunu büyük harfle yazın, bkz. 06 §16) → kaynak meşgul değilse ≤15 sn içinde crawler alır |
 | Bir aşamayı yeniden çalıştırma | `POST /api/v1/admin/reprocess` (`extract \| classify \| summarize \| match`, tarih aralığı) |
 | TLS zincir hatası | `mevzuat-collect ca-fetch HOST` → `config/certs`'e ekle (core'da) → sync → imaj |
 

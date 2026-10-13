@@ -113,9 +113,11 @@ insert {kind, source_code,     →  find_one_and_update                →  run_
                                                                            result / error
 ```
 
-- `kind=run`: "şimdi tara", yani admin API `POST /api/v1/admin/sources/{code}/run`. Portal arayüzünde henüz
-  düğmesi yok; API (`/docs`) veya `curl` ile çağrılır. API talebi boş `params` ile bırakır (tüm kanallar,
-  `max_details=200`). `channels`/`max_details` yalnızca talep belgesine elle yazılırsa kullanılır.
+- `kind=run`: "şimdi tara", yani admin API `POST /api/v1/admin/sources/{code}/run`. Portalda sağ üstteki kaynak
+  durumu panelinde her kaynağın yanında **Tara** düğmesi vardır (yalnızca `mevzuat_admin` rolüne görünür; başarılı
+  talepten sonra 60 sn kapalı kalır). API (`/docs`) veya `curl` ile de çağrılabilir. API talebi boş `params` ile
+  bırakır (tüm kanallar, `max_details=200`). `channels`/`max_details` yalnızca talep belgesine elle yazılırsa
+  kullanılır.
 - `kind=backfill`: `POST /api/v1/admin/sources/{code}/backfill` (başlangıç–bitiş farkı ≤62 gün, yani 63 takvim
   gününe kadar) veya `mevzuat-monitor backfill` (CLI'da sınır yok). Resmî Gazete'de gün gün tarar, diğer kaynaklarda normal tarama yapar
   (`monitoring/reprocess.py:backfill`).
