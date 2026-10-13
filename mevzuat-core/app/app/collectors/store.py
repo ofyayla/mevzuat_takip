@@ -63,7 +63,7 @@ class CrawlStore(Protocol):
     def put_content(self, content: bytes) -> tuple[str, str]: ...
     def upsert_source(self, source: SourceConfig) -> None: ...
     def last_success(self, code: str) -> datetime | None: ...
-    def previous_channel_stats(self, code: str) -> dict: ...
+    def previous_channel_stats(self, code: str, channels: list[str] | None = None) -> dict: ...
     def start_run(self, code: str, started_at: datetime) -> Any: ...
     def finish_run(self, run_id: Any, **fields) -> None: ...
     def latest_documents(self, code: str, external_ids: list[str]) -> dict[str, StoredDoc]: ...
@@ -77,12 +77,27 @@ def aware(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt   # SQLite tz saklamaz
 
 
-def merge_channel_stats(rows) -> dict:
-    """Her kanal için en son kaydedilen istatistik (yalnızca bazı kanalların tarandığı çalıştırmalar olabilir)."""
+CHANNEL_STATS_MAX_RUNS = 1000   # uzun süre görülmeyen kanal için geriye bakılacak en fazla tarama
+SIGNATURE_LOOKBACK_RUNS = 50    # boş imzalı (hatalı/boş liste) kanal için geçerli imza aranacak tarama sayısı
+
+
+def merge_channel_stats(rows, wanted=None) -> dict:
+    """Her kanal için en son kaydedilen istatistik (yalnızca bazı kanalların tarandığı çalıştırmalar olabilir).
+
+    ``rows`` yeniden eskiye sıralı ``channels`` sözlükleridir. ``signature`` boşsa (liste hatası, boş liste) boş
+    olmayan en son imza kullanılır; yoksa hatadan sonraki taramada yapı karşılaştırması atlanırdı. ``wanted``
+    verilirse istenen kanalların hepsi bulununca (ve imzaları dolunca ya da imza penceresi geçilince) okuma durur.
+    """
     merged: dict = {}
-    for channels in rows:
+    wanted = set(wanted) if wanted is not None else None
+    for n, channels in enumerate(rows, 1):
         for name, stats in (channels or {}).items():
-            merged.setdefault(name, stats)
+            cur = merged.setdefault(name, dict(stats))
+            if not cur.get("signature") and stats.get("signature") and n <= SIGNATURE_LOOKBACK_RUNS:
+                cur["signature"] = stats["signature"]
+        if wanted is not None and wanted <= merged.keys() and (
+                n >= SIGNATURE_LOOKBACK_RUNS or all(merged[w].get("signature") for w in wanted)):
+            break
     return merged
 
 
@@ -110,11 +125,13 @@ class SqlCrawlStore:
                 FetchRun.source_code == code, FetchRun.status == "success"
             ).order_by(FetchRun.started_at.desc()).limit(1)))
 
-    def previous_channel_stats(self, code: str) -> dict:
+    def previous_channel_stats(self, code: str, channels: list[str] | None = None) -> dict:
         with self.session_factory() as s:
+            # yield_per: satırlar parça parça okunur, merge erken çıkınca kalanı çekilmez
             return merge_channel_stats(s.scalars(select(FetchRun.channels).where(
                 FetchRun.source_code == code, FetchRun.status.in_(("success", "partial"))
-            ).order_by(FetchRun.started_at.desc()).limit(50)))
+            ).order_by(FetchRun.started_at.desc()).limit(CHANNEL_STATS_MAX_RUNS).execution_options(yield_per=50)),
+                channels)
 
     def start_run(self, code: str, started_at: datetime) -> int:
         with self.session_factory() as s:

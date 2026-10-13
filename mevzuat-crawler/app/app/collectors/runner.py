@@ -167,7 +167,8 @@ class SourceCollector:
         now = now or datetime.now(timezone.utc)
         self.store.upsert_source(self.source)
         since = self.store.last_success(self.source.code)
-        prev_channels = self.store.previous_channel_stats(self.source.code)
+        selected = [c for c in self.source.channels if c.enabled and (not channels or c.name in channels)]
+        prev_channels = self.store.previous_channel_stats(self.source.code, [c.name for c in selected])
         run_id = self.store.start_run(self.source.code, now)
 
         reports: list[ChannelReport] = []
@@ -198,9 +199,7 @@ class SourceCollector:
     def _run_channels(self, run_id, channels, max_details: int, now: datetime, since, prev_channels: dict,
                       reports: list[ChannelReport]) -> None:
         budget = max_details
-        for channel in self.source.channels:
-            if not channel.enabled or (channels and channel.name not in channels):
-                continue
+        for channel in selected:
             rep = ChannelReport(channel.name)
             reports.append(rep)
             prev = prev_channels.get(channel.name) or {}

@@ -50,7 +50,7 @@ def files(root: Path, rel: str) -> set[str]:
         return {f.relative_to(root).as_posix() for f in p.rglob("*")   # Windows'ta ters eğik çizgi sync'i bozar
                 if f.is_file() and not any(part in ("__pycache__", ".pytest_cache", "data") for part in f.parts)
                 and f.suffix != ".pyc"}
-    return {rel} if p.is_file() else set()
+    return {str(Path(rel))} if p.is_file() else set()   # dizin dalıyla aynı ayraç (Windows'ta "\")
 
 
 def dependencies(pyproject: Path) -> str:

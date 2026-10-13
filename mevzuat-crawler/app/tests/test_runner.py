@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.collectors.config import SourceConfig
 from app.collectors.runner import SourceCollector
-from app.collectors.store import SqlCrawlStore
+from app.collectors.store import SqlCrawlStore, merge_channel_stats
 from app.db import FetchRun, RawDocument, make_sessionmaker
 from app.storage import FileSystemStorage
 from tests.conftest import DictFetcher
@@ -150,6 +150,58 @@ def test_first_run_is_baseline_until_backlog_done(settings):
     assert not rep.channels[0].baseline and rep.new == 1
     new = [r for r in docs(sf) if r.external_id.startswith("/d/3")]
     assert {(r.role, r.is_baseline) for r in new} == {("main", False), ("attachment", False)}
+
+
+def test_merge_channel_stats_keeps_last_signature_and_stops_early():
+    rows = [{"a": {"signature": "", "error": "x", "baseline_complete": True}},
+            {"a": {"signature": "s1"}, "b": {"signature": "s2"}},
+            {"c": {"signature": "s3"}}]
+    consumed = []
+    merged = merge_channel_stats((consumed.append(r) or r for r in rows), ["a", "b"])
+    assert merged["a"] == {"signature": "s1", "error": "x", "baseline_complete": True}
+    assert len(consumed) == 2 and "c" not in merged      # istenen kanallar bulununca okuma durdu
+    assert rows[0]["a"]["signature"] == ""                 # girdi değiştirilmedi
+
+
+def test_structure_change_detected_after_channel_error(settings):
+    """Hata alan kanalın boş imzası, sonraki taramada yapı karşılaştırmasını atlatmamalı."""
+    other = "https://ornek.gov.tr/diger"
+    src = SourceConfig.model_validate({
+        "code": "ORNEK", "name": "Örnek", "base_url": "https://ornek.gov.tr",
+        "channels": [{"name": "duyurular", "strategy": "css_list",
+                      "params": {"urls": [LIST], "item": "ul.liste li", "title": "h5", "date": ".t"}},
+                     {"name": "diger", "strategy": "css_list",
+                      "params": {"urls": [other], "item": "ul.liste li", "title": "h5", "date": ".t"}}]})
+    pages = {LIST: (listing(("/d/1", "Bir", "25.09.2026")), "text/html"),
+             other: (listing(("/d/2", "İki", "25.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": ("<p>1</p>", "text/html"),
+             "https://ornek.gov.tr/d/2": ("<p>2</p>", "text/html")}
+    c, sf = collector(settings, src, pages)
+    c.run()
+    saved = pages.pop(LIST)
+    assert c.run().status == "partial"                   # duyurular liste hatası aldı
+    pages[LIST] = (saved[0].replace("<li>", "<li class='yeni'>"), "text/html")
+    rep = c.run()
+    assert rep.channels[0].structure_changed and not rep.channels[1].structure_changed
+
+
+def test_channel_absent_for_long_keeps_baseline_state(settings):
+    """Kanal 50'den fazla taramada görünmese de baseline'ı tamamlanmış sayılmaya devam eder."""
+    src = make_source()
+    pages = {LIST: (listing(("/d/1", "Bir", "25.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": ("<p>1</p>", "text/html"),
+             "https://ornek.gov.tr/d/2": ("<p>2</p>", "text/html")}
+    c, sf = collector(settings, src, pages)
+    t0 = datetime(2026, 9, 25, 8, tzinfo=timezone.utc)
+    assert c.run(now=t0).channels[0].baseline_complete
+    with sf() as s:                                      # başka kanalların taramaları
+        s.add_all(FetchRun(source_code="ORNEK", started_at=t0 + timedelta(hours=i + 1), status="success",
+                           channels={"baska": {"signature": "x"}}) for i in range(60))
+        s.commit()
+    pages[LIST] = (listing(("/d/1", "Bir", "25.09.2026"), ("/d/2", "İki", "26.09.2026")), "text/html")
+    rep = c.run(now=t0 + timedelta(days=5))
+    assert not rep.channels[0].baseline and rep.new == 1
+    assert [r.is_baseline for r in docs(sf) if r.external_id == "/d/2"] == [False]
 
 
 def test_refresh_after_days_detects_in_place_update(settings):
