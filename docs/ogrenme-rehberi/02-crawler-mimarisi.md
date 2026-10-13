@@ -148,7 +148,7 @@ Kayıt katmanı `CrawlStore` protokolüyle soyutlanmıştır (`collectors/store.
 ```mermaid
 flowchart TD
   A["run() başlar"] --> B["upsert_source: kaynak yapılandırmasının anlık görüntüsü"]
-  B --> C["since = son BAŞARILI taramanın başlangıcı<br/>prev_channels = son 50 success/partial taramadan kanal istatistikleri"]
+  B --> C["Geçmişe bak (bkz. 5.1.1)<br/>since: son success taramanın başlangıç zamanı<br/>prev_channels: her kanalın en son kaydedilen istatistiği"]
   C --> D["start_run → fetch_runs: status=running"]
   D --> E{"Her etkin kanal"}
   E --> F["list_channel: strateji → ItemRef listesi<br/>+ mevzuat.gov.tr bağlantılarını kanonikleştir"]
@@ -158,6 +158,55 @@ flowchart TD
   E -->|"bitti"| I["status: hepsi hatalı → failed, bazıları → partial, yoksa success<br/>structure_alert = hatasız ama boş liste dönen kanal var mı"]
   I --> J["finish_run → fetch_runs güncellenir"]
 ```
+
+#### 5.1.1 Taramadan önce geçmişe bakış: `since` ve `prev_channels`
+
+Yeni tarama başlamadan önce `run()`, aynı kaynağın önceki taramalarına (`fetch_runs`) iki soru sorar:
+
+**`since`: "En son ne zaman tam başarılı tarandım?"** (`store.last_success`)
+
+- Yalnızca `status == "success"` olan en son taramanın `started_at` değeridir. `partial` ve `failed` sayılmaz,
+  çünkü o taramalarda bazı kanallar hiç okunamamıştır.
+- Hiç başarılı tarama yoksa `None` olur.
+- `list_channel` üzerinden stratejiye (`ctx.since`) geçirilir. Bugün yalnızca `wordpress_api` stratejisi kullanır:
+  API'den yalnızca `since - overlap_hours` (varsayılan 6 saat) sonrasını ister. `since` yoksa `lookback_days` kadar
+  geriye gider. Diğer stratejiler `since`'i yok sayar ve her seferinde listeyi baştan okur.
+
+**`prev_channels`: "Her kanal en son nasıldı?"** (`store.previous_channel_stats`)
+
+Her tarama bitince `finish_run`, kanal başına bir `ChannelReport` özetini `fetch_runs.channels` alanına yazar:
+
+```json
+{ "kurul-kararlari": { "items": 412, "signature": "a1b2…", "baseline_complete": true, "deferred": 0, "error": null, … },
+  "duyurular":       { … } }
+```
+
+`previous_channel_stats` bu kayıtlardan bir sözlük kurar:
+
+1. Kaynağın `status` değeri `success` veya `partial` olan **en yeni 50** taraması, yeniden eskiye sıralanır.
+   (`partial` da dahildir, çünkü o taramada başarılı olan kanalların istatistiği geçerlidir.)
+2. `merge_channel_stats` bunları sırayla gezer ve her kanal adı için **ilk gördüğü, yani en yeni** kaydı alır
+   (`setdefault`). Sonuç `{kanal_adı: o kanalın en son istatistiği}` olur.
+
+Neden tek bir tarama değil de 50? Her tarama her kanalı kapsamayabilir: `run(channels=[...])` ile yalnızca bazı
+kanallar taranabilir veya bir kanal `enabled: false` yapılmış olabilir. En son tarama bir kanalı içermiyorsa, o
+kanalın bilgisi daha eski bir taramadan alınır.
+
+`run()` her kanal için bu sözlükten (`prev`) yalnızca iki alan okur:
+
+| Alan | Ne için | Yoksa |
+|---|---|---|
+| `baseline_complete` | Kanal hâlâ baseline modunda mı? (§5.4) | `False` → kanal baseline modunda başlar |
+| `signature` | Liste sayfasının HTML yapısı değişti mi? Önceki ve şimdiki imza farklıysa `structure_changed=True` | Karşılaştırma yapılmaz |
+
+Dikkat edilecek iki durum:
+
+- **50 taramalık pencere:** Bir kanal son 50 `success`/`partial` taramanın hiçbirinde yoksa (uzun süre kapalı kalıp
+  yeniden açıldıysa) `prev` boş gelir. Kanal yeniden baseline moduna girer: o taramada ilk kez görülen öğeler
+  `is_baseline=True` ile arşivlenir ve YZ'ye gitmez.
+- **Hatalı kanalın kaydı:** Liste hatası alan bir kanalın özeti de yazılır. `baseline_complete` önceki değerden
+  taşınır, ama `signature` boş (`""`) kalır. Bu yüzden bir sonraki taramada o kanal için yapı karşılaştırması bir
+  kez atlanır.
 
 Önemli kurallar (`runner.py` başlık yorumu):
 
