@@ -174,7 +174,7 @@ class SourceCollector:
         reports: list[ChannelReport] = []
         completed = False
         try:
-            self._run_channels(run_id, channels, max_details, now, since, prev_channels, reports)
+            self._run_channels(run_id, selected, max_details, now, since, prev_channels, reports)
             completed = True
         finally:   # istisna yükselse bile kayıt "running" kalmasın
             failed = [r for r in reports if r.error]
@@ -196,7 +196,7 @@ class SourceCollector:
                 errors=errors, structure_alert=any(r.empty_listing and not r.error for r in reports))
         return RunReport(self.source.code, run_id, status, reports, self.fetcher.request_count)
 
-    def _run_channels(self, run_id, channels, max_details: int, now: datetime, since, prev_channels: dict,
+    def _run_channels(self, run_id, selected: list[ChannelConfig], max_details: int, now: datetime, since, prev_channels: dict,
                       reports: list[ChannelReport]) -> None:
         budget = max_details
         for channel in selected:
