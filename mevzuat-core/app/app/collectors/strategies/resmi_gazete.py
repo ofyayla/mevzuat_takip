@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 
 from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import tr_lower
+from app.collectors.http import FetchError
 from app.collectors.strategies._html import absolutize, clean, node_signature, parse_html
 
 _ITEM_ID = re.compile(r"/(?:eskiler|ilanlar/eskiilanlar)/\d{4}/\d{2}/(\d{8}(?:M\d+)?(?:-[\w-]+)?)\.\w+$")
@@ -54,6 +55,7 @@ class ResmiGazeteStrategy:
         signatures: list[str] = []
         pages = 0
         warnings: list[str] = []
+        incomplete = False
         indexes: list[ItemRef] = []
         for offset in range(p.get("lookback_days", 1) + 1):
             day = today - timedelta(days=offset)
@@ -61,7 +63,15 @@ class ResmiGazeteStrategy:
                 params = {"tarih": day.isoformat()}
                 if muk:
                     params["mukerrer"] = muk
-                resp = ctx.fetcher.get(ctx.source.base_url.rstrip("/") + "/fihrist", params=params)
+                try:
+                    resp = ctx.fetcher.get(ctx.source.base_url.rstrip("/") + "/fihrist", params=params)
+                except FetchError as e:
+                    if offset == 0 and muk == 0:
+                        raise            # bugünün asıl sayısı olmadan koşunun anlamı yok
+                    # Dünün ya da bir mükerrerin fihristi alınamadı: elimizdekiler atılmasın, eksik olarak işaretlenir
+                    warnings.append(f"{day}{f' mükerrer {muk}' if muk else ''}: fihrist alınamadı: {e}")
+                    incomplete = True
+                    break
                 pages += 1
                 found, sig = self._parse(ctx, resp.text, resp.final_url, day, muk, excluded, items,
                                          ilan_indexes, indexes)
@@ -73,11 +83,16 @@ class ResmiGazeteStrategy:
                     break  # mükerrer yoksa sonrakileri denemeye gerek yok
         if issuer_rx:
             for index in indexes:
-                resp = ctx.fetcher.get(index.url)
+                try:
+                    resp = ctx.fetcher.get(index.url)
+                except FetchError as e:   # tek ilan dizini günün tüm kanun/yönetmeliklerini düşürmemeli
+                    warnings.append(f"{index.title}: ilan dizini alınamadı: {e}")
+                    incomplete = True
+                    continue
                 pages += 1
                 items.extend(self._ilanlar(ctx, index, resp.text, resp.final_url, issuer_rx))
         return ChannelResult(items=items, pages_fetched=pages, signature=signatures[0] if signatures else "",
-                             warnings=warnings)
+                             warnings=warnings, incomplete=incomplete)
 
     def _parse(self, ctx, html_text, page_url, day, muk, excluded, out, ilan_indexes=(), indexes=None
                ) -> tuple[int, str]:

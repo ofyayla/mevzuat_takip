@@ -382,7 +382,7 @@ def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, set
 
     require(actor, ROLE_ADMIN)
     try:
-        load_sources(settings.sources_file).get(code)
+        code = load_sources(settings.sources_file).get(code).code   # kanonik kod: crawler büyük/küçük harfe duyarlı
     except KeyError as e:
         raise ApiError(404, "not_found", str(e)) from e
     if body.date_to < body.date_from or (body.date_to - body.date_from).days > 62:
@@ -415,7 +415,7 @@ def admin_run_source(code: str, background: BackgroundTasks, settings: SettingsD
 
     require(actor, ROLE_ADMIN)
     try:
-        load_sources(settings.sources_file).get(code)
+        code = load_sources(settings.sources_file).get(code).code   # kanonik kod: crawler büyük/küçük harfe duyarlı
     except KeyError as e:
         raise ApiError(404, "not_found", str(e)) from e
     if settings.crawl_mode == "remote":

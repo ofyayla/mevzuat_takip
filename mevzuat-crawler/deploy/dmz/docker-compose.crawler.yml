@@ -9,5 +9,7 @@ services:
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 2m
+    hostname: mevzuat-crawler      # sabit ad: kilit/talep sahipliği yeniden başlatmada değişmesin
+    mem_limit: 1g                  # sınırsız bellek aşımı sunucuyu OOM'a düşürür (50 MB indirme sınırı × 3 kaynak)
     restart: always
 volumes: {crawlerdata: {}}

@@ -36,12 +36,15 @@ class Settings(BaseSettings):
     crawl_mode: str = "local"
     mongo_url: str | None = None             # mongodb://kullanici:parola@10.155.7.195:27017/?authSource=admin
     mongo_db: str = "mevzuat_crawl"
-    mongo_timeout_ms: int = 10000
+    mongo_timeout_ms: int = 10000            # sunucu seçimi
+    mongo_connect_timeout_ms: int = 10000
+    mongo_socket_timeout_ms: int = 60000     # DMZ↔LAN güvenlik duvarı bağlantıyı sessizce düşürürse işlem takılı kalmasın
     ingest_batch: int = 500
     # DMZ crawler servisi
     crawler_max_parallel: int = 3            # aynı anda taranan kaynak sayısı (her kaynak kendi hızını korur)
     crawler_poll_s: float = 15.0             # zamanlama ve tarama talebi kontrol aralığı
     crawler_lock_ttl_s: int = 3600
+    crawler_sweep_s: float = 60.0            # ölü crawler'ın kilit/talep/tarama kalıntılarını temizleme aralığı
     crawler_heartbeat_file: Path = BACKEND_DIR / "data" / "crawler.alive"   # konteyner sağlık kontrolü
     crawler_stale_minutes: int = 30          # LAN izleme: crawler bu kadar süre sinyal vermezse "down" alarmı
 
@@ -64,7 +67,12 @@ class Settings(BaseSettings):
     collect_timeout_s: float = 30.0
     collect_max_attachments: int = 5
     collect_max_bytes: int = 50 * 1024 * 1024
+    collect_total_timeout_s: float = 120.0   # tek indirmenin toplam süresi (collect_timeout_s okuma başına; yavaş damlayan sunucu)
+    collect_enforce_redirect_hosts: bool = True   # yönlendirme izinli olmayan host'a çıkarsa yanıt reddedilir (False: yalnızca log)
     collect_default_lookback_days: int = 30
+    # İlk tarama (BASELINE) kapanış kapıları: sitede duran birikim "yeni düzenleme" sayılmasın
+    baseline_empty_runs: int = 3             # beklenenden az öğe dönen kanal bu kadar ardışık koşudan sonra "gerçekten az" sayılır
+    baseline_max_runs: int = 48              # geçici hata baseline'ı bundan uzun açık tutamaz (sessiz BASELINE sonsuza uzamasın)
 
     # İK-2: metin çıkarma / OCR (kurumdaki Azure Document Intelligence "Read" servisi)
     ocr_provider: str = "none"               # none | azure_di

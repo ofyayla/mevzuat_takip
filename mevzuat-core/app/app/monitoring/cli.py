@@ -56,7 +56,18 @@ def cmd_alerts(args) -> int:
 
 
 def cmd_backfill(args) -> int:
+    from app.collectors.config import load_sources
+
     s = get_settings()
+    d_from, d_to = date.fromisoformat(args.date_from), date.fromisoformat(args.date_to)
+    if d_to < d_from or (d_to - d_from).days > 62:   # API ile aynı sınır; uzun aralık zamanlanmış taramaları geciktirir
+        print("--from ≤ --to ve en fazla 62 gün olmalı", file=sys.stderr)
+        return 2
+    try:
+        args.code = load_sources(s.sources_file).get(args.code).code   # kanonik kod (crawler büyük/küçük harfe duyarlı)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
     if s.crawl_mode == "remote":   # LAN internete çıkamaz: DMZ crawler'a tarama talebi bırakılır
         from app.mongo import crawl_db, submit_crawl_request
 
@@ -64,8 +75,7 @@ def cmd_backfill(args) -> int:
                                    {"date_from": args.date_from, "date_to": args.date_to}, requested_by="cli")
         print(f"DMZ crawler'a iletildi (talep {rid}); sonuç ingest ile gelir")
         return 0
-    rep = backfill(local_store(make_sessionmaker(s.database_url), s), s, args.code,
-                   date.fromisoformat(args.date_from), date.fromisoformat(args.date_to))
+    rep = backfill(local_store(make_sessionmaker(s.database_url), s), s, args.code, d_from, d_to)
     for r in rep.runs:
         print(r)
     print(f"{rep.days} gün, {rep.new} yeni öğe")

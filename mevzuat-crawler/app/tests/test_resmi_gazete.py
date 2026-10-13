@@ -46,3 +46,20 @@ def test_day_boundary_uses_istanbul_time(sources, settings):
     except Exception:  # noqa: BLE001 — sayfa sözlükte yok; yalnızca istenen URL'yi kontrol ediyoruz
         pass
     assert f.requested == [f"{BASE}/fihrist?tarih=2026-09-26"]
+
+
+def test_failed_secondary_pages_do_not_discard_collected_items(sources, settings):
+    """Dünün fihristi ya da ilan dizini alınamazsa bugünün maddeleri korunur; liste eksik olarak işaretlenir."""
+    src = sources.get("RESMI_GAZETE")
+    home = fihrist((f"{BASE}/eskiler/2026/09/20260925-1.htm", "Bugünün Tebliği"))
+    pages = {
+        f"{BASE}/fihrist?tarih=2026-09-25": (home, "text/html"),
+        f"{BASE}/fihrist?tarih=2026-09-25&mukerrer=1": (home, "text/html", 200, f"{BASE}/"),
+        # 24.09 fihristi sözlükte yok → 404
+    }
+    ch = src.channel("fihrist").model_copy(update={"params": {
+        "lookback_days": 1, "max_mukerrer": 1, "ilan_indexes": ["ilanlar"], "ilan_issuers": ["bankacılık"]}})
+    res = list_channel(src, ch, DictFetcher(src, settings, pages), now=datetime(2026, 9, 25, 20, tzinfo=timezone.utc))
+    assert [i.external_id for i in res.items] == ["20260925-1"]
+    assert res.incomplete and any("alınamadı" in w for w in res.warnings)
+    assert sum("ilan dizini" in w for w in res.warnings) == 1

@@ -1,6 +1,7 @@
 """SourceCollector: yeni/değişen tespiti, sürümleme, ekler, dış host, erteleme, boş liste uyarısı."""
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import select
 
 from app.collectors.config import SourceConfig
@@ -206,3 +207,167 @@ def test_mevzuat_gov_links_fetched_as_full_text(settings):
     row = docs(sf)[0]
     assert row.external_id == "mevzuat.gov.tr:7.5.11180" and row.role == "main"
     assert row.final_url == iframe and row.extra["mevzuat_tur"] == 7
+
+
+# ------------------------------------------------------------------------------------------------ dayanıklılık
+class FlakyFetcher(DictFetcher):
+    """Belirli URL'lerde verilen istisnayı fırlatan sahte istemci (``errors`` değiştirilerek iyileştirilebilir)."""
+
+    def __init__(self, source, settings, pages, errors):
+        super().__init__(source, settings, pages)
+        self.errors = errors
+
+    def _get_with_retry(self, url, headers):
+        if url in self.errors:
+            self.requested.append(url)
+            raise self.errors[url]
+        return super()._get_with_retry(url, headers)
+
+
+def flaky(settings, source, pages, errors, **kw):
+    sf = make_sessionmaker(settings.database_url)
+    store = SqlCrawlStore(sf, FileSystemStorage(settings.raw_storage_dir))
+    return SourceCollector(source, settings, store, fetcher=FlakyFetcher(source, settings, pages, errors), **kw), sf
+
+
+def run_statuses(sf):
+    with sf() as s:
+        return [r.status for r in s.scalars(select(FetchRun).order_by(FetchRun.id))]
+
+
+def rows3():
+    return [(f"/d/{i}", f"Duyuru {i}", "25.09.2026") for i in (1, 2, 3)]
+
+
+def pages3():
+    pages = {LIST: (listing(*rows3()), "text/html")}
+    pages.update({f"https://ornek.gov.tr/d/{i}": (f"<p>{i}</p>", "text/html") for i in (1, 2, 3)})
+    return pages
+
+
+def test_unexpected_item_error_does_not_cut_the_run(settings):
+    """Sarmalanmamış bir hata (ör. httpx RemoteProtocolError) kalan öğeleri/kanalları durdurmamalı."""
+    c, sf = flaky(settings, make_source(), pages3(), {"https://ornek.gov.tr/d/2": RuntimeError("boom")})
+    rep = c.run()
+    ch = rep.channels[0]
+    assert rep.new == 2 and ch.failed == 1 and rep.status == "partial"
+    assert run_statuses(sf) == ["partial"]
+    assert not ch.baseline_complete                       # geçici hata: baseline açık kalır, öğe yeniden denenir
+    del c.fetcher.errors["https://ornek.gov.tr/d/2"]      # sorun giderildi
+    rep = c.run()
+    assert rep.new == 1 and rep.channels[0].baseline_complete
+    assert all(r.is_baseline for r in docs(sf))           # geç gelen eski öğe "yeni düzenleme" olmadı
+
+
+def test_run_is_always_finished_even_when_the_store_fails(settings, monkeypatch):
+    c, sf = flaky(settings, make_source(), pages3(), {})
+    monkeypatch.setattr(c.store, "add_version", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mongo koptu")))
+    rep = c.run()
+    assert rep.status == "failed" and "mongo koptu" in rep.channels[0].error
+    assert run_statuses(sf) == ["failed"]
+
+    monkeypatch.setattr(c.store, "latest_documents", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        c.run()
+    assert run_statuses(sf) == ["failed", "failed"]       # hiçbir kayıt 'running' kalmadı
+
+
+def test_attachments_with_identical_content_do_not_collide(settings):
+    pages = {LIST: (listing(("/d/1", "Bir", "25.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": ("<p>bir <a href='/ek/1.pdf'>a</a> <a href='/ek/2.pdf'>b</a></p>", "text/html"),
+             "https://ornek.gov.tr/ek/1.pdf": (b"%PDF ayni", "application/pdf"),
+             "https://ornek.gov.tr/ek/2.pdf": (b"%PDF ayni", "application/pdf")}
+    c, sf = collector(settings, make_source(), pages)
+    rep = c.run()
+    assert rep.status == "success" and rep.new == 1
+    assert [r.role for r in docs(sf)] == ["main", "attachment"]
+
+
+def test_new_version_retires_attachments_of_previous_version(settings):
+    pages = {LIST: (listing(("/d/1", "Bir", "25.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": ("<p>v1 <a href='/ek/1.pdf'>a</a></p>", "text/html"),
+             "https://ornek.gov.tr/ek/1.pdf": (b"%PDF bir", "application/pdf")}
+    c, sf = collector(settings, make_source(), pages)
+    c.run()
+    pages[LIST] = (listing(("/d/1", "Bir (düzeltme)", "25.09.2026")), "text/html")
+    pages["https://ornek.gov.tr/d/1"] = ("<p>v2 <a href='/ek/1.pdf'>a</a></p>", "text/html")
+    c.run()
+    assert [(r.role, r.version, r.is_latest) for r in docs(sf)] == [
+        ("main", 1, False), ("attachment", 1, False), ("main", 2, True), ("attachment", 2, True)]
+
+
+def test_empty_listing_does_not_close_baseline_until_it_persists(settings):
+    """İlk taramada seçici bozuk/site boş dönerse baseline kapanmamalı; sonradan gelen birikim 'yeni' sayılmasın."""
+    s2 = settings.model_copy(update={"baseline_empty_runs": 2})
+    pages = {LIST: (listing(), "text/html")}
+    c, sf = collector(s2, make_source(), pages)
+    rep = c.run()
+    assert rep.channels[0].baseline and not rep.channels[0].baseline_complete
+
+    pages.update(pages3())                               # site düzeldi, 3 eski belge göründü
+    rep = c.run()
+    assert rep.new == 3 and rep.channels[0].baseline and rep.channels[0].baseline_complete
+    assert all(r.is_baseline for r in docs(sf))          # YZ hattına "yeni düzenleme" olarak girmedi
+
+    # Gerçekten boş kalan kanal: ardışık N boş koşudan sonra kapanır (aksi halde ilk gerçek öğe sessizce baseline olurdu)
+    c2, _ = collector(s2, make_source().model_copy(update={"code": "BOS"}), {LIST: (listing(), "text/html")})
+    assert [c2.run().channels[0].baseline_complete for _ in range(3)] == [False, True, True]
+
+
+def test_source_that_may_legitimately_be_empty_closes_baseline_immediately(settings):
+    src = SourceConfig.model_validate({
+        "code": "ORNEK", "name": "Örnek", "base_url": "https://ornek.gov.tr", "expected": {"min_items_per_run": 0},
+        "channels": [{"name": "d", "strategy": "css_list", "params": {"urls": [LIST], "item": "ul.liste li",
+                                                                       "title": "h5", "date": ".t"}}]})
+    c, _ = collector(settings, src, {LIST: (listing(), "text/html")})
+    assert c.run().channels[0].baseline_complete
+
+
+def test_transient_failure_keeps_baseline_open_but_permanent_404_does_not(settings):
+    from app.collectors.http import TransientFetchError
+
+    pages = pages3()
+    del pages["https://ornek.gov.tr/d/2"]                 # kalıcı 404
+    errors = {"https://ornek.gov.tr/d/1": TransientFetchError("u", "HTTP 503", 503)}
+    c, sf = flaky(settings, make_source(), pages, errors)
+    ch = c.run().channels[0]
+    assert (ch.failed, ch.gave_up, ch.baseline_complete) == (1, 1, False)
+    del c.fetcher.errors["https://ornek.gov.tr/d/1"]
+    ch = c.run().channels[0]
+    assert (ch.failed, ch.gave_up, ch.baseline_complete) == (0, 1, True)   # 404'lü ölü bağlantı baseline'ı tutmaz
+
+
+def test_baseline_is_force_closed_after_max_runs(settings):
+    from app.collectors.http import TransientFetchError
+
+    s2 = settings.model_copy(update={"baseline_max_runs": 2})
+    c, _ = flaky(s2, make_source(), pages3(), {"https://ornek.gov.tr/d/1": TransientFetchError("u", "HTTP 503", 503)})
+    assert c.run().channels[0].baseline_complete is False
+    ch = c.run().channels[0]
+    assert ch.baseline_complete and any("zorla" in w for w in ch.warnings)
+
+
+def test_incomplete_listing_keeps_baseline_open_and_marks_run_partial(settings, monkeypatch):
+    from app.collectors import runner as runner_mod
+
+    real = runner_mod.list_channel
+
+    def incomplete(*a, **k):
+        res = real(*a, **k)
+        res.incomplete = True
+        return res
+
+    monkeypatch.setattr(runner_mod, "list_channel", incomplete)
+    c, sf = collector(settings, make_source(), pages3())
+    rep = c.run()
+    assert rep.status == "partial" and not rep.channels[0].baseline_complete
+
+
+def test_stop_flag_leaves_run_partial_without_closing_baseline(settings):
+    c, sf = flaky(settings, make_source(), pages3(), {})
+    c.should_stop = lambda: len(c.fetcher.requested) >= 2          # liste + ilk detaydan sonra dur
+    rep = c.run()
+    ch = rep.channels[0]
+    assert ch.stopped and rep.new == 1 and rep.status == "partial" and not ch.baseline_complete
+    c.should_stop = lambda: False
+    assert c.run().new == 2                                         # kalan öğeler sonraki koşuda tamamlanır
