@@ -1,0 +1,152 @@
+{
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC #1ce399d6e936": {
+  "file": "555018d2d582bd77.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/sirkuler/list?page=0&size=20&sortFieldName=sirkulerTarih&sortType=DESC #1ce399d6e936": {
+  "file": "ad586919f7328f62.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/sirkuler/list?page=0&size=20&sortFieldName=sirkulerTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #a639204de822": {
+  "file": "5f06001aa0131fe0.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #cd7c97a5f4fa": {
+  "file": "e991f8a5c59ab707.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #796269b20c15": {
+  "file": "4bd8844b62dcd202.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #d73503d7e715": {
+  "file": "34c207d039b1d043.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #629476e9458f": {
+  "file": "8bbf22b5990931a7.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #d0e9ee2083c4": {
+  "file": "808e00e8c60c0e0a.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #c63d2e54cd23": {
+  "file": "7eff4bb8f9ab8bb7.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #ea7ccc26edce": {
+  "file": "346c5aaf46db2af6.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #d4b055a18108": {
+  "file": "d3d470794a31aa64.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #64107db04c0b": {
+  "file": "f96ea907adbd2482.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #795cdf3a0ee8": {
+  "file": "596fa3c8598e15b5.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #4b5dd0d8cb50": {
+  "file": "a1ae86a92990ab45.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #607c3c7a4297": {
+  "file": "8d97173919dbd7ba.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #d95af39b2358": {
+  "file": "0ea604e54e7a28ca.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #c0bc3e4f5776": {
+  "file": "f12c19ac97035a3c.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #2cfe2c7af119": {
+  "file": "afaee4a0730e085a.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC #852a939ea8f5": {
+  "file": "23eea3e12598df21.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/cbk/list?page=0&size=20&sortFieldName=resmiGazeteTarih&sortType=DESC #1ce399d6e936": {
+  "file": "6cbd5c505137b8ed.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/cbk/list?page=0&size=20&sortFieldName=resmiGazeteTarih&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/icGenelge/list?page=0&size=20&sortFieldName=id&sortType=DESC #1ce399d6e936": {
+  "file": "e31cf97ca60d4fd0.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/icGenelge/list?page=0&size=20&sortFieldName=id&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/yonetmelikler/list?page=0&size=20&sortFieldName=id&sortType=DESC #1ce399d6e936": {
+  "file": "78aac945b06a78c0.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/yonetmelikler/list?page=0&size=20&sortFieldName=id&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/mevzuat/taslak/list?page=0&size=20&sortFieldName=id&sortType=DESC #bf21a9e8fbc5": {
+  "file": "fd6e1b4d1ef4b47f.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/mevzuat/taslak/list?page=0&size=20&sortFieldName=id&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "POST https://gib.gov.tr/api/gibportal/duyuru/listPublish?page=0&size=20&sortFieldName=startdate&sortType=DESC #c6a986998ba3": {
+  "file": "33a4df7cefac404a.json",
+  "status": 200,
+  "final_url": "https://gib.gov.tr/api/gibportal/duyuru/listPublish?page=0&size=20&sortFieldName=startdate&sortType=DESC",
+  "content_type": "application/json"
+ },
+ "https://cdn.gib.gov.tr/api/gibportal-file/file/getFile?objectKey=DUYURU/UNIVERSAL/2026/213_Teblig596_abn.pdf": {
+  "file": "fe87da74adbb6830.pdf",
+  "status": 200,
+  "final_url": "https://cdn.gib.gov.tr/api/gibportal-file/file/getFile?objectKey=DUYURU/UNIVERSAL/2026/213_Teblig596_abn.pdf",
+  "content_type": "application/pdf"
+ }
+}

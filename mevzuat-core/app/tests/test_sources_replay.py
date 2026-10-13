@@ -1,9 +1,10 @@
 """Canlı sitelerden kaydedilmiş yanıtlar (tests/fixtures/<kaynak>/) üzerinde kanal ayrıştırma testleri.
 
-Fixture'lar `mevzuat-collect probe <KOD> --record tests/fixtures/<kod>` ile üretildi (25.09.2026). Site yapısı
-değişirse bu testler değil, canlı probe/izleme (İK-7) uyarı verir; fixture'lar o gün yeniden kaydedilir.
+Fixture'lar `mevzuat-collect probe <KOD> --record tests/fixtures/<kod>` ile üretildi (25.09.2026; HMB, GİB, KGK
+13.10.2026). Site yapısı değişirse bu testler değil, canlı probe/izleme (İK-7) uyarı verir; fixture'lar o gün yeniden
+kaydedilir.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -11,11 +12,22 @@ from app.collectors.http import ReplayFetcher
 from app.collectors.runner import fetch_documents, list_channel
 from tests.conftest import FIXTURES, RECORDED_AT
 
+# Sorgu adresi kayıt anına bağlı kaynaklar (wordpress_api: modified_after = kayıt günü - lookback_days)
+RECORDED_AT_BY_SOURCE = {"HMB": datetime(2026, 10, 13, 9, 0, tzinfo=timezone.utc)}
+
+
+def recorded_at(code: str) -> datetime:
+    return RECORDED_AT_BY_SOURCE.get(code, RECORDED_AT)
+
+
+def replay(sources, settings, code):
+    source = sources.get(code)
+    return source, ReplayFetcher(source, settings, FIXTURES / code.lower())
+
 
 def run_channel(sources, settings, code, channel):
-    source = sources.get(code)
-    fetcher = ReplayFetcher(source, settings, FIXTURES / code.lower())
-    return list_channel(source, source.channel(channel), fetcher, now=RECORDED_AT)
+    source, fetcher = replay(sources, settings, code)
+    return list_channel(source, source.channel(channel), fetcher, now=recorded_at(code))
 
 
 @pytest.mark.parametrize("code,channel,min_items", [
@@ -42,6 +54,19 @@ def run_channel(sources, settings, code, channel):
     ("REKABET", "kurul_kararlari", 5),
     ("TKBB", "duyurular", 3),
     ("TKBB", "birlik_duzenlemeleri", 20),
+    ("HMB", "duyurular", 20),
+    ("HMB", "sayfalar", 3),
+    ("GIB", "ozelgeler", 30),
+    ("GIB", "sirkulerler", 20),
+    ("GIB", "tebligler", 80),
+    ("GIB", "cbk", 20),
+    ("GIB", "ic_genelgeler", 20),
+    ("GIB", "yonetmelikler", 20),
+    ("GIB", "taslaklar", 1),
+    ("GIB", "mevzuat_duyurulari", 20),
+    ("KGK", "duyurular", 30),
+    ("KGK", "son_yayimlananlar", 5),
+    ("KGK", "mevzuat", 40),
 ])
 def test_channel_parses_recorded_page(sources, settings, code, channel, min_items):
     res = run_channel(sources, settings, code, channel)
@@ -210,3 +235,83 @@ def test_spk_mevzuat_api(sources, settings):
     fetcher = ReplayFetcher(source, settings, FIXTURES / "spk")
     doc = fetch_documents(source, source.channel("mevzuat"), ik, fetcher, max_attachments=5)[0]
     assert doc.content_type == "application/pdf" and doc.content[:4] == b"%PDF"
+
+
+# ------------------------------------------------------------------------------------------------ Grup I (13.10.2026)
+
+def test_hmb_wordpress(sources, settings):
+    items = run_channel(sources, settings, "HMB", "duyurular").items
+    assert all(i.url.startswith("https://www.hmb.gov.tr/duyuru/") for i in items)   # api.hmb.gov.tr değil
+    assert not any(20 in (i.extra["wp_categories"] or []) for i in items)            # Sınav Duyuruları hariç
+    nakit = next(i for i in items if i.external_id == "posts:100225")
+    assert nakit.url == "https://www.hmb.gov.tr/duyuru/eylul-2026-hazine-nakit-gerceklesmeleri"
+    assert nakit.published_at == date(2026, 10, 7) and nakit.category == "Kamu Finansmanı"
+    assert b"<h1>Eyl\xc3\xbcl 2026 Hazine Nakit" in nakit.inline_content
+    assert next(i for i in items if i.external_id == "posts:100248").category == "Haber"   # haberler dahil
+    pages = {i.external_id: i for i in run_channel(sources, settings, "HMB", "sayfalar").items}
+    teblig = pages["pages:100210"]
+    assert teblig.url == ("https://www.hmb.gov.tr/aydinlatma-yukumlulugunun-yerine-getirilmesinde-uyulacak-usul-ve-"
+                          "esaslar-hakkinda-teblig") and teblig.category == "Mevzuat/Sayfa"
+
+
+def test_gib_api(sources, settings):
+    oz = run_channel(sources, settings, "GIB", "ozelgeler").items[0]
+    assert (oz.external_id, oz.published_at) == ("ozelge-39057", date(2026, 10, 9))
+    assert oz.url == "https://gib.gov.tr/mevzuat/kanun/433/ozelge/39057" and oz.extra["kanun_no"] == "193"
+    assert oz.inline_content.startswith(b"<html>") and "Dövize Endeksli".encode() in oz.inline_content
+    assert oz.version_key   # updated_at: yerinde güncellenen metin yeniden saklanır
+
+    tebligler = run_channel(sources, settings, "GIB", "tebligler").items
+    vuk = next(i for i in tebligler if i.external_id == "teblig-11884")   # kanunId 434 (213 VUK)
+    assert vuk.published_at == date(2026, 10, 11) and vuk.extra["resmi_gazete_sayi"] == "33397"
+    assert {i.extra["kanun_no"] for i in tebligler} >= {"193", "213", "3065", "5520"}
+
+    taslak = run_channel(sources, settings, "GIB", "taslaklar").items[0]
+    assert taslak.url == "https://gib.gov.tr/mevzuat/taslak/16" and taslak.category == "Düzenleme Taslağı"
+
+
+def test_gib_duyuru_attachment(sources, settings):
+    source, fetcher = replay(sources, settings, "GIB")
+    ch = source.channel("mevzuat_duyurulari")
+    ref = next(i for i in list_channel(source, ch, fetcher, now=RECORDED_AT).items if i.external_id == "duyuru-19152")
+    assert ref.url.startswith("https://gib.gov.tr/duyuru-arsivi/guncel/19152_")
+    docs = fetch_documents(source, ch, ref, fetcher, max_attachments=5)
+    assert [d.role for d in docs] == ["main", "attachment"]   # SPA detay sayfası indirilmez, metin inline
+    assert docs[0].content == ref.inline_content
+    assert docs[1].url.startswith("https://cdn.gib.gov.tr/api/gibportal-file/file/getFile?objectKey=DUYURU/")
+    assert docs[1].content[:4] == b"%PDF"
+
+
+def test_kgk_duyurular(sources, settings):
+    source, fetcher = replay(sources, settings, "KGK")
+    ch = source.channel("duyurular")
+    items = {i.external_id: i for i in list_channel(source, ch, fetcher, now=RECORDED_AT).items}
+    guvence = items["ContentAssignmentDetail/5155"]
+    assert guvence.published_at == date(2026, 8, 26)                  # "26 AĞU. 2026"
+    assert guvence.title.startswith("Güvence Denetimlerine İlişkin Çerçeve Taslak Metni")
+    pdf = items["/Portalv2Uploads/files/Duyurular/v2/Diger/Bas%C4%B1n%20Duyurusu-37.pdf"]
+    assert pdf.published_at == date(2026, 9, 18) and pdf.url.startswith("https://www.kgk.gov.tr/Portalv2Uploads/")
+    dis = items["bdsm.kgk.gov.tr/giris.aspx"]                         # dış site: kimlik tam adres
+    assert fetch_documents(source, ch, dis, fetcher, max_attachments=5)[0].role == "listing"
+
+    docs = fetch_documents(source, ch, guvence, fetcher, max_attachments=5)
+    assert [d.role for d in docs] == ["main", "attachment"]
+    assert docs[1].content[:4] == b"%PDF"
+    assert not any("BankaHesap" in d.url for d in docs)               # üst menüdeki ortak PDF ek sayılmaz
+
+    son = {i.external_id for i in run_channel(sources, settings, "KGK", "son_yayimlananlar").items}
+    assert "ContentAssignmentDetail/5152" in son
+    assert "www.resmigazete.gov.tr/eskiler/2026/05/20260507-8.pdf" in son
+
+
+def test_kgk_mevzuat_data_href(sources, settings):
+    source, fetcher = replay(sources, settings, "KGK")
+    ch = source.channel("mevzuat")
+    items = {i.external_id: i for i in list_channel(source, ch, fetcher, now=RECORDED_AT).items}
+    # Tebliğler sayfası alt sayfalara yalnızca data-href ile bağlanıyor
+    yetki = items["DynamicContentDetail/5132"]
+    assert yetki.title == "Bağımsız Denetim Yetkilendirme Tebliği"
+    assert "mevzuat.gov.tr:4.5.660" in items                          # 660 sayılı KHK, kanonik kimlik
+    docs = fetch_documents(source, ch, yetki, fetcher, max_attachments=5)
+    assert [d.role for d in docs] == ["main", "attachment", "attachment"]
+    assert {d.url.rsplit(".", 1)[-1] for d in docs[1:]} == {"pdf", "docx"}

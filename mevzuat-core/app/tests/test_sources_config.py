@@ -5,11 +5,13 @@ import pytest
 
 from app.collectors.strategies import STRATEGIES
 
-SCOPE_SOURCES = {"RESMI_GAZETE", "BDDK", "SPK", "TCMB", "KVKK", "MASAK", "TICARET", "REKABET", "TKBB"}
+SCOPE_SOURCES = {"RESMI_GAZETE", "BDDK", "SPK", "TCMB", "KVKK", "MASAK", "TICARET", "REKABET", "TKBB",
+                 "HMB", "GIB", "KGK"}
 
 
 def test_scope_sources_defined(sources):
-    assert {s.code for s in sources.sources} == SCOPE_SOURCES  # Kapsam Formu v3, KEP ayrı adaptör
+    # Kapsam Formu v3 (9 kaynak) + kapsam genişletme Grup I (HMB, GİB, KGK); KEP ayrı adaptör
+    assert {s.code for s in sources.sources} == SCOPE_SOURCES
 
 
 def test_channels_valid(sources):
@@ -24,6 +26,8 @@ def test_channels_valid(sources):
                 re.compile(ch.attachment_pattern)
             for url in ch.params.get("urls", []):
                 assert s.host_allowed(url.format(year=2026)), f"{s.code}/{ch.name}: {url}"
+            if ch.params.get("method"):
+                assert ch.params["method"] in ("GET", "POST"), f"{s.code}/{ch.name}"
 
 
 def test_schedules_are_valid_cron(sources):
