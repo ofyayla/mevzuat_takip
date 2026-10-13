@@ -450,7 +450,7 @@ sources:
   # ---------------------------------------------------------------------------------------------
   - code: GIB
     name: Gelir İdaresi Başkanlığı
-    base_url: https://gib.gov.tr
+    base_url: https://www.gib.gov.tr
     allowed_hosts: ["gib.gov.tr", "www.gib.gov.tr", "cdn.gib.gov.tr"]
     request_delay_s: 2
     verified: "2026-10-13"
@@ -473,7 +473,7 @@ sources:
         attachment_pattern: &gib_ek "cdn\\.gib\\.gov\\.tr/api/gibportal-file/file/getFile"
         params: &gib
           method: POST
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC"]
           body: {status: 2}
           items_path: resultContainer.content
           id: "ozelge-{id}"
@@ -489,7 +489,7 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/sirkuler/list?page=0&size=20&sortFieldName=sirkulerTarih&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/sirkuler/list?page=0&size=20&sortFieldName=sirkulerTarih&sortType=DESC"]
           id: "sirkuler-{id}"
           date: [sirkulerTarih]
           fields: {kanun_no: kanunNo, kanun: kanunTitle, sirkuler_no: sirkulerNo}
@@ -499,7 +499,7 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/teblig/list?page=0&size=5&sortFieldName=resmiGazeteTarih&sortType=DESC"]
           body:   # 193 GVK, 213 VUK, 5520 KVK, 3065 KDV, 4760 ÖTV, … (kanunId → kanun: /mevzuat/kanun/filterList)
             - {kanunId: 433, status: 2, deleted: false}
             - {kanunId: 434, status: 2, deleted: false}
@@ -527,7 +527,7 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/cbk/list?page=0&size=20&sortFieldName=resmiGazeteTarih&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/cbk/list?page=0&size=20&sortFieldName=resmiGazeteTarih&sortType=DESC"]
           id: "cbk-{id}"
           date: [resmiGazeteTarih]
           fields: {kanun_no: kanunNo, kanun: kanunTitle, karar_sayisi: "no", resmi_gazete_sayi: resmiGazeteSayi}
@@ -537,7 +537,7 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/icGenelge/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/icGenelge/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
           id: "icgenelge-{id}"
           date: [tarih]
           fields: {kanun_no: kanunNo, kanun: kanunTitle, sayi: sayi}
@@ -549,7 +549,7 @@ sources:
           <<: *gib
           # RG tarihine göre sıralama desteklenmiyor, id'ye göre çalışıyor. Tüm liste (66 kayıt) tam metinlerle
           # 1,7 MB olduğu için yalnız son eklenenler okunur
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/yonetmelikler/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/yonetmelikler/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
           id: "yonetmelik-{id}"
           date: [resmiGazeteTarih]
           fields: {kanun_no: kanunNo, kanun: kanunTitle, resmi_gazete_sayi: resmiGazeteSayi}
@@ -559,10 +559,10 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/mevzuat/taslak/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/taslak/list?page=0&size=20&sortFieldName=id&sortType=DESC"]
           body: {}
           id: "taslak-{id}"
-          url: "https://gib.gov.tr/mevzuat/taslak/{id}"   # öğede siteLink yok; ön yüz adresi
+          url: "https://www.gib.gov.tr/mevzuat/taslak/{id}"   # öğede siteLink yok; ön yüz adresi
           date: [timePublishedAt, ts]
           fields: {}
       - name: mevzuat_duyurulari
@@ -571,10 +571,10 @@ sources:
         attachment_pattern: *gib_ek
         params:
           <<: *gib
-          urls: ["https://gib.gov.tr/api/gibportal/duyuru/listPublish?page=0&size=20&sortFieldName=startdate&sortType=DESC"]
+          urls: ["https://www.gib.gov.tr/api/gibportal/duyuru/listPublish?page=0&size=20&sortFieldName=startdate&sortType=DESC"]
           body: {type: 1, ilkodu: UNIVERSAL}   # 1 = "Mevzuat" duyuru kategorisi
           id: "duyuru-{id}"
-          url: "https://gib.gov.tr/duyuru-arsivi/guncel/{slug}"
+          url: "https://www.gib.gov.tr/duyuru-arsivi/guncel/{slug}"
           date: [startdate]
           version_fields: [updated_at, stopdate]
           fields: {}

@@ -435,7 +435,7 @@ def test_gib_communique_matches_rg_and_sira_nolu_titles_stay_apart(settings, env
             content=f"<html><body>{body.format(n=596, m=257)}</body></html>".encode())
     for n, m, day in ((596, 257, 11), (595, 242, 5)):
         add_raw(sf, storage, source="GIB", channel="tebligler", external_id=f"teblig-{11884 - 596 + n}",
-                url=f"https://gib.gov.tr/mevzuat/kanun/434/teblig/{11884 - 596 + n}",
+                url=f"https://www.gib.gov.tr/mevzuat/kanun/434/teblig/{11884 - 596 + n}",
                 title=f"{n} SIRA NOLU VERGİ USUL KANUNU GENEL TEBLİĞİ", published=date(2026, 10 if n == 596 else 9, day),
                 content=f"<html><body><h1>{n} SIRA NOLU VERGİ USUL KANUNU GENEL TEBLİĞİ</h1>{body.format(n=n, m=m)}"
                         f"</body></html>".encode())
@@ -443,7 +443,7 @@ def test_gib_communique_matches_rg_and_sira_nolu_titles_stay_apart(settings, env
                                "Yeminli Mali Müşavirlik Tasdik Raporlarına Eklenen Tablolar Hakkında Genel Tebliğ "
                                "(Sıra No: 1)")):
         add_raw(sf, storage, source="GIB", channel="tebligler", external_id=f"teblig-{10297 + i}",
-                url=f"https://gib.gov.tr/mevzuat/kanun/442/teblig/{10297 + i}", title=title,
+                url=f"https://www.gib.gov.tr/mevzuat/kanun/442/teblig/{10297 + i}", title=title,
                 published=date(2026, 9, 1 + i), content=f"<html><body><h1>{title}</h1><p>metin {i}</p></body></html>".encode())
     DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
     by_title = {r.title: r for r in regs(sf)}

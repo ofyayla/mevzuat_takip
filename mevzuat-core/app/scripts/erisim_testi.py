@@ -39,7 +39,7 @@ TARGETS = [
     ("TKBB", "https://www.tkbb.org.tr/"),
     ("HMB", "https://www.hmb.gov.tr/portal/v2/posts?per_page=1"),
     # GİB liste uç noktaları yalnız POST kabul eder; erişim testi için GET'e açık olanı kullanılır
-    ("GIB", "https://gib.gov.tr/api/gibportal/search/mevzuatLastAdded"),
+    ("GIB", "https://www.gib.gov.tr/api/gibportal/search/mevzuatLastAdded"),
     ("GIB_EKLER", "https://cdn.gib.gov.tr/"),
     ("KGK", "https://www.kgk.gov.tr/"),
     ("MEVZUAT_GOV", "https://www.mevzuat.gov.tr/"),
