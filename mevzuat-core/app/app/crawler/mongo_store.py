@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from app.collectors.config import SourceConfig
-from app.collectors.store import NewDoc, StoredDoc, merge_channel_stats
+from app.collectors.store import CHANNEL_STATS_MAX_RUNS, NewDoc, StoredDoc, merge_channel_stats
 from app.mongo import DOCS, RUNS, SOURCES, utcnow
 from app.storage import GridFsStorage
 
@@ -36,10 +36,14 @@ class MongoCrawlStore:
                                      sort=[("started_at", -1)])
         return row["started_at"] if row else None
 
-    def previous_channel_stats(self, code: str) -> dict:
+    def previous_channel_stats(self, code: str, channels: list[str] | None = None) -> dict:
         rows = self.db[RUNS].find({"source_code": code, "status": {"$in": ["success", "partial"]}},
-                                  {"channels": 1}, sort=[("started_at", -1)], limit=50)
-        return merge_channel_stats(r.get("channels") for r in rows)
+                                  {"channels": 1}, sort=[("started_at", -1)], limit=CHANNEL_STATS_MAX_RUNS,
+                                  batch_size=50)
+        try:
+            return merge_channel_stats((r.get("channels") for r in rows), channels)
+        finally:
+            rows.close()   # merge erken çıkınca sunucudaki imleç açık kalmasın
 
     def start_run(self, code: str, started_at: datetime):
         doc = {"source_code": code, "started_at": started_at, "finished_at": None, "status": "running",
