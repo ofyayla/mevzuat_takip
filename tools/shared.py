@@ -32,7 +32,8 @@ MODULES = ["__init__.py", "settings.py", "db.py", "storage.py", "mongo.py", "col
            "monitoring/__init__.py", "monitoring/reprocess.py"]
 CONFIG = ["config/sources.yaml", "config/certs"]
 TESTS = ["__init__.py", "conftest.py", "test_dates.py", "test_http.py", "test_resolvers.py", "test_resmi_gazete.py",
-         "test_runner.py", "test_sources_config.py", "test_sources_replay.py", "test_crawler_service.py"]
+         "test_runner.py", "test_sources_config.py", "test_sources_replay.py", "test_strategies.py",
+         "test_crawler_service.py"]
 FIXTURES_EXCLUDE = {"processing"}      # yalnızca core'un işleme testleri kullanır
 
 
