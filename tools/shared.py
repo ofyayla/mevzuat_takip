@@ -47,14 +47,14 @@ def shared_paths() -> list[str]:
 def files(root: Path, rel: str) -> set[str]:
     p = root / rel
     if p.is_dir():
-        return {str(f.relative_to(root)) for f in p.rglob("*")
+        return {f.relative_to(root).as_posix() for f in p.rglob("*")   # Windows'ta ters eğik çizgi sync'i bozar
                 if f.is_file() and not any(part in ("__pycache__", ".pytest_cache", "data") for part in f.parts)
                 and f.suffix != ".pyc"}
     return {rel} if p.is_file() else set()
 
 
 def dependencies(pyproject: Path) -> str:
-    return re.search(r"^dependencies = \[\n(.*?)^\]", pyproject.read_text(), re.S | re.M).group(1)
+    return re.search(r"^dependencies = \[\n(.*?)^\]", pyproject.read_text(encoding="utf-8"), re.S | re.M).group(1)
 
 
 def check() -> list[str]:

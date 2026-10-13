@@ -67,3 +67,134 @@ def test_fetcher_uses_extra_ca_dir(settings, sources, tmp_path, monkeypatch):
     http_mod.Fetcher(sources.get("TCMB"), s)._get_backend()
     bundle = open(captured["verify"], "rb").read()
     assert b"GlobalSign RSA OV SSL CA 2018" in bundle and bundle.count(b"BEGIN CERTIFICATE") > 100
+
+
+# ------------------------------------------------------------------------------------------------ gerçek istemciler
+# Yerel bir HTTP sunucusuna karşı: hem httpx hem curl_cffi arka ucu aynı sözleşmeyi sağlamalı.
+
+
+@pytest.fixture(scope="module")
+def local_server():
+    import gzip
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path == "/ok":
+                body = "merhaba".encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+            elif self.path == "/big":      # Content-Length başlığı sınırı aşıyor
+                body = b"x" * 4096
+                self.send_response(200)
+            elif self.path == "/bomb":     # sıkıştırılmış küçük, açılmış büyük
+                body = gzip.compress(b"\0" * (4 << 20))
+                self.send_response(200)
+                self.send_header("Content-Encoding", "gzip")
+            elif self.path == "/redir":
+                self.send_response(302)
+                self.send_header("Location", "/ok")
+                body = b""
+            elif self.path == "/loop":
+                self.send_response(302)
+                self.send_header("Location", "/loop")
+                body = b""
+            else:
+                body = b"yok"
+                self.send_response(404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+
+
+def _backends():
+    from app.collectors import http as h
+
+    return [("httpx", lambda: h._HttpxBackend(None, True)), ("curl", lambda: h._ImpersonateBackend(None, True))]
+
+
+@pytest.mark.parametrize("name", ["httpx", "curl"])
+def test_backend_reads_follows_redirect_and_maps_errors(local_server, name):
+    from app.collectors.http import FetchError
+
+    backend = dict(_backends())[name]()
+    try:
+        r = backend.get(f"{local_server}/ok", {}, 5)
+        assert (r.status, r.content, r.final_url) == (200, b"merhaba", f"{local_server}/ok")
+        assert backend.get(f"{local_server}/redir", {}, 5).final_url.endswith("/ok")
+        assert backend.get(f"{local_server}/yok", {}, 5).status == 404          # 4xx yanıtı hata değil, Fetcher karar verir
+        with pytest.raises(FetchError):                                         # sonsuz yönlendirme döngüsü sızmaz
+            backend.get(f"{local_server}/loop", {}, 5)
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("name", ["httpx", "curl"])
+def test_backend_rejects_oversized_bodies_before_loading_them(local_server, name):
+    from app.collectors.http import FetchError
+
+    backend = dict(_backends())[name]()
+    try:
+        with pytest.raises(FetchError, match="çok büyük"):
+            backend.get(f"{local_server}/big", {}, 5, max_bytes=1024)           # Content-Length ile erken ret
+        with pytest.raises(FetchError, match="çok büyük"):
+            backend.get(f"{local_server}/bomb", {}, 5, max_bytes=1 << 20)       # açılmış boyutla ret (gzip bombası)
+        assert len(backend.get(f"{local_server}/big", {}, 5, max_bytes=1 << 20).content) == 4096
+    finally:
+        backend.close()
+
+
+def test_read_capped_enforces_total_deadline():
+    from app.collectors.http import TransientFetchError, _read_capped
+
+    def slow():
+        import time
+
+        for _ in range(5):
+            time.sleep(0.05)
+            yield b"x"
+
+    with pytest.raises(TransientFetchError, match="toplam"):
+        _read_capped("u", slow(), None, 0.1)
+    assert _read_capped("u", iter([b"a", b"b"]), 10, 5) == b"ab"
+
+
+def test_httpx_protocol_errors_become_fetch_errors(monkeypatch):
+    """Sarmalanmayan httpx hataları taramayı kesiyordu (RemoteProtocolError, TooManyRedirects)."""
+    import httpx
+
+    from app.collectors.http import FetchError, TransientFetchError, _HttpxBackend
+
+    backend = _HttpxBackend(None, True)
+    try:
+        for exc, expected in ((httpx.RemoteProtocolError("kesildi"), TransientFetchError),
+                              (httpx.TooManyRedirects("döngü"), FetchError), (httpx.DecodingError("bozuk"), FetchError)):
+            def boom(*a, _exc=exc, **k):
+                raise _exc
+
+            monkeypatch.setattr(backend.client, "stream", boom)
+            with pytest.raises(expected) as e:
+                backend.get("http://x.test/", {}, 1)
+            assert type(e.value) is expected
+    finally:
+        backend.close()
+
+
+def test_redirect_outside_allowlist_is_rejected(settings):
+    f = DictFetcher(SRC, settings, {"https://www.ornek.gov.tr/a": ("ok", "text/html", 200, "https://kotu.example.com/x"),
+                                    "https://www.ornek.gov.tr/b": ("ok", "text/html", 200, "https://x.alt.gov.tr/y")})
+    with pytest.raises(HostNotAllowed, match="yönlendirme"):
+        f.get("https://www.ornek.gov.tr/a")
+    assert f.get("https://www.ornek.gov.tr/b").final_url == "https://x.alt.gov.tr/y"      # izinli host'a yönlendirme serbest
+    relaxed = DictFetcher(SRC, settings.model_copy(update={"collect_enforce_redirect_hosts": False}),
+                          {"https://www.ornek.gov.tr/a": ("ok", "text/html", 200, "https://kotu.example.com/x")})
+    assert relaxed.get("https://www.ornek.gov.tr/a").status == 200                      # yalnızca log

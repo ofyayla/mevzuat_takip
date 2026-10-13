@@ -112,6 +112,9 @@ def test_api_run_and_backfill_go_to_crawler_in_remote_mode(remote, mdb):
     reqs = {d["kind"]: d for d in mdb[REQUESTS].find()}
     assert reqs["run"]["source_code"] == "BDDK" and reqs["run"]["status"] == "pending"
     assert reqs["backfill"]["params"] == {"date_from": "2026-09-01", "date_to": "2026-09-03"}
+    # küçük harfli kod kanonik hale getirilir; aksi halde crawler talebi "kaynak tanımlı değil" diye reddeder
+    assert c.post("/api/v1/admin/sources/bddk/run").status_code == 202
+    assert {d["source_code"] for d in mdb[REQUESTS].find({"kind": "run"})} == {"BDDK"}
 
 
 def test_beat_schedule_remote_mode_has_ingest_not_collect(remote, monkeypatch):

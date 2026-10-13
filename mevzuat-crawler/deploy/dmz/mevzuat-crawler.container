@@ -19,6 +19,14 @@ HealthOnFailure=kill
 NoNewPrivileges=true
 ReadOnly=true
 Tmpfs=/tmp
+# Sabit host adı: Podman varsayılanı her yeniden oluşturmada değişen konteyner kimliğidir; crawler bu adla kilit ve
+# talep sahipliği tutar (kalıntı temizliği host adı değişse de çalışır, ama sabit ad kurtarmayı hemen yapar).
+# --stop-timeout: TimeoutStopSec'ten (150) küçük olmalı; SIGTERM sonrası süren taramalar bu sürede temiz kapanır.
+# --memory: sınırsız bellek aşımında konteyner değil sunucu OOM'a düşer. Sınır, 3 eşzamanlı kaynak × en çok
+# COLLECT_MAX_BYTES (50 MB) indirmeye ve ayrıştırma payına göre bol seçildi; izleyip gerekirse ayarlayın.
+# Quadlet anahtarları (HostName=, StopTimeout=, Memory=) sürüme bağlı olduğundan PodmanArgs kullanılır:
+# desteklenmeyen bir anahtar unit'in hiç üretilmemesine yol açar.
+PodmanArgs=--hostname=mevzuat-crawler --stop-timeout=140 --memory=1g
 
 [Service]
 Restart=always

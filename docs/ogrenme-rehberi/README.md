@@ -27,6 +27,7 @@ Mevcut operasyon belgelerinin yerine geçmez, onlara giden yolu açar:
 | 5 | [05 — Uygulamalı çalışma ve işletim](05-uygulamali-calisma.md) | 2–4 saat | Testleri çalıştırmak, ağsız tarama denemek, yeni kaynak eklemek, sorun ayıklamak |
 | 6 | [06 — Geliştirme noktaları](06-gelistirme-noktalari.md) | 1 saat | Bilinen riskleri ve iyileştirme önerilerini önceliklendirmek |
 | 7 | [07 — Sunum rehberi](07-sunum-rehberi.md) | 1 saat | Projeyi teknik ve teknik olmayan dinleyiciye sunmak, soruları cevaplamak |
+| 8 | [08 — İyileştirme planı ve uygulama durumu](08-iyilestirme-plani.md) | 45 dk | 06'daki riskler ve kod taramasının hangilerinin uygulandığını, hangilerinin neden ertelendiğini görmek |
 
 ## Önerilen 5 günlük plan (ekip için)
 

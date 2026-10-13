@@ -30,6 +30,7 @@ class BackfillReport:
     days: int = 0
     new: int = 0
     runs: list[dict] = field(default_factory=list)
+    interrupted_at: date | None = None   # servis kapanırken yarıda kalan ilk gün (talep bu günden sürdürülür)
 
 
 def local_store(session_factory: sessionmaker[Session], settings: Settings) -> SqlCrawlStore:
@@ -37,13 +38,17 @@ def local_store(session_factory: sessionmaker[Session], settings: Settings) -> S
 
 
 def backfill(store: CrawlStore, settings: Settings, code: str, date_from: date, date_to: date,
-             *, fetcher_factory=None) -> BackfillReport:
+             *, fetcher_factory=None, should_stop=None) -> BackfillReport:
     """``store``: yerel kurulumda ``local_store(...)``; DMZ crawler'da ``MongoCrawlStore`` (LAN'dan tarama talebiyle)."""
     source = load_sources(settings.sources_file).get(code)
     rep = BackfillReport()
     if code != "RESMI_GAZETE":
-        col = SourceCollector(source, settings, store, fetcher=fetcher_factory(source) if fetcher_factory else None)
-        r = col.run()
+        col = SourceCollector(source, settings, store, fetcher=fetcher_factory(source) if fetcher_factory else None,
+                              should_stop=should_stop)
+        try:
+            r = col.run()
+        finally:
+            col.fetcher.close()
         rep.days, rep.new = 1, r.new
         rep.runs.append({"status": r.status, "new": r.new})
         return rep
@@ -55,11 +60,21 @@ def backfill(store: CrawlStore, settings: Settings, code: str, date_from: date, 
     tz = ZoneInfo(settings.timezone)
     d = date_from
     while d <= date_to:
-        col = SourceCollector(day_source, settings, store, fetcher=fetcher_factory(day_source) if fetcher_factory else None)
-        r = col.run(now=datetime.combine(d, time(23, 0), tzinfo=tz))
-        rep.days += 1
+        if should_stop and should_stop():   # servis kapanıyor: kalan günler talep yeniden kuyruğa alınınca işlenir
+            rep.interrupted_at = d
+            break
+        col = SourceCollector(day_source, settings, store, should_stop=should_stop,
+                              fetcher=fetcher_factory(day_source) if fetcher_factory else None)
+        try:
+            r = col.run(now=datetime.combine(d, time(23, 0), tzinfo=tz))
+        finally:
+            col.fetcher.close()
         rep.new += r.new
         rep.runs.append({"date": d.isoformat(), "status": r.status, "new": r.new})
+        if should_stop and should_stop():   # gün yarıda bırakılmış olabilir: yeniden taranır (idempotent)
+            rep.interrupted_at = d
+            break
+        rep.days += 1
         d += timedelta(days=1)
     return rep
 

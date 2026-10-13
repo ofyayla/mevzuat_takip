@@ -9,6 +9,10 @@ DMZ'den Redis'e ve PostgreSQL'e erişim yoktur; bu yüzden Celery kullanılmaz. 
 - Kaynaklar ``CRAWLER_MAX_PARALLEL`` iş parçacığında paralel taranır; aynı kaynak asla aynı anda iki kez taranmaz
   (süreç içi takip + Mongo kilidi; ``mevzuat-crawler run`` elle çalıştırılsa bile).
 - Her turda ``crawler_status`` güncellenir ve sağlık dosyasına dokunulur; LAN izlemesi sinyal gelmezse alarm açar.
+- Süreç SIGKILL/OOM ile ölürse kilit, ``running`` talep ve ``running`` tarama kaydı geride kalır. Açılışta kendi
+  kalıntıları, ``crawler_sweep_s`` aralığıyla da sinyali bayatlamış (ölü) sahiplerin kalıntıları temizlenir; host
+  adı yeniden başlatmada değişse de (Podman/K8s) kaynak en geç birkaç dakika içinde yeniden taranır.
+- SIGTERM'de yeni iş alınmaz; süren taramalar bayrağı öğe aralarında kontrol edip temiz biçimde (``partial``) durur.
 """
 from __future__ import annotations
 
@@ -29,8 +33,13 @@ from app.mongo import (
     claim_crawl_request,
     ensure_indexes,
     finish_crawl_request,
+    interrupt_orphaned_runs,
     release_lock,
+    release_locks_of,
     requeue_orphaned_requests,
+    requeue_request,
+    requeue_requests_of,
+    stale_owners,
     utcnow,
     worker_id,
     write_heartbeat,
@@ -64,6 +73,7 @@ class CrawlerService:
         self.running: dict[str, Future] = {}      # yalnızca ana iş parçacığı değiştirir
         self.next_due: dict[str, datetime | None] = {}
         self.stop = threading.Event()
+        self._last_sweep: datetime | None = None
 
     # ------------------------------------------------------------------ tek kaynak / talep
 
@@ -79,7 +89,7 @@ class CrawlerService:
     def run_source(self, code: str, *, channels: list[str] | None = None, max_details: int = 200) -> dict:
         source = self.sources[code]
         with self._lock(code):
-            col = SourceCollector(source, self.settings, self.store,
+            col = SourceCollector(source, self.settings, self.store, should_stop=self.stop.is_set,
                                   fetcher=self.fetcher_factory(source) if self.fetcher_factory else None)
             try:
                 rep = col.run(channels=channels, max_details=max_details)
@@ -95,8 +105,12 @@ class CrawlerService:
         from app.monitoring.reprocess import backfill
 
         with self._lock(code):
-            rep = backfill(self.store, self.settings, code, date_from, date_to, fetcher_factory=self.fetcher_factory)
-        return {"source": code, "days": rep.days, "new": rep.new, "runs": rep.runs}
+            rep = backfill(self.store, self.settings, code, date_from, date_to, fetcher_factory=self.fetcher_factory,
+                           should_stop=self.stop.is_set)
+        out = {"source": code, "days": rep.days, "new": rep.new, "runs": rep.runs}
+        if rep.interrupted_at:
+            out["interrupted_at"] = rep.interrupted_at.isoformat()
+        return out
 
     def handle_request(self, req: dict) -> None:
         p = req.get("params") or {}
@@ -107,6 +121,10 @@ class CrawlerService:
             elif req["kind"] == "backfill":
                 result = self.run_backfill(req["source_code"], date.fromisoformat(p["date_from"]),
                                            date.fromisoformat(p["date_to"]))
+                if resume := result.get("interrupted_at"):   # servis kapanıyor: talep kaldığı günden sürdürülür
+                    requeue_request(self.db, req["_id"], {"date_from": resume})
+                    log.info("backfill %s günden sürdürülmek üzere kuyruğa alındı", resume)
+                    return
             else:
                 raise ValueError(f"bilinmeyen talep türü: {req['kind']}")
         except Exception as e:  # noqa: BLE001 — talep başarısız işaretlenir, servis çalışmaya devam eder
@@ -125,8 +143,26 @@ class CrawlerService:
 
     # ------------------------------------------------------------------ döngü
 
+    def sweep(self, now: datetime) -> None:
+        """Ölü bir crawler'ın kilit/talep/tarama kalıntılarını temizler (sahip kimliği değişmiş olsa bile)."""
+        self._last_sweep = now
+        stale = stale_owners(self.db, self.owner, now, max(4 * self.settings.crawler_poll_s, 120))
+        locks, reqs = release_locks_of(self.db, stale), requeue_requests_of(self.db, stale)
+        runs = interrupt_orphaned_runs(self.db, now)
+        if locks or reqs or runs:
+            log.warning("ölü süreç kalıntıları temizlendi: sahipler=%s kilit=%d talep=%d tarama=%d",
+                        stale, locks, reqs, runs)
+
+    def _maybe_sweep(self, now: datetime) -> None:
+        if self._last_sweep is None or (now - self._last_sweep).total_seconds() >= self.settings.crawler_sweep_s:
+            try:
+                self.sweep(now)
+            except Exception:  # noqa: BLE001 — temizlik başarısızsa tarama ve sağlık sinyali aksamasın
+                log.exception("kalıntı temizliği başarısız")
+
     def tick(self, now: datetime | None = None) -> None:
         now = now or utcnow()
+        self._maybe_sweep(now)
         for code, fut in list(self.running.items()):
             if fut.done():
                 del self.running[code]
@@ -163,6 +199,9 @@ class CrawlerService:
         ensure_indexes(self.db)
         if n := requeue_orphaned_requests(self.db, self.owner):
             log.warning("yarıda kalan %d tarama talebi yeniden kuyruğa alındı", n)
+        if n := release_locks_of(self.db, [self.owner]):
+            log.warning("önceki sürecin %d kilidi bırakıldı", n)
+        self._maybe_sweep(utcnow())
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, lambda *_: self.stop.set())
         log.info("crawler başladı: %d kaynak, paralel=%d, sahip=%s", len(self.sources),
@@ -174,4 +213,4 @@ class CrawlerService:
                 log.exception("crawler turu başarısız")
             self.stop.wait(self.settings.crawler_poll_s)
         log.info("durduruluyor; süren taramalar bekleniyor: %s", sorted(self.running))
-        self.pool.shutdown(wait=True)
+        self.pool.shutdown(wait=True, cancel_futures=True)

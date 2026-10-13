@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.config import SourceConfig
@@ -147,6 +147,8 @@ class SqlCrawlStore:
         with self.session_factory() as s:
             if prev is not None:
                 s.get(RawDocument, prev.id).is_latest = False
+                # eski sürümün ekleri de eskidir (aynı ek kimliği yeni sürümde yeniden eklenir)
+                s.execute(update(RawDocument).where(RawDocument.parent_id == prev.id).values(is_latest=False))
             parent = RawDocument(**main.__dict__, is_latest=True, fetch_run_id=run_id)
             s.add(parent)
             s.flush()

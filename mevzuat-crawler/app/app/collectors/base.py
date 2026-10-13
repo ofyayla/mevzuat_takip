@@ -50,6 +50,7 @@ class ChannelResult:
     pages_fetched: int = 0
     signature: str = ""             # sayfa yapısı parmak izi (İK-7 yapı değişikliği uyarısı)
     warnings: list[str] = field(default_factory=list)
+    incomplete: bool = False        # liste eksik toplandı (bir sayfa alınamadı): baseline kapanmaz, koşu "partial" olur
 
 
 @dataclass

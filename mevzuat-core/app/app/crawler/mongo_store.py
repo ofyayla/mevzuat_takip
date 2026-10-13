@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+from bson import ObjectId
+
 from app.collectors.config import SourceConfig
 from app.collectors.store import NewDoc, StoredDoc, merge_channel_stats
 from app.mongo import DOCS, RUNS, SOURCES, utcnow
@@ -69,12 +71,19 @@ class MongoCrawlStore:
             "extra.checked_at": checked_at.isoformat()}))
 
     def add_version(self, prev: StoredDoc | None, run_id, main: NewDoc, attachments: list[NewDoc]) -> None:
-        # Sıra önemli: önce yeni sürüm, sonra eskisinin is_latest'i düşer (çökme halinde belge kaybolmaz)
-        parent_id = self.db[DOCS].insert_one(self._doc(main, run_id)).inserted_id
+        """Sıra: ekler → ana belge → eski sürümü kapat. Ana belge işleme noktasıdır (``latest_documents`` yalnızca
+        onu görür): yazım ortasında kesilirse ana belge yoktur, sonraki tarama öğeyi yeniden yazar. Tersi sırada
+        (ana belge önce) kesinti ekleri kalıcı kaybettirirdi, çünkü ana belge "değişmedi" sayılırdı. Ekler anahtar
+        üzerinden upsert edilir: yarım kalmış önceki denemenin kalıntısı aynı kayıtla değiştirilir. Ana belgesi
+        henüz olmayan ekleri ingest erteler (``IngestReport.deferred``)."""
+        parent_id = ObjectId()
+        for att in attachments:
+            key = {"source_code": att.source_code, "external_id": att.external_id, "version": att.version}
+            self.db[DOCS].replace_one(key, self._doc(att, run_id, parent_id), upsert=True)
+        self.db[DOCS].insert_one({**self._doc(main, run_id), "_id": parent_id})
         if prev is not None:
             self.db[DOCS].update_one({"_id": prev.id}, _set({"is_latest": False}))
-        if attachments:
-            self.db[DOCS].insert_many([self._doc(a, run_id, parent_id) for a in attachments])
+            self.db[DOCS].update_many({"parent_id": prev.id, "is_latest": True}, _set({"is_latest": False}))
 
     @staticmethod
     def _doc(d: NewDoc, run_id, parent_id=None) -> dict:

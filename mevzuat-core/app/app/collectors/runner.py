@@ -10,6 +10,12 @@ Kurallar:
   "yeni düzenleme" sayılmaz ve YZ hattına gönderilmez. Kanal, ertelenen öğe kalmadan bir taramayı tamamlayana
   kadar bu kural geçerlidir (``baseline_complete`` bayrağı fetch_run.channels içinde taşınır). Bu belgeler metin çıkarma ve tekilleştirmeden geçer
   (sonradan yayımlanan kopyalarının eşleşebilmesi için) ama oluşan düzenleme ``BASELINE`` olur ve YZ'ye gitmez.
+- Baseline şu durumlarda kapanmaz: ertelenen öğe var, geçici hatayla indirilemeyen öğe var (kalıcı 404/410 gibi
+  hatalar engellemez), liste eksik/şüpheli biçimde boş (``expected.min_items_per_run``; ``baseline_empty_runs``
+  ardışık koşudan sonra kabul edilir) ya da koşu durdurulmuş. Geçici hata ``baseline_max_runs`` koşudan uzun
+  süremez; aksi halde sonradan gelen gerçek düzenlemeler sessizce BASELINE sayılırdı.
+- Beklenmeyen hatalar taramayı kesmez: öğe hatası uyarıya, kanal hatası ``rep.error``'a dönüşür ve ``finish_run``
+  her koşulda çağrılır (``fetch_runs`` kaydı ``running`` kalmaz).
 """
 from __future__ import annotations
 
@@ -18,10 +24,11 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from app.collectors.base import ChannelContext, ChannelResult, FetchedDocument, ItemRef
 from app.collectors.config import ChannelConfig, SourceConfig
-from app.collectors.http import Fetcher, FetchError
+from app.collectors.http import Fetcher, FetchError, TransientFetchError
 from app.collectors.resolvers import resolve
 from app.collectors.store import CrawlStore, NewDoc, StoredDoc
 from app.collectors.strategies import get_strategy
@@ -46,6 +53,12 @@ class ChannelReport:
     empty_listing: bool = False
     baseline: bool = False
     baseline_complete: bool = False
+    baseline_runs: int = 0          # baseline açıkken tamamlanan koşu sayısı (baseline_max_runs sınırı)
+    empty_runs: int = 0             # ardışık "beklenenden az öğe" koşusu (baseline_empty_runs eşiği)
+    failed: int = 0                 # geçici hatayla indirilemeyen öğe: baseline'ı kapatmaz, sonraki koşuda yeniden denenir
+    gave_up: int = 0                # kalıcı hata (404/410 …): yalnızca uyarı, baseline'ı engellemez
+    stopped: bool = False           # servis durdurulduğu için koşu yarıda bırakıldı
+    incomplete: bool = False        # strateji listeyi eksik topladı (ör. bir indeks sayfası alınamadı)
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -131,14 +144,23 @@ def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, 
     return docs
 
 
+def _is_permanent(e: FetchError) -> bool:
+    """Tekrar denemenin sonucu değiştirmeyeceği hata (404/410, boyut, izin listesi); geçici hata baseline'ı tutar."""
+    if isinstance(e, TransientFetchError):
+        return False
+    return e.status is None or (400 <= e.status < 500 and e.status not in (408, 429))
+
+
 class SourceCollector:
     """``store``: kayıt katmanı (``SqlCrawlStore`` veya DMZ'de ``MongoCrawlStore``)."""
 
-    def __init__(self, source: SourceConfig, settings: Settings, store: CrawlStore, fetcher: Fetcher | None = None):
+    def __init__(self, source: SourceConfig, settings: Settings, store: CrawlStore, fetcher: Fetcher | None = None,
+                 should_stop: Callable[[], bool] | None = None):
         self.source = source
         self.settings = settings
         self.store = store
         self.fetcher = fetcher or Fetcher(source, settings)
+        self.should_stop = should_stop or (lambda: False)   # servis kapanırken tarama temiz biçimde bırakılır
 
     def run(self, *, channels: list[str] | None = None, max_details: int = 200,
             now: datetime | None = None) -> RunReport:
@@ -149,6 +171,32 @@ class SourceCollector:
         run_id = self.store.start_run(self.source.code, now)
 
         reports: list[ChannelReport] = []
+        completed = False
+        try:
+            self._run_channels(run_id, channels, max_details, now, since, prev_channels, reports)
+            completed = True
+        finally:   # istisna yükselse bile kayıt "running" kalmasın
+            failed = [r for r in reports if r.error]
+            degraded = any(r.stopped or r.incomplete or r.failed for r in reports)
+            if not completed or (reports and len(failed) == len(reports)):
+                status = "failed"
+            else:
+                status = "partial" if failed or degraded else "success"
+            errors = [f"{r.name}: {r.error}" for r in failed]
+            if not completed:
+                errors.append("tarama beklenmeyen bir hatayla kesildi")
+            elif any(r.stopped for r in reports):
+                errors.append("servis durdurulduğu için tarama yarıda bırakıldı")
+            self.store.finish_run(
+                run_id, finished_at=datetime.now(timezone.utc), status=status,
+                items_listed=sum(r.items for r in reports), items_new=sum(r.new for r in reports),
+                items_changed=sum(r.changed for r in reports), requests=self.fetcher.request_count,
+                channels={r.name: {k: v for k, v in r.__dict__.items() if k != "name"} for r in reports},
+                errors=errors, structure_alert=any(r.empty_listing and not r.error for r in reports))
+        return RunReport(self.source.code, run_id, status, reports, self.fetcher.request_count)
+
+    def _run_channels(self, run_id, channels, max_details: int, now: datetime, since, prev_channels: dict,
+                      reports: list[ChannelReport]) -> None:
         budget = max_details
         for channel in self.source.channels:
             if not channel.enabled or (channels and channel.name not in channels):
@@ -158,6 +206,10 @@ class SourceCollector:
             prev = prev_channels.get(channel.name) or {}
             rep.baseline = not prev.get("baseline_complete", False)
             rep.baseline_complete = prev.get("baseline_complete", False)
+            rep.baseline_runs, rep.empty_runs = prev.get("baseline_runs", 0), prev.get("empty_runs", 0)
+            if self.should_stop():
+                rep.stopped = True
+                break
             try:
                 result = list_channel(self.source, channel, self.fetcher, now=now, since=since)
             except Exception as e:  # noqa: BLE001 — kanal hatası çalıştırmayı durdurmamalı
@@ -166,23 +218,32 @@ class SourceCollector:
                 continue
             rep.items, rep.pages, rep.signature = len(result.items), result.pages_fetched, result.signature
             rep.warnings.extend(result.warnings)
+            rep.incomplete = result.incomplete
             rep.empty_listing = rep.items < self.source.expected.min_items_per_run
             rep.structure_changed = bool(prev.get("signature") and rep.signature
                                          and prev["signature"] != rep.signature)
-            budget = self._store_items(run_id, channel, result.items, rep, budget, rep.baseline, now)
-            # Mevcut içeriğin tamamı arşive alındığında (ertelenen kalmadıysa) kanal normal moda geçer
-            rep.baseline_complete = rep.baseline_complete or rep.deferred == 0
+            try:
+                budget = self._store_items(run_id, channel, result.items, rep, budget, rep.baseline, now)
+            except Exception as e:  # noqa: BLE001 — yazma/Mongo hatası diğer kanalları durdurmasın
+                log.exception("%s/%s kayıt hatası", self.source.code, channel.name)
+                rep.error = f"{type(e).__name__}: {e}"
+                continue
+            if rep.baseline and not rep.baseline_complete:
+                self._update_baseline(rep)
+            if rep.stopped:
+                break
 
-        failed = [r for r in reports if r.error]
-        status = "failed" if reports and len(failed) == len(reports) else "partial" if failed else "success"
-        self.store.finish_run(
-            run_id, finished_at=datetime.now(timezone.utc), status=status,
-            items_listed=sum(r.items for r in reports), items_new=sum(r.new for r in reports),
-            items_changed=sum(r.changed for r in reports), requests=self.fetcher.request_count,
-            channels={r.name: {k: v for k, v in r.__dict__.items() if k != "name"} for r in reports},
-            errors=[f"{r.name}: {r.error}" for r in reports if r.error],
-            structure_alert=any(r.empty_listing and not r.error for r in reports))
-        return RunReport(self.source.code, run_id, status, reports, self.fetcher.request_count)
+    def _update_baseline(self, rep: ChannelReport) -> None:
+        """Mevcut içeriğin tamamı arşive alındığında kanal normal moda geçer (ayrıntı: modül docstring'i)."""
+        rep.baseline_runs += 1
+        rep.empty_runs = rep.empty_runs + 1 if rep.empty_listing else 0
+        listing_ok = not rep.empty_listing or rep.empty_runs >= self.settings.baseline_empty_runs
+        rep.baseline_complete = (rep.deferred == 0 and rep.failed == 0 and listing_ok
+                                 and not rep.incomplete and not rep.stopped)
+        if not rep.baseline_complete and rep.baseline_runs >= self.settings.baseline_max_runs and not rep.stopped:
+            rep.baseline_complete = True
+            rep.warnings.append(f"baseline {rep.baseline_runs} koşudur kapanamadı; zorla kapatıldı "
+                                f"(ertelenen={rep.deferred}, hatalı={rep.failed}, eksik liste={rep.empty_listing})")
 
     # ------------------------------------------------------------------ yardımcılar
 
@@ -192,6 +253,9 @@ class SourceCollector:
         refresh_budget = channel.refresh_max_per_run if channel.refresh_after_days else 0
         now = now or datetime.now(timezone.utc)
         for ref in items:
+            if self.should_stop():
+                rep.stopped = True
+                break
             prev = existing.get(ref.external_id)
             listing_hash = ref.listing_hash()
             refreshing = False
@@ -209,7 +273,11 @@ class SourceCollector:
             try:
                 docs = fetch_documents(self.source, channel, ref, self.fetcher, self.settings.collect_max_attachments)
             except FetchError as e:
-                rep.warnings.append(f"{ref.url}: {e}")
+                self._item_failed(rep, ref, e, permanent=_is_permanent(e))
+                continue
+            except Exception as e:  # noqa: BLE001 — tek öğenin ayrıştırma/ağ hatası kalan öğeleri durdurmasın
+                log.exception("%s: %s işlenemedi", self.source.code, ref.url)
+                self._item_failed(rep, ref, e, permanent=False)
                 continue
             main = docs[0]
             key, sha = self.store.put_content(main.content)
@@ -228,15 +296,27 @@ class SourceCollector:
                 rep.new += 1
             is_baseline = baseline and prev is None
             parent = self._new_doc(channel, ref, main, key, sha, version, listing_hash, is_baseline)
-            attachments = []
+            attachments, seen_att = [], set()
             for att in docs[1:]:
                 akey, asha = self.store.put_content(att.content)
+                if asha in seen_att:   # aynı bayt (farklı URL ya da aynı hata sayfası) tek ek: kimlik çakışması olmasın
+                    continue
+                seen_att.add(asha)
                 att_ref = ItemRef(ref.source, ref.channel, f"{ref.external_id}#{asha[:12]}", att.url,
                                   att.title or ref.title, ref.published_at, ref.category)
                 # eski içeriğin ekleri de eski içeriktir
                 attachments.append(self._new_doc(channel, att_ref, att, akey, asha, version, None, is_baseline))
             self.store.add_version(prev, run_id, parent, attachments)
         return budget
+
+    @staticmethod
+    def _item_failed(rep: ChannelReport, ref: ItemRef, e: Exception, *, permanent: bool) -> None:
+        detail = str(e) if isinstance(e, FetchError) else f"{type(e).__name__}: {e}"
+        rep.warnings.append(f"{ref.url}: {detail}")
+        if permanent:
+            rep.gave_up += 1
+        else:
+            rep.failed += 1
 
     @staticmethod
     def _refresh_due(prev: StoredDoc, channel: ChannelConfig, now: datetime) -> bool:

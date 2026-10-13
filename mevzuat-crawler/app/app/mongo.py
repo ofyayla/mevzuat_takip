@@ -32,16 +32,20 @@ def utcnow() -> datetime:
 
 
 @lru_cache
-def _client(url: str, timeout_ms: int):
+def _client(url: str, timeout_ms: int, connect_timeout_ms: int, socket_timeout_ms: int):
     from pymongo import MongoClient
 
-    return MongoClient(url, tz_aware=True, serverSelectionTimeoutMS=timeout_ms, appname="mevzuat-takip")
+    # socketTimeoutMS yoksa DMZ↔LAN güvenlik duvarının sessizce düşürdüğü bağlantıda okuma çok uzun süre bekler ve
+    # o kaynağın iş parçacığı (running[kod]) servis yeniden başlayana kadar takılı kalır.
+    return MongoClient(url, tz_aware=True, serverSelectionTimeoutMS=timeout_ms, connectTimeoutMS=connect_timeout_ms,
+                       socketTimeoutMS=socket_timeout_ms, appname="mevzuat-takip")
 
 
 def crawl_db(settings):
     if not settings.mongo_url:
         raise RuntimeError("MONGO_URL tanımlı değil (CRAWL_MODE=remote / RAW_STORAGE=gridfs için gerekli)")
-    return _client(settings.mongo_url, settings.mongo_timeout_ms)[settings.mongo_db]
+    return _client(settings.mongo_url, settings.mongo_timeout_ms, settings.mongo_connect_timeout_ms,
+                   settings.mongo_socket_timeout_ms)[settings.mongo_db]
 
 
 def ensure_indexes(db) -> None:
@@ -59,6 +63,8 @@ def ensure_indexes(db) -> None:
     db[RUNS].create_index([("source_code", ASCENDING), ("started_at", DESCENDING)], name="ix_run_source")
     db[REQUESTS].create_index([("status", ASCENDING), ("created_at", ASCENDING)], name="ix_request_status")
     db["raw.files"].create_index([("filename", ASCENDING), ("uploadDate", ASCENDING)], name="ix_raw_filename")
+    # Her yeniden başlatmada host adı değişebilir (Podman/K8s): eski sahiplerin sinyal belgeleri birikmesin
+    db[STATUS].create_index([("at", ASCENDING)], name="ttl_status", expireAfterSeconds=7 * 86400)
 
 
 def worker_id() -> str:
@@ -90,11 +96,53 @@ def finish_crawl_request(db, request_id, *, ok: bool, result: Any = None, error:
         "status": "done" if ok else "failed", "finished_at": utcnow(), "result": result, "error": error}})
 
 
+def requeue_request(db, request_id, params: dict | None = None) -> None:
+    """Servis kapanırken yarım kalan talebi (isteğe bağlı güncellenmiş parametrelerle) kuyruğa geri koyar."""
+    update: dict = {"$set": {"status": "pending", **({f"params.{k}": v for k, v in params.items()} if params else {})},
+                    "$unset": {"claimed_by": "", "started_at": ""}}
+    db[REQUESTS].update_one({"_id": request_id}, update)
+
+
 def requeue_orphaned_requests(db, owner: str) -> int:
     """Crawler yeniden başladığında yarıda kalan kendi taleplerini tekrar kuyruğa alır."""
     return db[REQUESTS].update_many({"status": "running", "claimed_by": owner},
                                     {"$set": {"status": "pending"}, "$unset": {"claimed_by": "", "started_at": ""}}
                                     ).modified_count
+
+
+# ------------------------------------------------------------------------------------------------ ölü süreç kalıntıları
+# Süreç SIGKILL/OOM/healthcheck-kill ile öldüğünde kilit, ``running`` talep ve ``running`` tarama kaydı geride kalır.
+# Sahip kimliği (host adı) yeniden başlatmada değişebileceğinden "kendi kalıntılarım" yetmez: sinyali (``crawler_status``)
+# bayatlamış sahiplerin kalıntıları da temizlenir. Sinyal belgesi hiç olmayan sahipler (elle ``mevzuat-crawler run``)
+# bilinmeyen sayılır ve dokunulmaz: onların kilidi yalnızca TTL ile düşer.
+
+
+def stale_owners(db, owner: str, now: datetime, stale_s: float) -> list[str]:
+    cutoff = now - timedelta(seconds=stale_s)
+    return [d["_id"] for d in db[STATUS].find({"at": {"$lt": cutoff}}, {"_id": 1}) if d["_id"] != owner]
+
+
+def release_locks_of(db, owners: list[str]) -> int:
+    return db[LOCKS].delete_many({"owner": {"$in": owners}}).deleted_count if owners else 0
+
+
+def requeue_requests_of(db, owners: list[str]) -> int:
+    if not owners:
+        return 0
+    return db[REQUESTS].update_many({"status": "running", "claimed_by": {"$in": owners}},
+                                    {"$set": {"status": "pending"}, "$unset": {"claimed_by": "", "started_at": ""}}
+                                    ).modified_count
+
+
+def interrupt_orphaned_runs(db, now: datetime, min_age_s: float = 120) -> int:
+    """Kilidi tutulmayan kaynağın ``running`` tarama kaydı sahipsizdir (kilit alındıktan sonra açılır, ``finish_run``
+    bitmeden bırakılmaz); ``failed (interrupted)`` işaretlenir."""
+    locked = [d["_id"].split(":", 1)[1] for d in db[LOCKS].find({"_id": {"$regex": "^collect:"}}, {"_id": 1})]
+    res = db[RUNS].update_many(
+        {"status": "running", "source_code": {"$nin": locked}, "started_at": {"$lt": now - timedelta(seconds=min_age_s)}},
+        {"$set": {"status": "failed", "finished_at": now, "errors": ["interrupted: süreç tarama sırasında öldü"],
+                  "synced": False, "updated_at": now}, "$inc": {"rev": 1}})
+    return res.modified_count
 
 
 def get_crawl_request(db, request_id: str) -> dict | None:

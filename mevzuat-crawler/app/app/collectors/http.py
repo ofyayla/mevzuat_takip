@@ -115,8 +115,26 @@ def build_ca_bundle(base: str | bool, extra: list[Path], out_dir: Path) -> str:
 
 # --------------------------------------------------------------------------------------------- backends
 
+def _too_big(url: str, limit: int) -> FetchError:
+    return FetchError(url, f"yanıt çok büyük (> {limit} bayt)")
+
+
+def _read_capped(url: str, chunks, max_bytes: int | None, deadline_s: float | None) -> bytes:
+    """Gövdeyi parça parça okur; boyut ya da toplam süre sınırı aşılırsa RAM'e tamamı inmeden keser."""
+    started, size, parts = time.monotonic(), 0, []
+    for chunk in chunks:
+        size += len(chunk)
+        if max_bytes is not None and size > max_bytes:
+            raise _too_big(url, max_bytes)
+        if deadline_s is not None and time.monotonic() - started > deadline_s:
+            raise TransientFetchError(url, f"toplam indirme süresi aşıldı ({deadline_s:.0f} sn)")
+        parts.append(chunk)
+    return b"".join(parts)
+
+
 class _Backend:
-    def get(self, url: str, headers: dict[str, str], timeout: float) -> Response:  # pragma: no cover
+    def get(self, url: str, headers: dict[str, str], timeout: float, max_bytes: int | None = None,
+            deadline_s: float | None = None) -> Response:  # pragma: no cover
         raise NotImplementedError
 
     def close(self) -> None:
@@ -134,12 +152,19 @@ class _HttpxBackend(_Backend):
             verify = ssl.create_default_context(cafile=verify)
         self.client = httpx.Client(proxy=proxy, verify=verify, follow_redirects=True, trust_env=proxy is None)
 
-    def get(self, url, headers, timeout):
+    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
+        httpx = self._httpx
         try:
-            r = self.client.get(url, headers=headers, timeout=timeout)
-        except (self._httpx.TimeoutException, self._httpx.NetworkError, self._httpx.ProxyError) as e:
+            with self.client.stream("GET", url, headers=headers, timeout=timeout) as r:
+                declared = r.headers.get("content-length", "")
+                if max_bytes is not None and declared.isdigit() and int(declared) > max_bytes:
+                    raise _too_big(url, max_bytes)
+                body = _read_capped(url, r.iter_bytes(), max_bytes, deadline_s)   # açılmış (gzip sonrası) boyut
+                return Response(url, str(r.url), r.status_code, {k.lower(): v for k, v in r.headers.items()}, body)
+        except (httpx.TooManyRedirects, httpx.DecodingError, httpx.UnsupportedProtocol, httpx.InvalidURL) as e:
+            raise FetchError(url, f"{type(e).__name__}: {e}") from e      # tekrar denemek sonucu değiştirmez
+        except httpx.HTTPError as e:   # zaman aşımı, ağ, proxy, RemoteProtocolError …
             raise TransientFetchError(url, f"{type(e).__name__}: {e}") from e
-        return Response(url, str(r.url), r.status_code, {k.lower(): v for k, v in r.headers.items()}, r.content)
 
     def close(self):
         self.client.close()
@@ -153,14 +178,22 @@ class _ImpersonateBackend(_Backend):
         self.session = cffi_requests.Session(impersonate=profile, verify=verify,
                                              proxies={"https": proxy, "http": proxy} if proxy else None)
 
-    def get(self, url, headers, timeout):
+    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
         # curl_cffi tarayıcı başlıklarını kendisi üretir; yalnızca UA dışındakileri geçiriyoruz ki parmak izi bozulmasın
         extra = {k: v for k, v in headers.items() if k.lower() != "user-agent"}
+        r = None
         try:
-            r = self.session.get(url, headers=extra, timeout=timeout, allow_redirects=True)
+            r = self.session.get(url, headers=extra, timeout=timeout, allow_redirects=True, stream=True)
+            declared = r.headers.get("content-length", "")
+            if max_bytes is not None and declared.isdigit() and int(declared) > max_bytes:
+                raise _too_big(url, max_bytes)
+            body = _read_capped(url, r.iter_content(), max_bytes, deadline_s)
+            return Response(url, str(r.url), r.status_code, {k.lower(): v for k, v in r.headers.items()}, body)
         except self._errors as e:
             raise TransientFetchError(url, f"{type(e).__name__}: {e}") from e
-        return Response(url, str(r.url), r.status_code, {k.lower(): v for k, v in r.headers.items()}, r.content)
+        finally:
+            if r is not None:
+                r.close()
 
     def close(self):
         self.session.close()
@@ -178,7 +211,7 @@ class _BrowserBackend(_Backend):
             launch["proxy"] = {"server": proxy}
         self.browser = self._pw.chromium.launch(**launch)
 
-    def get(self, url, headers, timeout):
+    def get(self, url, headers, timeout, max_bytes=None, deadline_s=None):
         page = self.browser.new_page()
         try:
             resp = page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
@@ -275,6 +308,13 @@ class Fetcher:
         resp = self._get_with_retry(url, headers)
         if self.recorder:
             self.recorder.save(resp)
+        if resp.final_url != url and not self.source.host_allowed(resp.final_url):
+            # İzin listesi yalnızca ilk URL'de değil, yönlendirmenin vardığı yerde de geçerli olmalı: aksi halde
+            # izinli bir sitedeki açık yönlendirme, başka bir host'un içeriğini arşive ve YZ hattına sokar.
+            msg = f"yönlendirme izin listesi dışına çıktı: {resp.final_url}"
+            if self.settings.collect_enforce_redirect_hosts:
+                raise HostNotAllowed(url, msg)
+            log.warning("%s: %s (%s)", self.source.code, msg, url)
         if resp.status >= 400 and resp.status not in allow_status:
             raise FetchError(url, f"HTTP {resp.status}", resp.status)
         if len(resp.content) > self.settings.collect_max_bytes:
@@ -287,7 +327,8 @@ class Fetcher:
         self._throttle(urlparse(url).hostname or "")
         self.request_count += 1
         log.debug("GET %s", url)
-        resp = self._get_backend().get(url, headers, self.timeout)
+        resp = self._get_backend().get(url, headers, self.timeout, max_bytes=self.settings.collect_max_bytes,
+                                       deadline_s=self.settings.collect_total_timeout_s)
         if resp.status in _RETRY_STATUSES:
             raise TransientFetchError(url, f"HTTP {resp.status}", resp.status)
         return resp
