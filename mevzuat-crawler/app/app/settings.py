@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     collect_total_timeout_s: float = 120.0   # tek indirmenin toplam süresi (collect_timeout_s okuma başına; yavaş damlayan sunucu)
     collect_enforce_redirect_hosts: bool = True   # yönlendirme izinli olmayan host'a çıkarsa yanıt reddedilir (False: yalnızca log)
     collect_default_lookback_days: int = 30
+    collect_host_breaker_threshold: int = 3        # bir host'a art arda bu kadar bağlantı hatası → koşuda kalan istekler atlanır (0: kapalı)
+    collect_attachment_max_attempts: int = 10      # indirilemeyen ek bu kadar denemeden sonra "vazgeçildi" olur (onarım komutu yeniden açar)
+    collect_attachment_retry_items: int = 25       # koşu başına eki yeniden denenecek en fazla öğe
     # İlk tarama (BASELINE) kapanış kapıları: sitede duran birikim "yeni düzenleme" sayılmasın
     baseline_empty_runs: int = 3             # beklenenden az öğe dönen kanal bu kadar ardışık koşudan sonra "gerçekten az" sayılır
     baseline_max_runs: int = 48              # geçici hata baseline'ı bundan uzun açık tutamaz (sessiz BASELINE sonsuza uzamasın)

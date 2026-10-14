@@ -68,16 +68,27 @@
           <span style="font-size:12.5px; color:{{ healthTextColor }};">{{ healthText }}</span>
         </div>
         <sc-if value="{{ sourceHealthOpen }}" hint-placeholder-val="{{ false }}">
-          <div style="position:absolute; top:calc(100% + 8px); right:0; width:280px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); padding:14px; z-index:30;">
+          <div style="position:absolute; top:calc(100% + 8px); right:0; width:{{ healthPanelWidth }}; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); padding:14px; z-index:30;">
             <div style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:10px;">Kaynak durumu</div>
-            <div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto;">
+            <div style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto;">
               <sc-for list="{{ sourceList }}" as="src" hint-placeholder-count="8">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                  <span style="font-size:13px; color:var(--foreground); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ src.name }}</span>
-                  <span style="font-size:12px; color:{{ src.dotColor }}; white-space:nowrap; flex:0 0 auto;">{{ src.lastFetch }}</span>
+                  <span style="font-size:13px; color:var(--foreground); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;" title="{{ src.name }}">{{ src.name }}</span>
+                  <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+                    <span style="font-size:12px; color:{{ src.dotColor }}; white-space:nowrap;">{{ src.lastFetch }}</span>
+                    <sc-if value="{{ src.canRun }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ src.runFn }}" disabled="{{ src.runDisabled }}" title="{{ src.runTitle }}" aria-label="{{ src.runTitle }}" style="display:flex; align-items:center; gap:4px; height:24px; padding:0 8px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:11.5px; font-weight:500; cursor:{{ src.runCursor }}; opacity:{{ src.runOpacity }}; font-family:var(--font-sans); white-space:nowrap;">
+                        <i data-lucide="refresh-cw" style="width:11px; height:11px; color:var(--primary);"></i>
+                        {{ src.runLabel }}
+                      </button>
+                    </sc-if>
+                  </div>
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ showRunHint }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:11.5px; line-height:1.45; color:var(--muted-foreground);">Tara: kaynak takvimi beklenmeden hemen taranır. Yeni kayıtlar işleme hattından geçtikten sonra listede görünür.</div>
+            </sc-if>
           </div>
         </sc-if>
       </div>
@@ -619,6 +630,7 @@ const REJECTION_REASON_LABELS = {
 };
 
 const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
+const RUN_COOLDOWN_MS = 60000;
 
 class Component extends DCLogic {
   state = {
@@ -649,7 +661,8 @@ class Component extends DCLogic {
     units: [],
     health: { sources: [], overall: 'healthy', bannerText: '' },
     me: null,
-    busy: false
+    busy: false,
+    runningSources: {}   // kod → true: tarama talebi gönderildi (art arda tetiklemeyi önler)
   };
 
   handleKeyDown = (event) => {
@@ -731,6 +744,27 @@ class Component extends DCLogic {
   setPage = (p) => this.update({ page: p });
   setPageSize = (e) => this.update({ pageSize: parseInt(e.target.value, 10), page: 1 });
   toggleSourceHealth = () => this.setState({ sourceHealthOpen: !this.state.sourceHealthOpen });
+
+  // ------------------------------------------------------------------ manuel tarama (admin)
+  // POST /admin/sources/{kod}/run: DMZ kurulumunda talep crawler'a iletilir (≤ CRAWLER_POLL_S içinde başlar), yerel
+  // kurulumda Celery/arka plan görevi hemen başlatır. Başarılı talepten sonra düğme RUN_COOLDOWN_MS boyunca kapalı kalır.
+  setSourceRunning = (code, on) => {
+    const running = Object.assign({}, this.state.runningSources);
+    if (on) running[code] = true; else delete running[code];
+    this.setState({ runningSources: running });
+  };
+  runSource = (src) => {
+    if (!src.code || this.state.runningSources[src.code]) return;
+    this.setSourceRunning(src.code, true);
+    api('/admin/sources/' + encodeURIComponent(src.code) + '/run', { method: 'POST' })
+      .then(r => {
+        this.showToast(r.data.via === 'crawler'
+          ? `${src.name}: tarama talebi crawler'a iletildi; kaynak meşgul değilse kısa süre içinde başlar.`
+          : `${src.name}: tarama başlatıldı.`);
+        setTimeout(() => { this.setSourceRunning(src.code, false); this.loadMeta(); }, RUN_COOLDOWN_MS);
+      })
+      .catch(e => { this.setSourceRunning(src.code, false); this.fail(e); });
+  };
 
   // ------------------------------------------------------------------ karar
   openApprove = () => this.setState({ confirmType: 'approve', confirmNote: '', rejectionReason: '' });
@@ -821,7 +855,7 @@ class Component extends DCLogic {
   };
 
   renderVals() {
-    const { records, total, stats: apiStats, detail, units, sources, health, me, confirmNote, rejectionReason, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, contentModalOpen, contentTitleDraft, contentSummaryDraft, busy, toast, sourceHealthOpen, page, pageSize } = this.state;
+    const { records, total, stats: apiStats, detail, units, sources, health, me, confirmNote, rejectionReason, view, detailTab, filters, activeMetric, confirmType, unitModalOpen, unitModalSelected, unitSearch, contentModalOpen, contentTitleDraft, contentSummaryDraft, busy, toast, sourceHealthOpen, page, pageSize, runningSources } = this.state;
     // Filtreleme ve sayfalama sunucu tarafında: records yalnızca geçerli sayfadır
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -888,7 +922,14 @@ class Component extends DCLogic {
       valueColor: critZero ? 'var(--foreground)' : 'color-mix(in oklch, var(--warning) 55%, black)'
     };
 
-    const sourceList = (health.sources || []).map(s => ({ ...s, dotColor: s.status === 'down' ? 'var(--destructive)' : s.status === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)' }));
+    const canRunSources = !!me && !!me.isAdmin;
+    const sourceList = (health.sources || []).map(s => {
+      const running = !!runningSources[s.code];
+      return { ...s, dotColor: s.status === 'down' ? 'var(--destructive)' : s.status === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)',
+        canRun: canRunSources && !!s.code, runFn: () => this.runSource(s), runDisabled: running,
+        runLabel: running ? 'İstendi' : 'Tara', runOpacity: running ? 0.5 : 1, runCursor: running ? 'default' : 'pointer',
+        runTitle: running ? `${s.name} için tarama talebi gönderildi` : `${s.name} kaynağını şimdi tara` };
+    });
     const delayedSources = sourceList.filter(s => s.status === 'delayed');
     const downSources = sourceList.filter(s => s.status === 'down');
     const overallStatus = health.overall || 'healthy';
@@ -946,6 +987,7 @@ class Component extends DCLogic {
       healthBg: hm.bg, healthBorder: hm.border, healthTextColor: hm.textColor,
       showHealthBanner: overallStatus !== 'healthy', bannerText,
       sourceHealthOpen, toggleSourceHealth: this.toggleSourceHealth, sourceList,
+      showRunHint: canRunSources && sourceList.length > 0, healthPanelWidth: canRunSources ? '340px' : '280px',
       selected, isPending: !!selected && selected.status === 'Bekliyor', isDecided: !!selected && selected.status !== 'Bekliyor',
       canEditContent: !!selected && selected.status === 'Bekliyor' && !!me && me.canDecide,
       contentModalOpen, contentTitleDraft, contentSummaryDraft,

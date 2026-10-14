@@ -30,6 +30,7 @@ paylaşılan **MongoDB sözleşmesi**.
 | `HTTP_USER_AGENT` | `MevzuatTakipBot/1.0 …` | İsteklerde kimlik |
 | `COLLECT_REQUEST_DELAY_S` | `1.5` | Host başına istekler arası bekleme |
 | `COLLECT_TIMEOUT_S`, `COLLECT_MAX_ATTACHMENTS`, `COLLECT_MAX_BYTES` | `30`, `5`, 50 MB | İstek sınırları |
+| `COLLECT_HOST_BREAKER_THRESHOLD`, `COLLECT_ATTACHMENT_MAX_ATTEMPTS`, `COLLECT_ATTACHMENT_RETRY_ITEMS` | `3`, `10`, `25` | Devre kesici; indirilemeyen ek için deneme sınırı ve koşu başına yeniden deneme sayısı |
 
 ## MongoDB sözleşmesi (`mevzuat_crawl`)
 

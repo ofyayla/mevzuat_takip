@@ -123,3 +123,57 @@ def test_beat_schedule_remote_mode_has_ingest_not_collect(remote, monkeypatch):
     monkeypatch.setattr(worker, "settings", remote[0])
     sched = worker.build_beat_schedule()
     assert "ingest-crawl" in sched and not any(k.startswith("collect-") for k in sched)
+
+
+def test_late_attachment_is_ingested_under_the_existing_parent(remote, mdb):
+    """CDN erişilemezken ek alınamaz; sonradan alınınca LAN tarafı ekı mevcut ana belgeye bağlar (yeni sürüm yok)."""
+    from app.collectors.http import TransientFetchError
+    from tests.test_runner import FlakyFetcher
+
+    settings, sf = remote
+    src, ek = make_source(), "https://ornek.gov.tr/ek/1.pdf"
+    fetcher = FlakyFetcher(src, settings, pages_v1(), {ek: TransientFetchError(ek, "reset")})
+    col = SourceCollector(src, settings, MongoCrawlStore(mdb), fetcher=fetcher)
+    assert col.run().status == "partial"
+    ing = CrawlIngestor(settings, sf, mdb)
+    ing.run()
+    assert not [r for r in sql_docs(sf) if r.role == "attachment"]
+    main1 = next(r for r in sql_docs(sf) if r.external_id == "/d/1")
+    assert [m["url"] for m in main1.extra["missing_attachments"]] == [ek]
+
+    del fetcher.errors[ek]
+    assert col.run(now=datetime.now(timezone.utc) + timedelta(hours=2)).status == "success"
+    rep = ing.run()
+    assert rep.deferred == 0
+    rows = sql_docs(sf)
+    att = [r for r in rows if r.role == "attachment"]
+    main1 = next(r for r in rows if r.external_id == "/d/1")
+    assert len(att) == 1 and att[0].parent_id == main1.id and att[0].version == main1.version == 1
+    assert main1.extra["missing_attachments"] == [] and main1.is_latest
+    assert mdb[DOCS].count_documents({"synced": False}) == 0
+
+
+def test_repair_attachments_with_mongo_store_and_ingest(remote, mdb):
+    """Onarım komutu Mongo'da da çalışır: eksik ek GridFS içeriğinden yeniden çıkarılır, LAN tarafı ekı alır."""
+    from app.collectors.http import TransientFetchError
+    from tests.test_runner import FlakyFetcher
+
+    settings, sf = remote
+    src, ek = make_source(), "https://ornek.gov.tr/ek/1.pdf"
+    fetcher = FlakyFetcher(src, settings, pages_v1(), {ek: TransientFetchError(ek, "reset")})
+    col = SourceCollector(src, settings, MongoCrawlStore(mdb), fetcher=fetcher)
+    col.run()
+    mdb[DOCS].update_many({"role": "main"}, {"$unset": {"extra.missing_attachments": ""}})   # eski hasar
+    del fetcher.errors[ek]
+    rep = col.repair_attachments()
+    assert rep.docs_with_gaps == 1 and rep.recovered == 1
+    att = list(mdb[DOCS].find({"role": "attachment"}))
+    main = mdb[DOCS].find_one({"external_id": "/d/1"})
+    assert len(att) == 1 and att[0]["parent_id"] == main["_id"] and att[0]["fetch_run_id"] is None
+    assert main["extra"]["missing_attachments"] == []
+    assert col.repair_attachments().docs_with_gaps == 0                                      # idempotent
+
+    CrawlIngestor(settings, sf, mdb).run()
+    rows = sql_docs(sf)
+    assert [r.role for r in rows if r.role == "attachment"] == ["attachment"]
+    assert mdb[DOCS].count_documents({"synced": False}) == 0

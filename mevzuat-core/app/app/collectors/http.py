@@ -49,6 +49,10 @@ class TransientFetchError(FetchError):
     """Yeniden denenebilir hata (bağlantı, zaman aşımı, 429/5xx)."""
 
 
+class HostUnreachable(TransientFetchError):
+    """Aynı koşuda host'a art arda bağlanılamadı (firewall/ağ kesintisi); kalan istekler beklemeden reddedilir."""
+
+
 @dataclass
 class Response:
     url: str
@@ -291,6 +295,11 @@ class Fetcher:
         self._lock = threading.Lock()
         self._backend: _Backend | None = None
         self.request_count = 0
+        # Devre kesici (koşu başına): bir host'a art arda bağlanılamıyorsa o koşuda kalan istekler atılmaz. Yeni koşu
+        # (yeni Fetcher) kapalı başlar; ilk başarılı istek sayacı sıfırlar. 0 = kapalı.
+        self._breaker_threshold = getattr(settings, "collect_host_breaker_threshold", 3)
+        self._host_failures: dict[str, int] = {}
+        self._open_hosts: set[str] = set()
 
     def _get_backend(self) -> _Backend:
         if self._backend is None:
@@ -329,7 +338,7 @@ class Fetcher:
     def _request(self, method: str, url: str, *, params: dict[str, Any] | None, accept: str | None,
                  allow_status: tuple[int, ...], body: bytes | None = None,
                  content_type: str | None = None) -> Response:
-        url = build_url(url, params)
+        url = self.source.request_url(build_url(url, params))
         if not self.source.host_allowed(url):
             raise HostNotAllowed(url, f"host izin listesinde değil ({self.source.code}.allowed_hosts)")
         headers = {"User-Agent": self.settings.http_user_agent, "Accept-Language": "tr-TR,tr;q=0.9"}
@@ -337,7 +346,15 @@ class Fetcher:
             headers["Accept"] = accept
         if content_type:
             headers["Content-Type"] = content_type
-        resp = self._request_with_retry(method, url, headers, body)
+        host = urlparse(url).hostname or ""
+        if host in self._open_hosts:
+            raise HostUnreachable(url, f"{host} bu koşuda erişilemez sayıldı (devre kesici açık)")
+        try:
+            resp = self._request_with_retry(method, url, headers, body)
+        except TransientFetchError as e:
+            self._record_failure(host, e)
+            raise
+        self._host_failures.pop(host, None)
         if self.recorder:
             self.recorder.save(resp, request_key(method, url, body))
         if resp.final_url != url and not self.source.host_allowed(resp.final_url):
@@ -352,6 +369,20 @@ class Fetcher:
         if len(resp.content) > self.settings.collect_max_bytes:
             raise FetchError(url, f"yanıt çok büyük ({len(resp.content)} bayt)")
         return resp
+
+    def host_blocked(self, url: str) -> bool:
+        """Bu koşuda devre kesicisi açılmış bir host mu? (Çağıran istek atmadan atlayabilir; deneme sayılmaz.)"""
+        return (urlparse(url).hostname or "") in self._open_hosts
+
+    def _record_failure(self, host: str, e: TransientFetchError) -> None:
+        # Yalnız ağ düzeyi hata sayılır (reset, zaman aşımı, DNS); 429/5xx tek bir adresin sorunu olabilir
+        if not self._breaker_threshold or e.status is not None or isinstance(e, HostUnreachable):
+            return
+        n = self._host_failures[host] = self._host_failures.get(host, 0) + 1
+        if n >= self._breaker_threshold:
+            self._open_hosts.add(host)
+            log.warning("%s: %s art arda %d bağlantı hatası verdi; bu koşuda kalan istekleri atlanıyor",
+                        self.source.code, host, n)
 
     @retry(retry=retry_if_exception(lambda e: isinstance(e, TransientFetchError)),
            stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30), reraise=True)

@@ -11,9 +11,10 @@
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,6 +35,8 @@ class StoredDoc:
     fetched_at: datetime
     is_baseline: bool = False
     extra: dict = field(default_factory=dict)
+    channel: str = ""    # kimlik çakışması denetimi: aynı external_id başka kanalın farklı belgesi olabilir
+    url: str = ""
 
 
 @dataclass
@@ -59,8 +62,27 @@ class NewDoc:
     extra: dict = field(default_factory=dict)
 
 
+@dataclass
+class MainDocInfo:
+    """Onarım komutu için: son sürüm ana belge + saklı içeriğin yeri + zaten bağlı eklerin adresleri."""
+
+    doc: StoredDoc
+    channel: str
+    url: str
+    final_url: str | None
+    content_type: str
+    storage_key: str
+    title: str | None
+    published_at: date | None
+    category: str | None
+    attachment_urls: set[str]
+
+
 class CrawlStore(Protocol):
     def put_content(self, content: bytes) -> tuple[str, str]: ...
+    def read_content(self, key: str) -> bytes: ...
+    def iter_main_documents(self, code: str, channels: list[str] | None = None,
+                            batch: int = 200) -> Iterator[MainDocInfo]: ...
     def upsert_source(self, source: SourceConfig) -> None: ...
     def last_success(self, code: str) -> datetime | None: ...
     def previous_channel_stats(self, code: str, channels: list[str] | None = None) -> dict: ...
@@ -71,6 +93,8 @@ class CrawlStore(Protocol):
                         title: str | None, checked_at: datetime) -> None: ...
     def add_version(self, prev: StoredDoc | None, run_id: Any, main: NewDoc,
                     attachments: list[NewDoc]) -> None: ...
+    def add_late_attachments(self, prev: StoredDoc, run_id: Any, attachments: list[NewDoc],
+                             missing: list[dict]) -> None: ...
 
 
 def aware(dt: datetime | None) -> datetime | None:
@@ -108,6 +132,35 @@ class SqlCrawlStore:
 
     def put_content(self, content: bytes) -> tuple[str, str]:
         return self.storage.put(content)
+
+    def read_content(self, key: str) -> bytes:
+        return self.storage.get(key)
+
+    def iter_main_documents(self, code: str, channels: list[str] | None = None,
+                            batch: int = 200) -> Iterator[MainDocInfo]:
+        """Kaynağın son sürüm ana belgeleri (kimliğe göre sayfalı). Onarım komutu kullanır."""
+        last = 0
+        while True:
+            with self.session_factory() as s:
+                q = select(RawDocument).where(
+                    RawDocument.source_code == code, RawDocument.is_latest.is_(True),
+                    RawDocument.role != "attachment", RawDocument.id > last).order_by(RawDocument.id).limit(batch)
+                if channels:
+                    q = q.where(RawDocument.channel.in_(channels))
+                rows = s.scalars(q).all()
+                if not rows:
+                    return
+                kids: dict[int, set[str]] = defaultdict(set)
+                for pid, url in s.execute(select(RawDocument.parent_id, RawDocument.url).where(
+                        RawDocument.parent_id.in_([r.id for r in rows]), RawDocument.is_latest.is_(True))):
+                    kids[pid].add(url)
+                infos = [MainDocInfo(
+                    StoredDoc(r.id, r.external_id, r.version, r.listing_hash, r.content_sha256, aware(r.fetched_at),
+                              r.is_baseline, dict(r.extra or {}), r.channel, r.url),
+                    r.channel, r.url, r.final_url, r.content_type, r.storage_key, r.title, r.published_at,
+                    r.category, kids[r.id]) for r in rows]
+            last = rows[-1].id
+            yield from infos
 
     def upsert_source(self, source: SourceConfig) -> None:
         cfg = source.model_dump(mode="json")
@@ -150,7 +203,7 @@ class SqlCrawlStore:
     def latest_documents(self, code: str, external_ids: list[str]) -> dict[str, StoredDoc]:
         with self.session_factory() as s:
             return {k: StoredDoc(r.id, r.external_id, r.version, r.listing_hash, r.content_sha256,
-                                 aware(r.fetched_at), r.is_baseline, dict(r.extra or {}))
+                                 aware(r.fetched_at), r.is_baseline, dict(r.extra or {}), r.channel, r.url)
                     for k, r in latest_documents(s, code, external_ids).items()}
 
     def touch_unchanged(self, prev: StoredDoc, *, listing_hash, version_key, title, checked_at) -> None:
@@ -171,4 +224,17 @@ class SqlCrawlStore:
             s.flush()
             for att in attachments:
                 s.add(RawDocument(**att.__dict__, is_latest=True, fetch_run_id=run_id, parent_id=parent.id))
+            s.commit()
+
+    def add_late_attachments(self, prev: StoredDoc, run_id: int, attachments: list[NewDoc],
+                             missing: list[dict]) -> None:
+        """Daha önce indirilemeyen ekler sonradan alındı: aynı sürümün ekleri olarak eklenir ve ana belgenin
+        ``extra.missing_attachments`` listesi güncellenir (ana belge yeni sürüm açmaz)."""
+        with self.session_factory() as s:
+            have = set(s.scalars(select(RawDocument.external_id).where(RawDocument.parent_id == prev.id)))
+            for att in attachments:
+                if att.external_id not in have:
+                    s.add(RawDocument(**att.__dict__, is_latest=True, fetch_run_id=run_id, parent_id=prev.id))
+            row = s.get(RawDocument, prev.id)
+            row.extra = {**(row.extra or {}), "missing_attachments": missing}   # JSON alanı yeniden atanmalı
             s.commit()

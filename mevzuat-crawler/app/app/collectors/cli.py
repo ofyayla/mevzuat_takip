@@ -8,6 +8,9 @@
   mevzuat-collect run KOD|all [--channel K] [--max-details N]
                                                   # tam tarama: detay + ekler + arşiv + DB (CRAWL_MODE=local;
                                                   # DMZ kurulumunda ``mevzuat-crawler run`` kullanılır)
+  mevzuat-collect repair-attachments KOD [--channel K] [--dry-run] [--reopen] [--max-attachments N] [--limit N]
+                                                  # arşivde eksik kalan ekleri yeniden getirir (CRAWL_MODE=local;
+                                                  # DMZ kurulumunda ``mevzuat-crawler repair-attachments``)
   mevzuat-collect ca-fetch HOST [HOST ...]        # zincirini eksik gönderen sunucunun ara sertifikasını AIA'dan
                                                   # indirip doğrular ve config/certs/ altına yazar
 """
@@ -162,6 +165,27 @@ def cmd_run(args) -> int:
     return rc
 
 
+def cmd_repair_attachments(args) -> int:
+    settings = get_settings()
+    store = SqlCrawlStore(make_sessionmaker(settings.database_url), get_storage(settings))
+    source = load_sources(settings.sources_file).get(args.code)
+    try:
+        with source_lock(source.code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
+            collector = SourceCollector(source, settings, store)
+            try:
+                rep = collector.repair_attachments(channels=args.channel, dry_run=args.dry_run, reopen=args.reopen,
+                                                   max_attachments=args.max_attachments, limit=args.limit)
+            finally:
+                collector.fetcher.close()
+    except LockBusy:
+        print(f"{source.code}: başka bir tarama sürüyor, atlandı")
+        return 1
+    print(f"{rep.source}: {rep.docs_checked} belge tarandı, {rep.docs_with_gaps} belgede eksik ek"
+          + (f" ({rep.gaps} ek; dry-run, indirme yapılmadı)" if rep.dry_run else
+             f"; alınan={rep.recovered} bekleyen={rep.pending} vazgeçilen={rep.gave_up} engelli={rep.blocked}"))
+    return 1 if rep.pending or rep.blocked else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="mevzuat-collect", description="Mevzuat kaynak toplayıcı")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -182,6 +206,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--channel", action="append")
     p.add_argument("--max-details", type=int, default=200)
     p.set_defaults(fn=cmd_run)
+    p = sub.add_parser("repair-attachments")
+    p.add_argument("code")
+    p.add_argument("--channel", action="append")
+    p.add_argument("--dry-run", action="store_true", help="yalnızca eksikleri say, indirme/yazma yapma")
+    p.add_argument("--reopen", action="store_true", help="vazgeçilmiş/kalıcı sayılan kayıtları da yeniden dene")
+    p.add_argument("--max-attachments", type=int, help="öğe başına ek sınırı (varsayılan COLLECT_MAX_ATTACHMENTS)")
+    p.add_argument("--limit", type=int, help="eksiği olan en çok bu kadar belge işle")
+    p.set_defaults(fn=cmd_repair_attachments)
     p = sub.add_parser("ca-fetch")
     p.add_argument("hosts", nargs="+")
     p.set_defaults(fn=cmd_ca_fetch)

@@ -113,9 +113,11 @@ insert {kind, source_code,     →  find_one_and_update                →  run_
                                                                            result / error
 ```
 
-- `kind=run`: "şimdi tara", yani admin API `POST /api/v1/admin/sources/{code}/run`. Portal arayüzünde henüz
-  düğmesi yok; API (`/docs`) veya `curl` ile çağrılır. API talebi boş `params` ile bırakır (tüm kanallar,
-  `max_details=200`). `channels`/`max_details` yalnızca talep belgesine elle yazılırsa kullanılır.
+- `kind=run`: "şimdi tara", yani admin API `POST /api/v1/admin/sources/{code}/run`. Portalda sağ üstteki kaynak
+  durumu panelinde her kaynağın yanında **Tara** düğmesi vardır (yalnızca `mevzuat_admin` rolüne görünür; başarılı
+  talepten sonra 60 sn kapalı kalır). API (`/docs`) veya `curl` ile de çağrılabilir. API talebi boş `params` ile
+  bırakır (tüm kanallar, `max_details=200`). `channels`/`max_details` yalnızca talep belgesine elle yazılırsa
+  kullanılır.
 - `kind=backfill`: `POST /api/v1/admin/sources/{code}/backfill` (başlangıç–bitiş farkı ≤62 gün, yani 63 takvim
   gününe kadar) veya `mevzuat-monitor backfill` (CLI'da sınır yok). Resmî Gazete'de gün gün tarar, diğer kaynaklarda normal tarama yapar
   (`monitoring/reprocess.py:backfill`).
@@ -288,7 +290,7 @@ Kullanan kanallar: BDDK `duzenlemeler`, SPK `mevzuat`, Ticaret `tuketici_mevzuat
 | Kanalda `fetch_detail: false` **veya** bağlantı kaynağın `allowed_hosts` listesi dışında (ör. KVKK → resmigazete.gov.tr PDF'i) | Detay istenmez. Liste satırının JSON anlık görüntüsü `role=listing`, `application/json` olarak saklanır. İçeriği RG kaynağı getirir, core tekilleştirmesi birleştirir |
 | Strateji içeriği zaten getirdiyse (`inline_content`: MASAK WordPress API) | Detay isteği atılmaz, içerik doğrudan saklanır |
 | Bağlantı mevzuat.gov.tr'ye gidiyorsa | `resolvers.resolve()` kanonik kimlik (`mevzuat.gov.tr:<tür>.<tertip>.<no>`), kamuya açık URL ve **iframe içerik adresi** üretir. Tam metin iframe adresinden indirilir |
-| Kanalda `attachment_pattern` var ve ana belge HTML | Detay sayfasındaki desene uyan bağlantılar (en fazla `COLLECT_MAX_ATTACHMENTS` = **5**) indirilir. İzin listesi dışındaki ek atlanır. İndirilemeyen ek yalnızca loglanır |
+| Kanalda `attachment_pattern` var ve ana belge HTML | Detay sayfasındaki desene uyan bağlantılar (en fazla `COLLECT_MAX_ATTACHMENTS` = **5**) indirilir. İzin listesi dışındaki ek atlanır. İndirilemeyen ek ana belgenin `extra.missing_attachments` listesine yazılır ve sonraki koşularda yeniden denenir (bkz. [08 §7](08-iyilestirme-plani.md)) |
 
 `_normalize_external` liste aşamasında aynı mevzuat.gov.tr belgesine farklı biçimlerde (eski `Metin.Aspx?MevzuatKod=`,
 yeni `?MevzuatNo=…`, http/https, www) verilen bağlantıları tek kimliğe indirger ve kanal içinde tekilleştirir.

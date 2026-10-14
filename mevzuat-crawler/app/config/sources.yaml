@@ -109,6 +109,9 @@ sources:
           link_selector: "a.mevzuatBaslik[href]"
           href_pattern: "."
           id_pattern: "/Mevzuat/(?:Detay|DokumanGetir)/(\\d+)"
+          # Duyuru (/Duyuru/Detay/N) ve Mevzuat (/Mevzuat/…/N) ayrı kimlik uzaylarıdır ve sayılar çakışır (147 kimlik,
+          # 13.10.2026). Önek olmadan biri diğerinin sürüm geçmişini ezer.
+          id_prefix: "mevzuat-"
           date_regex: "\\((\\d{2}\\.\\d{2}\\.\\d{4})\\s*-"
           fields: *bddk_karar_fields
           title_strip: ["^\\(\\d{2}\\.\\d{2}\\.\\d{4}\\s*-\\s*\\d+\\)\\s*"]
@@ -451,7 +454,8 @@ sources:
   - code: GIB
     name: Gelir İdaresi Başkanlığı
     base_url: https://www.gib.gov.tr
-    allowed_hosts: ["www.gib.gov.tr", "gib.gov.tr", "cdn.gib.gov.tr"]   # gib.gov.tr: API'nin siteLink alanı
+    allowed_hosts: ["gib.gov.tr", "www.gib.gov.tr", "cdn.gib.gov.tr"]
+    host_aliases: {gib.gov.tr: www.gib.gov.tr}   # www'siz adres bazı ağlarda bağlantıyı resetliyor; siteLink www'siz
     request_delay_s: 2
     verified: "2026-10-13"
     schedule: ["30 8 * * *", "0 13 * * 1-5", "0 18 * * 1-5", "30 22 * * *"]
@@ -459,8 +463,7 @@ sources:
     notes: >
       Site bir Next.js uygulaması; detay sayfaları istemcide oluşur (HTML'de metin yok). İçerik ön yüzün kullandığı
       /api/gibportal/ JSON API'sinden alınır; uç noktalar yalnızca POST + JSON gövde kabul eder (GET → 405). Metin
-      'description' alanında gelir (inline), ekler cdn.gib.gov.tr'den indirilir. İstekler www.gib.gov.tr'ye gider;
-      öğe adresi API'nin verdiği siteLink'tir (https://gib.gov.tr/…, aynı site). Tebliğ listesi yalnız kanunId
+      'description' alanında gelir (inline), ekler cdn.gib.gov.tr'den indirilir. Tebliğ listesi yalnız kanunId
       verildiğinde tarihe göre sıralanır; tebliğlerin %98'ini içeren 17 kanun ayrı ayrı sorgulanır (13.10.2026 sayımı).
       Konsolide (tümgüncel) güncellemeler yalnız listenin başında kalan kayıtlar için yakalanır (tebliğde kanun başına
       RG tarihine göre ilk 5, yönetmelikte en yeni 20 kayıt).
@@ -476,6 +479,7 @@ sources:
           method: POST
           urls: ["https://www.gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC"]
           body: {status: 2}
+          max_pages: 10   # kesinti sonrası telafi: sayfadaki hiçbir öğe arşivde yoksa sonraki sayfaya geçer
           items_path: resultContainer.content
           id: "ozelge-{id}"
           url: "{siteLink}"
@@ -585,6 +589,7 @@ sources:
     name: Kamu Gözetimi, Muhasebe ve Denetim Standartları Kurumu
     base_url: https://www.kgk.gov.tr
     allowed_hosts: ["www.kgk.gov.tr", "kgk.gov.tr"]
+    host_aliases: {kgk.gov.tr: www.kgk.gov.tr}   # www'siz adres bazı ağlarda bağlantıyı resetliyor; ekler www'siz gelebiliyor
     verified: "2026-10-13"
     schedule: ["0 10 * * 1-5", "0 17 * * 1-5"]
     expected: {silence_tolerance_hours: 336, business_days_only: true, min_items_per_run: 1}

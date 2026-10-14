@@ -4,6 +4,8 @@
   mevzuat-crawler check                           # MongoDB bağlantısı, indeksler, aktarılmayı bekleyen kayıtlar
   mevzuat-crawler run KOD|all [--channel K] [--max-details N]   # elle tarama (Mongo'ya yazar)
   mevzuat-crawler backfill KOD --from YYYY-MM-DD --to YYYY-MM-DD
+  mevzuat-crawler repair-attachments KOD [--channel K] [--dry-run] [--reopen] [--max-attachments N] [--limit N]
+                                                  # arşivde eksik kalan ekleri (CDN engeli vb.) yeniden getirir
   mevzuat-crawler healthcheck                     # konteyner sağlık kontrolü (sinyal dosyası taze mi)
 
 Kaynak erişim testi ve ara sertifika için ``mevzuat-collect check-access`` / ``ca-fetch`` aynı imajda kullanılır.
@@ -71,6 +73,19 @@ def cmd_backfill(args) -> int:
     return 0
 
 
+def cmd_repair_attachments(args) -> int:
+    from app.crawler.service import SourceBusy
+
+    try:
+        out = _service().repair_attachments(args.code, channels=args.channel, dry_run=args.dry_run, reopen=args.reopen,
+                                            max_attachments=args.max_attachments, limit=args.limit)
+    except SourceBusy:
+        print(f"{args.code}: başka bir tarama sürüyor, atlandı")
+        return 1
+    print(json.dumps(out, ensure_ascii=False))
+    return 1 if out["pending"] or out["blocked"] else 0
+
+
 def cmd_healthcheck(args) -> int:
     s = get_settings()
     try:
@@ -96,6 +111,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from", dest="date_from", required=True)
     p.add_argument("--to", dest="date_to", required=True)
     p.set_defaults(fn=cmd_backfill)
+    p = sub.add_parser("repair-attachments", help="arşivde eksik kalan ekleri yeniden getirir")
+    p.add_argument("code")
+    p.add_argument("--channel", action="append")
+    p.add_argument("--dry-run", action="store_true", help="yalnızca eksikleri say, indirme/yazma yapma")
+    p.add_argument("--reopen", action="store_true", help="vazgeçilmiş/kalıcı sayılan kayıtları da yeniden dene")
+    p.add_argument("--max-attachments", type=int, help="öğe başına ek sınırı (varsayılan COLLECT_MAX_ATTACHMENTS)")
+    p.add_argument("--limit", type=int, help="eksiği olan en çok bu kadar belge işle")
+    p.set_defaults(fn=cmd_repair_attachments)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

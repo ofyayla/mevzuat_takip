@@ -31,7 +31,7 @@ kaldırır. Crawler, internete çıkış yalnızca DMZ sunucusunda olduğu için
 | 5 | PostgreSQL veritabanı ve kullanıcı | `mevzuat` DB; `audit_event` için UPDATE/DELETE yetkisi verilmez | DBA |
 | 6 | MongoDB kullanıcıları | mevzuat-core `deploy/mongo/init-users.js` (`mevzuat_crawler`, `mevzuat_core`) | Mongo yöneticisi |
 | 7 | Redis DB numarası | `redis-master.artint.svc` paylaşımlı; boş numara (UAT 5, dev 6 varsayıldı) | Platform ekibi |
-| 8 | Firewall: DMZ → internet 443 | Allowlist: `config/sources.yaml` alan adları (`mevzuat-collect sources`). 13.10.2026'da eklenen HMB/GİB/KGK için: `www.hmb.gov.tr`, `ms.hmb.gov.tr`, `www.gib.gov.tr`, `gib.gov.tr` (API'nin verdiği belge adresleri), `cdn.gib.gov.tr`, `www.kgk.gov.tr` (ve kök/`www` eşleri) | Ağ / Bilgi Güvenliği |
+| 8 | Firewall: DMZ → internet 443 | Allowlist: `config/sources.yaml` alan adları (`mevzuat-collect sources`). 13.10.2026'da eklenen HMB/GİB/KGK için: `www.hmb.gov.tr`, `ms.hmb.gov.tr`, `www.gib.gov.tr` (`gib.gov.tr` istekleri `host_aliases` ile buraya çevrilir), `cdn.gib.gov.tr`, `www.kgk.gov.tr` (ve kök/`www` eşleri) | Ağ / Bilgi Güvenliği |
 | 9 | Firewall: DMZ → MongoDB 27017 | 192.168.18.35 → 10.155.7.195:27017 | Ağ |
 | 10 | DMZ'ye imaj taşıma yolu | DMZ → Nexus 9099 izni **veya** LAN'dan DMZ'ye dosya kopyalama | Ağ / Bilgi Güvenliği |
 | 11 | DNS | `mevzuat-takip.artinttest.albarakaturk.local` → ingress | Ağ |
@@ -164,7 +164,7 @@ Bu aşamada portal açılır ama crawler çalışmadığı için izleme `crawler
 
 1. `mevzuat-crawler check`: "aktarılmayı bekleyen belge" birkaç dakika içinde 0'a iner (ingest her dakika çalışır).
 2. Portal durum çubuğu / `GET /api/v1/sources/health`: `crawler_down` kapanır, kaynaklar `ok`.
-3. Portaldan "şimdi tara" → talep ≤15 sn içinde DMZ'de alınır (`journalctl -u mevzuat-crawler`).
+3. Portaldan "şimdi tara" (kaynak durumu panelinde **Tara**, admin rolü) → talep ≤15 sn içinde DMZ'de alınır (`journalctl -u mevzuat-crawler`).
 4. `kubectl -n artint exec deploy/mevzuat-core -- mevzuat-monitor audit-verify` → `ok`.
 5. İlk günlerde yeni düzenlemelerin portala düştüğü ve YZ alanlarının dolduğu kontrol edilir (runbook §6).
 

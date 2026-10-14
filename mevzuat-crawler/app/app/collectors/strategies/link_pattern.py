@@ -18,6 +18,7 @@ params:
   date_selector: tarihin, öğe kapsayıcısı içindeki CSS seçicisi (opsiyonel; date_regex'ten önce denenir)
   date_regex: bağlantı/üst eleman metninde tarih regex'i (opsiyonel)
   title_strip: başlıktan silinecek regex listesi (ör. tarih, "Yeni" etiketi)
+  id_prefix: kimliğin başına eklenen önek (aynı sayıyı paylaşan ayrı kimlik uzayları için; opsiyonel)
   id_pattern: kimlik regex'i; version_pattern: sürüm anahtarı regex'i (ör. TCMB 'CACHEID=...')
   pagination: css_list ile aynı
 """
@@ -128,7 +129,7 @@ class LinkPatternStrategy:
         if p.get("version_pattern") and (m := re.search(p["version_pattern"], link)):
             version = m.group(1) if m.groups() else m.group(0)
         return ItemRef(source=ctx.source.code, channel=ctx.channel.name,
-                       external_id=external_id(link, p.get("id_pattern")), url=link, title=title,
+                       external_id=external_id(link, p.get("id_pattern"), p.get("id_prefix")), url=link, title=title,
                        published_at=published, category=ctx.channel.category, version_key=version,
                        extra=extra), container
 
