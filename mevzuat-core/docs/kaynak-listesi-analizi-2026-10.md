@@ -92,7 +92,7 @@ Durum: ✅ mevcut · 🟡 mevcut kaynakta yeni kanal/doğrulama · 🆕 yeni kur
 | 8 | Hazine ve Maliye Bakanlığı | hmb.gov.tr | ✅ (13.10) | A | `HMB/duyurular` (WP REST, haberler dahil, sınav hariç), `HMB/sayfalar`. Bkz. §8 |
 | 9 | MASAK | masak.hmb.gov.tr | ✅ | | WordPress REST |
 | 10 | MASAK — Sıkça Sorulan Sorular | masak.hmb.gov.tr/sikca-sorulan-sorular | 🟡 | A | `pages` uç noktası + `modified_after` ile muhtemelen kapsanıyor; **SSS değişikliğinin yakalandığı doğrulanmalı**, gerekirse içerik-hash'li ayrı kanal |
-| 11 | Gelir İdaresi Başkanlığı | gib.gov.tr | ✅ (13.10) | A | 8 kanal (JSON API): özelge, sirküler, tebliğ, CBK, iç genelge, yönetmelik, taslak, mevzuat duyuruları. Bkz. §8 |
+| 11 | Gelir İdaresi Başkanlığı | www.gib.gov.tr | ✅ (13.10) | A | 8 kanal (JSON API): özelge, sirküler, tebliğ, CBK, iç genelge, yönetmelik, taslak, mevzuat duyuruları. Bkz. §8 |
 | 12 | Ticaret Bakanlığı | ticaret.gov.tr | ✅ | | duyurular + tüketici mevzuatı |
 | 13 | Rekabet Kurumu | rekabet.gov.tr | ✅ | | |
 | 14 | KVKK | kvkk.gov.tr | ✅ | | |

@@ -31,7 +31,7 @@ kaldırır. Crawler, internete çıkış yalnızca DMZ sunucusunda olduğu için
 | 5 | PostgreSQL veritabanı ve kullanıcı | `mevzuat` DB; `audit_event` için UPDATE/DELETE yetkisi verilmez | DBA |
 | 6 | MongoDB kullanıcıları | mevzuat-core `deploy/mongo/init-users.js` (`mevzuat_crawler`, `mevzuat_core`) | Mongo yöneticisi |
 | 7 | Redis DB numarası | `redis-master.artint.svc` paylaşımlı; boş numara (UAT 5, dev 6 varsayıldı) | Platform ekibi |
-| 8 | Firewall: DMZ → internet 443 | Allowlist: `config/sources.yaml` alan adları (`mevzuat-collect sources`). 13.10.2026'da eklenen HMB/GİB/KGK için: `www.hmb.gov.tr`, `ms.hmb.gov.tr`, `gib.gov.tr`, `cdn.gib.gov.tr`, `www.kgk.gov.tr` (ve kök/`www` eşleri) | Ağ / Bilgi Güvenliği |
+| 8 | Firewall: DMZ → internet 443 | Allowlist: `config/sources.yaml` alan adları (`mevzuat-collect sources`). 13.10.2026'da eklenen HMB/GİB/KGK için: `www.hmb.gov.tr`, `ms.hmb.gov.tr`, `www.gib.gov.tr` (`gib.gov.tr` istekleri `host_aliases` ile buraya çevrilir), `cdn.gib.gov.tr`, `www.kgk.gov.tr` (ve kök/`www` eşleri) | Ağ / Bilgi Güvenliği |
 | 9 | Firewall: DMZ → MongoDB 27017 | 192.168.18.35 → 10.155.7.195:27017 | Ağ |
 | 10 | DMZ'ye imaj taşıma yolu | DMZ → Nexus 9099 izni **veya** LAN'dan DMZ'ye dosya kopyalama | Ağ / Bilgi Güvenliği |
 | 11 | DNS | `mevzuat-takip.artinttest.albarakaturk.local` → ingress | Ağ |
