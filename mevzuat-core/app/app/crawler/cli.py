@@ -4,6 +4,7 @@
   mevzuat-crawler check                           # MongoDB bağlantısı, indeksler, aktarılmayı bekleyen kayıtlar
   mevzuat-crawler run KOD|all [--channel K] [--max-details N]   # elle tarama (Mongo'ya yazar)
   mevzuat-crawler backfill KOD --from YYYY-MM-DD --to YYYY-MM-DD
+  mevzuat-crawler reset-source KOD [--yes]        # kaynağın Mongo kayıtlarını siler (önce sayar; --yes ile siler)
   mevzuat-crawler repair-attachments KOD [--channel K] [--dry-run] [--reopen] [--max-attachments N] [--limit N]
                                                   # arşivde eksik kalan ekleri (CDN engeli vb.) yeniden getirir
   mevzuat-crawler healthcheck                     # konteyner sağlık kontrolü (sinyal dosyası taze mi)
@@ -86,6 +87,28 @@ def cmd_repair_attachments(args) -> int:
     return 1 if out["pending"] or out["blocked"] else 0
 
 
+def cmd_reset_source(args) -> int:
+    from app.crawler.service import SourceBusy
+
+    code = args.code.upper()
+    try:
+        out = _service().reset_source(code, dry_run=not args.yes)
+    except KeyError:
+        print(f"{code}: tanımlı kaynak değil")
+        return 1
+    except SourceBusy:
+        print(f"{code}: bir tarama sürüyor ya da kilit tutuluyor; bitmesini bekleyin ya da servisi durdurun")
+        return 1
+    print(json.dumps(out, ensure_ascii=False))
+    if out["deleted"]:
+        print(f"{code} Mongo kayıtları silindi. Sıradaki adımlar: ana servisin veritabanındaki {code} kayıtlarını silin "
+              "(docs/ogrenme-rehberi/08-iyilestirme-plani.md §7.4), sonra servisleri başlatın; ilk tarama BASELINE olur.")
+    else:
+        print("Silinmedi (yalnızca sayım). Silmek için --yes ekleyin. NOT: ana servis (PostgreSQL) kayıtları bu komutla "
+              "silinmez; önce ingest/beat/worker'ı durdurun.")
+    return 0
+
+
 def cmd_healthcheck(args) -> int:
     s = get_settings()
     try:
@@ -111,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from", dest="date_from", required=True)
     p.add_argument("--to", dest="date_to", required=True)
     p.set_defaults(fn=cmd_backfill)
+    p = sub.add_parser("reset-source", help="kaynağın Mongo kayıtlarını siler (varsayılan: yalnızca sayar)")
+    p.add_argument("code")
+    p.add_argument("--yes", action="store_true", help="gerçekten sil (yoksa yalnızca sayım)")
+    p.set_defaults(fn=cmd_reset_source)
     p = sub.add_parser("repair-attachments", help="arşivde eksik kalan ekleri yeniden getirir")
     p.add_argument("code")
     p.add_argument("--channel", action="append")

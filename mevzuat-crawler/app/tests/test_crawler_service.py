@@ -222,3 +222,38 @@ def test_stop_flag_interrupts_rg_backfill_and_requeues_request_from_unfinished_d
     got = get_crawl_request(mdb, rid)
     assert got["status"] == "pending" and got["params"]["date_from"] == "2026-09-01"
     svc.pool.shutdown()
+
+
+def test_reset_source_counts_first_then_deletes_under_the_source_lock(remote, mdb):
+    """reset-source: varsayılan yalnızca sayar; --yes siler; kaynak kilitliyken (koşu sürerken) reddeder; sonraki tarama
+    sıfırdan, BASELINE olarak başlar (eski baseline durumu taşınmaz)."""
+    settings, _ = remote
+    src, pages = make_source(), pages_v1()
+    svc = CrawlerService(settings, mdb, sources=[src], fetcher_factory=lambda s: DictFetcher(s, settings, pages))
+    svc.run_source("ORNEK")
+    svc.run_source("ORNEK")
+    mdb["crawl_requests"].insert_one({"source_code": "ORNEK", "kind": "run", "status": "done"})
+    mdb[DOCS].insert_one({"source_code": "BASKA", "external_id": "x", "role": "main"})     # başka kaynağa dokunulmaz
+
+    out = svc.reset_source("ORNEK")                                       # dry_run varsayılan
+    assert out["deleted"] is False and out["documents"] == 3 and out["attachments"] == 1 and out["runs"] == 2
+    assert mdb[DOCS].count_documents({"source_code": "ORNEK"}) == 3
+
+    assert acquire_lock(mdb, "collect:ORNEK", "baska-host", 3600)         # bir koşu sürüyor
+    with pytest.raises(SourceBusy):
+        svc.reset_source("ORNEK", dry_run=False)
+    assert mdb[DOCS].count_documents({"source_code": "ORNEK"}) == 3
+
+    mdb[LOCKS].delete_many({})
+    out = svc.reset_source("ORNEK", dry_run=False)
+    assert out["deleted"] is True
+    assert [mdb[c].count_documents({"source_code": "ORNEK"}) for c in (DOCS, RUNS, "crawl_requests")] == [0, 0, 0]
+    assert mdb[DOCS].count_documents({"source_code": "BASKA"}) == 1
+    with pytest.raises(KeyError):
+        svc.reset_source("YOK")
+
+    rep = SourceCollector(src, settings, MongoCrawlStore(mdb),
+                          fetcher=DictFetcher(src, settings, pages)).run()
+    assert rep.new == 2 and rep.channels[0].baseline                       # sıfırdan: baseline modunda
+    assert all(d["is_baseline"] for d in mdb[DOCS].find({"source_code": "ORNEK"}))
+    svc.pool.shutdown()

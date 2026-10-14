@@ -30,6 +30,9 @@ from app.collectors.config import SourceConfig, load_sources
 from app.collectors.runner import SourceCollector
 from app.crawler.mongo_store import MongoCrawlStore
 from app.mongo import (
+    DOCS,
+    REQUESTS,
+    RUNS,
     acquire_lock,
     claim_crawl_request,
     ensure_indexes,
@@ -114,6 +117,36 @@ class CrawlerService:
                 col.fetcher.close()
         out = dataclasses.asdict(rep)
         log.info("ek onarımı bitti %s", out)
+        return out
+
+    def reset_source(self, code: str, *, dry_run: bool = True) -> dict:
+        """Kaynağın Mongo kayıtlarını (belgeler, taramalar, talepler) siler; sonraki tarama sıfırdan, BASELINE olarak başlar.
+
+        Kaynak kilidi alınır: bu kaynağı tarayan (zamanlanmış ya da elle) bir koşu varken reddedilir (``SourceBusy``).
+        Böylece koşunun ortasında silinip baseline durumunun eski veriden kalması (kayıtların baseline'sız yeni sayılması)
+        önlenir. Yalnızca crawler'ın Mongo'sunu temizler: ana servisin veritabanı (PostgreSQL) ve GridFS içeriği
+        (içerik hash'iyle paylaşıldığı için bırakılır) ayrıca ele alınmalıdır. ``dry_run``: yalnızca sayar.
+        """
+        if code not in self.sources:
+            raise KeyError(code)
+        flt = {"source_code": code}
+        with self._lock(code):
+            counts = {"documents": self.db[DOCS].count_documents(flt),
+                      "attachments": self.db[DOCS].count_documents({**flt, "role": "attachment"}),
+                      "runs": self.db[RUNS].count_documents(flt),
+                      "requests": self.db[REQUESTS].count_documents(flt),
+                      "unsynced_documents": self.db[DOCS].count_documents({**flt, "synced": False})}
+            out = {"source": code, "dry_run": dry_run, **counts, "deleted": False}
+            if dry_run:
+                return out
+            # Sıra önemli: baseline bilgisi tarama kayıtlarında (``fetch_runs.channels``) tutulur. Önce onlar silinirse
+            # yarıda kalan bir silme "belgeler duruyor, baseline yeniden açık" ile sonuçlanır (zararsız); tersi sırada
+            # "belgeler yok ama baseline kapalı" kalır ve tüm içerik baseline'sız yeni sayılırdı.
+            self.db[RUNS].delete_many(flt)
+            self.db[DOCS].delete_many(flt)
+            self.db[REQUESTS].delete_many(flt)
+            out["deleted"] = True
+        log.warning("%s kaynağının Mongo kayıtları silindi: %s", code, out)
         return out
 
     def run_backfill(self, code: str, date_from: date, date_to: date) -> dict:

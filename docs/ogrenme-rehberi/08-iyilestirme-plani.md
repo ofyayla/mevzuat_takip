@@ -294,7 +294,19 @@ duzenleme_taslaklari, duzenlemeler). Duyuru ailesi (`/Duyuru/Detay/N`) eski say�
 kimlik uzayı ayrılır; `test_external_ids_do_not_collide_across_channels` fixture'lı tüm kaynaklarda aynı kimliğin farklı
 URL'ye düşmesini engeller (önek olmadan 100+ çakışma yakalıyordu).
 
-**Mevcut veri için (geliştirme ortamı):** eski çalışmada oluşan karışık sürüm geçmişi (aynı `external_id` altında
+**Mevcut veri için (geliştirme ortamı) — önerilen yol `reset-source`:**
+```
+mevzuat-crawler reset-source BDDK          # yalnızca sayar
+mevzuat-crawler reset-source BDDK --yes    # crawler Mongo'sundan BDDK belge/tarama/talep kayıtlarını siler
+```
+Komut kaynak kilidini alır: kaynağı tarayan bir koşu sürerken (zamanlanmış ya da elle) reddeder. Bu önemli: 14 Ekim
+2026'da temizlik 11:00'de başlayan bir BDDK koşusunun ortasında yapıldı; koşu baseline durumunu eski veriden
+(`baseline_complete=true`) taşıdı ve sonraki koşular ~630 belgeyi baseline'sız aldı (84'ü YZ hattına girdi).
+Silme sırası bilinçli: önce `fetch_runs` (baseline bilgisinin kaynağı), sonra belgeler. Komut yalnızca crawler'ın
+Mongo'sunu temizler; ana servis (PostgreSQL) için aşağıdaki adımlar ve `alert` tablosundaki BDDK kayıtları ayrıca
+silinmelidir. Sıra: ingest/beat/worker'ı durdur → `reset-source --yes` → PostgreSQL temizliği → servisleri başlat.
+
+Elle yöntem (komut yoksa): eski çalışmada oluşan karışık sürüm geçmişi (aynı `external_id` altında
 kanalı değişen sürümler) ve önekli yeni kimlikler nedeniyle BDDK'nın arşivi sıfırlanıp yeniden toplanmalı; böylece
 ilk taramada tüm içerik `BASELINE` olur ve YZ hattına girmez. Sıra: (1) crawler'ı durdur, (2) BDDK `raw_documents`,
 `fetch_runs` ve ilgili düzenleme/ingest kayıtlarını sil (Mongo ve ana servis veritabanı), (3) crawler'ı başlat.
@@ -302,6 +314,11 @@ Silmeden bırakılırsa: Mevzuat kanalları ~1100 öğeyi yeni (BASELINE olmayan
 belgesi olan kimlikler kimlik çakışması korumasıyla atlanır (`id_conflicts`).
 Üretime geçişte aynı adımlar uygulanmalı ya da önce yeniden-baseline aracı yazılmalıdır.
 Çakışmanın ölçümü (mongosh): `db.raw_documents.aggregate([{$match:{source_code:"BDDK"}},{$group:{_id:"$external_id",ch:{$addToSet:"$channel"},v:{$max:"$version"}}},{$match:{"ch.1":{$exists:true}}},{$sort:{v:-1}},{$limit:20}])`
+
+### 7.4b Ek sınırı aşımı artık hata sayılmaz
+`COLLECT_MAX_ATTACHMENTS` aşıldığında fazla ekler `missing_attachments`'a kalıcı kayıt olarak yazılır ama
+`ChannelReport.att_over_limit` ile ayrı sayılır, koşu hata listesine girmez ve `warnings`'e tek satır eklenir
+(HMB `sayfalar`: "50 ek kalıcı olarak alınamadı" yanıltıcıydı). Gerçek hata (kalıcı 404, deneme sınırı) `att_gave_up`.
 
 ### 7.5 Yeni ayarlar ve doğrulama
 `COLLECT_HOST_BREAKER_THRESHOLD`, `COLLECT_ATTACHMENT_MAX_ATTEMPTS`, `COLLECT_ATTACHMENT_RETRY_ITEMS` (koşu başına

@@ -522,9 +522,12 @@ def test_attachments_over_the_limit_are_recorded_not_silently_dropped(settings):
     settings.collect_max_attachments = 1
     eks = ["https://ornek.gov.tr/ek/1.pdf", "https://ornek.gov.tr/ek/2.pdf"]
     c, sf = collector(settings, make_source(), ek_pages(*eks))
-    c.run()
+    rep = c.run()
     missing = parent_of(sf).extra["missing_attachments"]
     assert [m["url"] for m in missing] == [eks[1]] and missing[0]["permanent"] and "sınırı" in missing[0]["last_error"]
+    ch = rep.channels[0]                                         # hata değil: koşu başarılı, hata listesi temiz
+    assert rep.status == "success" and rep.errors == [] and ch.att_over_limit == 1 and ch.att_gave_up == 0
+    assert any("ek sınırı" in w for w in ch.warnings)
 
 
 # ------------------------------------------------------------------------------------------------ ek onarımı

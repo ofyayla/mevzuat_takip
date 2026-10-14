@@ -61,6 +61,7 @@ class ChannelReport:
     att_pending: int = 0            # indirilemeyen, sonraki koşularda yeniden denenecek ek (extra.missing_attachments)
     att_recovered: int = 0          # bu koşuda geç de olsa alınan ek
     att_gave_up: int = 0            # kalıcı hata ya da deneme sınırı nedeniyle bırakılan ek (onarım komutuyla açılır)
+    att_over_limit: int = 0         # COLLECT_MAX_ATTACHMENTS aşıldığı için alınmayan ek (hata değil, bilgi; uyarıya yazılır)
     stopped: bool = False           # servis durdurulduğu için koşu yarıda bırakıldı
     incomplete: bool = False        # strateji listeyi eksik topladı (ör. bir indeks sayfası alınamadı)
     error: str | None = None
@@ -148,6 +149,7 @@ def _normalize_external(items: list[ItemRef]) -> list[ItemRef]:
     return out
 
 
+OVER_LIMIT = "ek sınırı"       # missing_attachments.last_error öneki: sınır aşımı (yeniden denenmez, hata sayılmaz)
 MAX_MISSING_ENTRIES = 50   # bir öğenin extra.missing_attachments listesi bundan uzun tutulmaz
 
 
@@ -205,7 +207,7 @@ def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, 
             if n > max_attachments:   # sessizce düşmesin: görünür ama yeniden denenmeyen kayıt
                 if missing is not None and len(missing) < MAX_MISSING_ENTRIES:
                     missing.append(_missing_entry(url, title, FetchError(url, "ek sınırı aşıldı"), now,
-                                                  reason=f"ek sınırı ({max_attachments}) aşıldı"))
+                                                  reason=f"{OVER_LIMIT} ({max_attachments}) aşıldı"))
                 continue
             if not source.host_allowed(url):
                 log.info("%s: ek atlandı (izinli olmayan host): %s", source.code, url)
@@ -389,8 +391,13 @@ class SourceCollector:
             else:
                 rep.new += 1
             is_baseline = baseline and prev is None
+            over = [m for m in missing if m["last_error"].startswith(OVER_LIMIT)]
             rep.att_pending += sum(1 for m in missing if not m["permanent"])
-            rep.att_gave_up += sum(1 for m in missing if m["permanent"])
+            rep.att_gave_up += sum(1 for m in missing if m["permanent"]) - len(over)
+            if over:   # hata değil: sayfada sınırdan çok ek var. Koşuyu/hata listesini kirletmez, uyarıya tek satır
+                rep.att_over_limit += len(over)
+                rep.warnings.append(f"{ref.url}: {len(over)} ek, ek sınırı ({self.settings.collect_max_attachments}) "
+                                    f"aşıldığı için alınmadı")
             parent = self._new_doc(channel, ref, main, key, sha, version, listing_hash, is_baseline, missing)
             attachments, seen_att = [], set()
             for att in docs[1:]:
@@ -485,9 +492,9 @@ class SourceCollector:
                 m = known.get(url)
                 if n > cap:   # sınır hâlâ aşılıyor: kayıt kalır (daha yüksek --max-attachments ile denenir)
                     entries.append(m or _missing_entry(url, title, FetchError(url, "ek sınırı aşıldı"), now,
-                                                       reason=f"ek sınırı ({cap}) aşıldı"))
+                                                       reason=f"{OVER_LIMIT} ({cap}) aşıldı"))
                     continue
-                over_limit = bool(m and "ek sınırı" in m.get("last_error", ""))   # hiç denenmemiş kayıt
+                over_limit = bool(m and m.get("last_error", "").startswith(OVER_LIMIT))   # hiç denenmemiş kayıt
                 if m and m.get("permanent") and not over_limit and not reopen:
                     entries.append(m)
                     rep.gave_up += 1
