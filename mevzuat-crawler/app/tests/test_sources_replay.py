@@ -267,14 +267,14 @@ def test_gib_api(sources, settings):
     assert {i.extra["kanun_no"] for i in tebligler} >= {"193", "213", "3065", "5520"}
 
     taslak = run_channel(sources, settings, "GIB", "taslaklar").items[0]
-    assert taslak.url == "https://gib.gov.tr/mevzuat/taslak/16" and taslak.category == "Düzenleme Taslağı"
+    assert taslak.url == "https://www.gib.gov.tr/mevzuat/taslak/16" and taslak.category == "Düzenleme Taslağı"
 
 
 def test_gib_duyuru_attachment(sources, settings):
     source, fetcher = replay(sources, settings, "GIB")
     ch = source.channel("mevzuat_duyurulari")
     ref = next(i for i in list_channel(source, ch, fetcher, now=RECORDED_AT).items if i.external_id == "duyuru-19152")
-    assert ref.url.startswith("https://gib.gov.tr/duyuru-arsivi/guncel/19152_")
+    assert ref.url.startswith("https://www.gib.gov.tr/duyuru-arsivi/guncel/19152_")
     docs = fetch_documents(source, ch, ref, fetcher, max_attachments=5)
     assert [d.role for d in docs] == ["main", "attachment"]   # SPA detay sayfası indirilmez, metin inline
     assert docs[0].content == ref.inline_content

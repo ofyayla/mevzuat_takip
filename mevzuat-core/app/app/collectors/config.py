@@ -4,7 +4,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -41,6 +41,9 @@ class SourceConfig(BaseModel):
     client: ClientKind = "httpx"
     request_delay_s: float | None = None
     allowed_hosts: list[str] = Field(default_factory=list)
+    # İstekten önce host değiştirme (ör. kgk.gov.tr → www.kgk.gov.tr): bazı ağlarda www'siz alan adı bağlantıyı
+    # resetliyor, sayfalardaki bağlantılar ise www'siz gelebiliyor. Saklanan adres ve kimlikler değişmez.
+    host_aliases: dict[str, str] = Field(default_factory=dict)
     schedule: list[str] = Field(default_factory=list)   # cron ifadeleri (Europe/Istanbul)
     verified: str | None = None      # canlı sitede en son doğrulandığı tarih; None = doğrulanmadı
     notes: str | None = None
@@ -57,6 +60,15 @@ class SourceConfig(BaseModel):
     def host_allowed(self, url: str) -> bool:
         host = urlparse(url).hostname or ""
         return any(fnmatch.fnmatch(host, pattern) for pattern in self.allowed_hosts)
+
+    def request_url(self, url: str) -> str:
+        """İstek atılacak adres: host_aliases'taki host'lar karşılığıyla değiştirilir."""
+        parts = urlsplit(url)
+        alias = self.host_aliases.get(parts.hostname or "")
+        if not alias:
+            return url
+        netloc = alias if parts.port is None else f"{alias}:{parts.port}"
+        return urlunsplit(parts._replace(netloc=netloc))
 
     def channel(self, name: str) -> ChannelConfig:
         for ch in self.channels:

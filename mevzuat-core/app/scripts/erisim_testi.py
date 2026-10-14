@@ -28,24 +28,35 @@ from urllib.parse import urlparse
 TARGETS = [
     ("RESMI_GAZETE", "https://www.resmigazete.gov.tr/"),
     ("BDDK", "https://www.bddk.org.tr/"),
+    ("BDDK_APEX", "https://bddk.org.tr/"),
     ("SPK", "https://spk.gov.tr/"),
+    ("SPK_WWW", "https://www.spk.gov.tr/"),
     ("SPK_MEVZUAT", "https://mevzuat.spk.gov.tr/"),
     ("TCMB", "https://www.tcmb.gov.tr/"),
+    ("TCMB_APEX", "https://tcmb.gov.tr/"),
     ("KVKK", "https://www.kvkk.gov.tr/"),
+    ("KVKK_APEX", "https://kvkk.gov.tr/"),
     ("MASAK", "https://masak.hmb.gov.tr/portal/v2/posts?per_page=1"),
     ("MASAK_EKLER", "https://ms.hmb.gov.tr/"),
     ("TICARET", "https://ticaret.gov.tr/"),
+    ("TICARET_WWW", "https://www.ticaret.gov.tr/"),
     ("REKABET", "https://www.rekabet.gov.tr/"),
+    ("REKABET_APEX", "https://rekabet.gov.tr/"),
     ("TKBB", "https://www.tkbb.org.tr/"),
+    ("TKBB_APEX", "https://tkbb.org.tr/"),
     ("HMB", "https://www.hmb.gov.tr/portal/v2/posts?per_page=1"),
+    ("HMB_APEX", "https://hmb.gov.tr/"),
     # GİB liste uç noktaları yalnız POST kabul eder; erişim testi için GET'e açık olanı kullanılır
-    ("GIB", "https://gib.gov.tr/api/gibportal/search/mevzuatLastAdded"),
+    ("GIB", "https://www.gib.gov.tr/api/gibportal/search/mevzuatLastAdded"),
+    ("GIB_APEX", "https://gib.gov.tr/"),
     ("GIB_EKLER", "https://cdn.gib.gov.tr/"),
     ("KGK", "https://www.kgk.gov.tr/"),
+    ("KGK_APEX", "https://kgk.gov.tr/"),
     ("MEVZUAT_GOV", "https://www.mevzuat.gov.tr/"),
+    ("MEVZUAT_GOV_APEX", "https://mevzuat.gov.tr/"),
 ]
 # Bu siteler tarayıcı olmayan TLS imzasını engelleyebilir; asıl crawler curl_cffi (impersonate) ile bağlanır.
-IMPERSONATE = {"RESMI_GAZETE", "BDDK", "TICARET"}
+IMPERSONATE = {"RESMI_GAZETE", "BDDK", "BDDK_APEX", "TICARET", "TICARET_WWW"}
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 
