@@ -18,12 +18,17 @@ params:
   filter: {json_alanı: [izin verilen değerler]} (opsiyonel)
   method: GET (varsayılan) | POST — POST'ta istek gövdesi ``body`` JSON olarak gönderilir (GİB API'si GET'e 405 döner)
   body: {..} veya [{..}, ..] — liste ise her adres × gövde için ayrı istek (ör. GİB tebliğleri kanun başına)
+  max_pages: telafi sayfalaması üst sınırı (varsayılan 1 = kapalı). Adreste ``page=N&size=M`` olmalı. Yalnız kanal
+             baseline dışındayken ve sayfadaki HİÇBİR öğe arşivde yokken sonraki sayfa çekilir (kesinti sırasında
+             kaçan öğeler); arşivde bilinen bir öğeye ulaşılınca ya da sayfa dolu değilse durur. Sınıra
+             örtüşme bulunmadan ulaşılırsa liste ``incomplete`` sayılır
   inline_html: öğedeki HTML gövde alanı (ör. description) — içerik olarak saklanır, detay adresi indirilmez
                (istemci tarafında oluşan SPA detay sayfaları için); ekler bu HTML'den attachment_pattern ile alınır
 """
 from __future__ import annotations
 
 import hashlib
+import re
 import string
 from typing import Any
 
@@ -42,6 +47,17 @@ def _dig(data: Any, path: str | None) -> Any:
         if part:
             data = data.get(part) if isinstance(data, dict) else None
     return data
+
+
+def _with_page(url: str, page: int) -> str | None:
+    """Adresteki ``page=N`` parametresini değiştirir; parametre yoksa None (sayfalama yapılamaz)."""
+    new, n = re.subn(r"([?&]page=)\d+", rf"\g<1>{page}", url)
+    return new if n else None
+
+
+def _page_size(url: str) -> int | None:
+    m = re.search(r"[?&]size=(\d+)", url)
+    return int(m[1]) if m else None
 
 
 def _date(value: Any):
@@ -66,27 +82,48 @@ class JsonApiStrategy:
         bodies = p.get("body", {})
         bodies = bodies if isinstance(bodies, list) else [bodies]
         requests = [(url, body) for url in p["urls"] for body in (bodies if post else [None])]
+        max_pages = max(int(p.get("max_pages", 1)), 1) if ctx.known_ids else 1
+        warnings: list[str] = []
+        incomplete = False
         for url, body in requests:
-            if post:
-                resp = ctx.fetcher.post_json(url, body)
-            else:
-                resp = ctx.fetcher.get(url, accept="application/json")
-            pages += 1
-            data = _dig(resp.json(), p.get("items_path"))
-            if not isinstance(data, list):
-                continue
-            for obj in data:
-                if not isinstance(obj, dict):
-                    continue
-                keys.update(obj.keys())
-                if any(obj.get(k) not in v for k, v in allowed.items()):
-                    continue
-                ref = self._item(ctx, obj)
-                if ref and ref.external_id not in seen:
-                    seen.add(ref.external_id)
-                    items.append(ref)
+            for page in range(max_pages):
+                page_url = url if page == 0 else _with_page(url, page)
+                if page_url is None:
+                    break
+                if post:
+                    resp = ctx.fetcher.post_json(page_url, body)
+                else:
+                    resp = ctx.fetcher.get(page_url, accept="application/json")
+                pages += 1
+                data = _dig(resp.json(), p.get("items_path"))
+                if not isinstance(data, list):
+                    break
+                page_ids: list[str] = []
+                for obj in data:
+                    if not isinstance(obj, dict):
+                        continue
+                    keys.update(obj.keys())
+                    if any(obj.get(k) not in v for k, v in allowed.items()):
+                        continue
+                    ref = self._item(ctx, obj)
+                    if ref:
+                        page_ids.append(ref.external_id)
+                        if ref.external_id not in seen:
+                            seen.add(ref.external_id)
+                            items.append(ref)
+                if max_pages == 1:
+                    break
+                size = _page_size(url)
+                if not data or (size and len(data) < size):
+                    break   # son sayfa
+                if ctx.known_ids(page_ids):
+                    break   # arşivde bilinen öğeye ulaşıldı: kesinti aralığı kapandı
+                if page + 1 >= max_pages:
+                    incomplete = True
+                    warnings.append(f"{url}: {max_pages} sayfa tarandı ama arşivdeki bir öğeyle örtüşme bulunamadı")
         signature = hashlib.sha1(",".join(sorted(keys)).encode()).hexdigest()[:16] if keys else ""
-        return ChannelResult(items=items, pages_fetched=pages, signature=signature)
+        return ChannelResult(items=items, pages_fetched=pages, signature=signature, warnings=warnings,
+                             incomplete=incomplete)
 
     def _item(self, ctx: ChannelContext, obj: dict) -> ItemRef | None:
         p = ctx.channel.params

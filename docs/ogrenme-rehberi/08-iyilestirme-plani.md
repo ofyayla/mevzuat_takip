@@ -193,7 +193,7 @@ Sınırlar (dürüst not):
 |---|---|---|
 | 0.2 CI | Pipeline'a `make test` + `make lint` (Linux ajan). `.dockerignore` testleri imaja almadığından test, imajdan önce ajanda ya da `python:3.12` konteynerinde koşmalı; Mongo testleri için `mongo:7`. Linux ajan `shared.py` düzeltmesinin ikinci güvencesi. | Jenkins sahibi; ajan ortamı belirlenince |
 | 0.4 / §5 | Üretim ölçümleri | İşletim, dağıtımdan önce ve sonra |
-| 1.2 onarım | Ölçüm sıfırdan büyükse eksik ekleri yeniden getiren komut | Ölçümden sonra |
+| 1.2 onarım | ~~Eksik ekleri yeniden getiren komut~~ **Uygulandı** (§7.3): `mevzuat-crawler repair-attachments`. Çalıştırmak işletim işi | Firewall düzeldikten sonra |
 | 2.4 bölme | Uzun (saatler süren) RG backfill'inde zamanlanmış RG taramaları atlanır (`tick`). Backfill rutin ve uzun hale gelirse gün başına ayrı taleplere bölünmeli. Şimdilik ≤62 gün sınırı ve süren backfill'in kendisi bugünü de kapsıyorsa risk düşük. | Rutinleşirse |
 | 4.1 | `ALERT_WEBHOOK_URL`'i kurum izlemesine bağlama; panel/metrik | İşletim + ürün |
 | 4.2 | Sertifika hatırlatmaları: `geotrust-tls-rsa-ca-g1.pem` (2027-11-02) için 2027-09-03; `globalsign-rsa-ov-ssl-ca-2018.pem` (2028-11-21) için 2028-09-22 | Sorumlu kişinin takvimi |
@@ -253,3 +253,52 @@ Dağıtımdan sonra temizliğin çalıştığını görmek için crawler logunda
 | 3 | `--memory=1g` yeterli mi? | `podman stats` ilk haftada |
 | 4 | Gerçek MongoDB'de yeni testler geçiyor mu? | `mongo:7` ile `make test-crawler` |
 | 5 | Meşru yönlendirme izin listesi dışına çıkıyor mu? | Dağıtım sonrası log: `yönlendirme izin listesi dışına çıktı` |
+
+## 7. 13–14 Ekim 2026 crawler.log analizi sonrası iyileştirmeler
+
+Kaynak: üretim logu (GİB 14:33 ve 15:02 koşuları, BDDK saatlik `changed=200`). Bulgular ve yapılanlar:
+
+### 7.1 Teşhis
+- **GİB**: `cdn.gib.gov.tr`'ye logda hiç başarılı istek yok; `Connection reset by peer` 107 ek indirmesini düşürdü.
+  Büyük olasılıkla firewall/allowlist (`kurum-devreye-alma.md` satır 34). Kod bunu "geçici" sayıp 3 deneme (2+4 sn
+  bekleme) yapıyor, hatayı **yutuyor** ve sonraki tur öğeyi `unchanged` sayıp atlıyordu: **ekler kalıcı kayboluyordu**.
+- **GİB liste API'si**: `json_api` yalnız sayfa 0'ı çekiyordu; uzun kesintide sayfa 0'dan kayan öğeler kaçıyordu.
+- **`partial` + `errors: []`**: nedenler yalnız `channels.*.warnings` içindeydi; log özetinde ve `errors` alanında yoktu.
+- **BDDK**: `id_pattern` yalnız sayıyı alıyor. `/Duyuru/Detay/951` ile `/Mevzuat/DokumanGetir/951` aynı
+  `external_id`'ye (`951`) düşüyor (canlı sayım 13.10.2026: 1195 kimlikten **147'si** birden çok kanalda). Biri
+  diğerinin geçmişinin üstüne yazıyor; her koşuda `max_details` (200) kadar sahte "değişen" sürüm üretiliyordu.
+
+### 7.2 Uygulananlar
+| Konu | Değişiklik |
+|---|---|
+| Görünürlük | `RunReport.errors`; `fetch_run.errors` ve log özeti artık öğe/ek/liste sorunlarını içerir. Bağlantı hatalarında traceback yerine tek satırlık uyarı |
+| Devre kesici | `Fetcher`: bir host'a koşu içinde art arda `COLLECT_HOST_BREAKER_THRESHOLD` (3) bağlantı hatası → o koşuda kalan istekler beklemeden `HostUnreachable` (107 ek × ~8 sn boşa beklemez). Yeni koşu kapalı başlar, kendiliğinden iyileşir |
+| Ek borcu | İndirilemeyen ek `extra.missing_attachments`'a yazılır: `url, attempts, next_try_at (1,2,4,8,16,24 sa), last_error, permanent`. İçeriği değişmeyen öğenin yalnız ekleri yeniden denenir (ana belge yeniden inmez, yeni sürüm açılmaz). `COLLECT_ATTACHMENT_MAX_ATTEMPTS` (10) sonra "vazgeçildi". Ek sınırı (`COLLECT_MAX_ATTACHMENTS`) aşıldığında da artık sessizce düşmez, kayıt tutulur. Bekleyen ek koşuyu `partial` yapar |
+| Telafi sayfalaması | `json_api` `max_pages` (GİB kanallarında 10): baseline dışında ve sayfadaki hiçbir öğe arşivde yokken sonraki sayfa çekilir; bilinen öğeye çarpınca durur. Normal işleyişte ek istek yok. Sınıra örtüşmesiz ulaşılırsa liste `incomplete` |
+| Kimlik çakışması koruması | Aynı `external_id` başka kanalda **farklı URL** ile bulunursa öğe atlanır, `id_conflicts` sayılır, koşu `partial` olur. Sahte sürüm üretimi durur. `id_prefix` parametresi eklendi (`css_list`, `feed`, `link_pattern`) |
+
+### 7.3 Onarım komutu
+```
+mevzuat-crawler repair-attachments GIB --dry-run            # DMZ (Mongo); yalnız eksikleri sayar
+mevzuat-crawler repair-attachments GIB                      # eksikleri indirir (bekleme süresini beklemez)
+mevzuat-crawler repair-attachments GIB --reopen             # vazgeçilmişleri de yeniden dener
+mevzuat-crawler repair-attachments GIB --max-attachments 20 # ek sınırı yüzünden atlananları da alır
+```
+Arşivdeki ana belge içeriğinden ek bağlantılarını yeniden çıkarır; arşivde olmayanları indirir. Yeni `fetch_run`
+açmaz (`last_success` kaymasın). `CRAWL_MODE=local` için `mevzuat-collect repair-attachments` (Linux; `fcntl`).
+Çıkış kodu: hâlâ bekleyen/engelli ek varsa 1.
+
+### 7.4 Bekleyen karar: BDDK kimlik ayrımı (üretim verisini etkiler)
+Koruma sahte sürümleri durdurur ama çakışan ~147 belgenin **diğer** kanaldaki kopyası toplanmaz. Kalıcı çözüm
+Mevzuat ailesi kanallarına `id_prefix` vermektir; bu, ~1100 mevcut belgeyi "yeni kimlik" yapar. Göz önünde tutulacaklar:
+1. Yeni kimlikler baseline sayılmazsa YZ hattına yeni düzenleme olarak girer. Önce o kanalların baseline'ı yeniden
+   açılmalı ya da eski kayıtlardan taşıma betiği yazılmalı.
+2. Daha önce üretilmiş sahte sürümler (BDDK, çakışan kimlikler, `version > 1`) için temizlik/işaretleme kararı gerekir.
+Ölçüm sorgusu (mongosh): çakışan kimlikte kanalı değişen sürümler
+`db.raw_documents.aggregate([{$match:{source_code:"BDDK"}},{$group:{_id:"$external_id",ch:{$addToSet:"$channel"},v:{$max:"$version"}}},{$match:{"ch.1":{$exists:true}}},{$sort:{v:-1}},{$limit:20}])`
+
+### 7.5 Yeni ayarlar ve doğrulama
+`COLLECT_HOST_BREAKER_THRESHOLD`, `COLLECT_ATTACHMENT_MAX_ATTEMPTS`, `COLLECT_ATTACHMENT_RETRY_ITEMS` (koşu başına
+eki yeniden denenecek en çok öğe, 25). Core 228, crawler 141 test geçti; ruff temiz. Gerçek MongoDB ve LAN ingest
+testleri (`test_ingest.py`: geç gelen ek, Mongo onarımı) bu makinede atlandı; `mongo:7` ile bir kez koşulmalı.
+Ingest kodu okunarak geç gelen ekin mevcut ana belgeye bağlanacağı doğrulandı (`DOC_MUTABLE` içinde `extra`).

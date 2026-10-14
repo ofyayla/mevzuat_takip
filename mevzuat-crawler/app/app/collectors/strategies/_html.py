@@ -90,11 +90,13 @@ def link_title(a: Node, *, max_depth: int = 6, min_len: int = 12) -> tuple[str, 
     return text, a
 
 
-def external_id(url: str, pattern: str | None) -> str:
+def external_id(url: str, pattern: str | None, prefix: str | None = None) -> str:
+    """URL'den kaynak içinde kararlı kimlik. ``prefix``: aynı sayıyı paylaşan ayrı kimlik uzaylarını (ör. BDDK
+    /Duyuru/Detay/951 ile /Mevzuat/DokumanGetir/951) birbirinden ayırır; yoksa kimlikler çakışıp sürüm geçmişini bozar."""
     if pattern and (m := re.search(pattern, url)):
-        return next((g for g in m.groups() if g), m.group(0))
+        return (prefix or "") + next((g for g in m.groups() if g), m.group(0))
     parts = urlsplit(url)
-    return f"{parts.path}{'?' + parts.query if parts.query else ''}"
+    return f"{prefix or ''}{parts.path}{'?' + parts.query if parts.query else ''}"
 
 
 def _strip_generic(text: str, generic: str) -> str:

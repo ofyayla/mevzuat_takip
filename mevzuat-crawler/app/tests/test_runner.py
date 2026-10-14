@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.collectors.config import SourceConfig
+from app.collectors.http import FetchError, TransientFetchError
 from app.collectors.runner import SourceCollector
 from app.collectors.store import SqlCrawlStore, merge_channel_stats
 from app.db import FetchRun, RawDocument, make_sessionmaker
@@ -423,3 +424,231 @@ def test_stop_flag_leaves_run_partial_without_closing_baseline(settings):
     assert ch.stopped and rep.new == 1 and rep.status == "partial" and not ch.baseline_complete
     c.should_stop = lambda: False
     assert c.run().new == 2                                         # kalan öğeler sonraki koşuda tamamlanır
+
+
+def test_run_errors_explain_partial_status(settings):
+    """`partial` nedeni (öğe hatası) fetch_run.errors ve RunReport.errors içinde okunabilir olmalı."""
+    c, sf = flaky(settings, make_source(), pages3(), {"https://ornek.gov.tr/d/2": RuntimeError("boom")})
+    rep = c.run()
+    assert rep.status == "partial" and rep.errors and "1 öğe geçici hatayla indirilemedi" in rep.errors[0]
+    with sf() as s:
+        assert s.scalars(select(FetchRun)).one().errors == rep.errors
+
+
+# ------------------------------------------------------------------------------------------------ ek borcu + devre kesici
+EK1 = "https://ornek.gov.tr/ek/1.pdf"
+
+
+def ek_pages(*eks):
+    links = "".join(f"<a href='{e}'>ek</a>" for e in eks)
+    pages = {LIST: (listing(("/d/1", "Birinci Duyuru", "24.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": (f"<html><body>bir {links}</body></html>", "text/html")}
+    pages.update({e: (b"%PDF-1.4 " + e.encode(), "application/pdf") for e in eks})
+    return pages
+
+
+def parent_of(sf):
+    return next(r for r in docs(sf) if r.role == "main")
+
+
+def test_failed_attachment_is_tracked_then_recovered_without_refetching_main(settings):
+    reset = TransientFetchError(EK1, "ConnectError: Connection reset by peer")
+    c, sf = flaky(settings, make_source(), ek_pages(EK1), {EK1: reset})
+    rep = c.run()
+    ch = rep.channels[0]
+    assert rep.status == "partial" and ch.att_pending == 1
+    assert any("1 ek indirilemedi" in e for e in rep.errors)
+    missing = parent_of(sf).extra["missing_attachments"]
+    assert len(missing) == 1 and missing[0]["url"] == EK1 and not missing[0]["permanent"]
+    assert [r.role for r in docs(sf)] == ["main"]            # ek yok
+
+    # hemen ardından: bekleme süresi dolmadı → ek için istek atılmaz, ama koşu hâlâ "partial" görünür
+    c.fetcher.requested.clear()
+    rep = c.run()
+    assert EK1 not in c.fetcher.requested and rep.channels[0].att_pending == 1 and rep.status == "partial"
+
+    # engel kalktı, bekleme geçti → yalnız ek alınır; ana belge yeniden indirilmez, yeni sürüm açılmaz
+    del c.fetcher.errors[EK1]
+    c.fetcher.requested.clear()
+    rep = c.run(now=datetime.now(timezone.utc) + timedelta(hours=2))
+    ch = rep.channels[0]
+    assert ch.att_recovered == 1 and ch.att_pending == 0 and rep.status == "success"
+    assert "https://ornek.gov.tr/d/1" not in c.fetcher.requested and EK1 in c.fetcher.requested
+    rows = docs(sf)
+    assert [r.role for r in rows] == ["main", "attachment"] and rows[1].parent_id == rows[0].id
+    assert rows[0].version == rows[1].version == 1 and rows[1].is_latest
+    assert parent_of(sf).extra["missing_attachments"] == []
+    rep = c.run(now=datetime.now(timezone.utc) + timedelta(hours=3))      # artık borç yok
+    assert rep.status == "success" and len(docs(sf)) == 2
+
+
+def test_host_circuit_breaker_stops_hammering_an_unreachable_host(settings):
+    eks = [f"https://ornek.gov.tr/ek/{i}.pdf" for i in range(1, 6)]
+    reset = {e: TransientFetchError(e, "ConnectError: Connection reset by peer") for e in eks}
+    c, sf = flaky(settings, make_source(), ek_pages(*eks), reset)
+    rep = c.run()
+    attempted = [u for u in c.fetcher.requested if u in eks]
+    assert len(attempted) == settings.collect_host_breaker_threshold      # kalan 2 ek için istek atılmadı
+    missing = parent_of(sf).extra["missing_attachments"]
+    assert len(missing) == 5 and all(not m["permanent"] for m in missing)
+    assert any("devre kesici" in m["last_error"] for m in missing[3:])
+    assert rep.channels[0].att_pending == 5
+    assert c.fetcher.host_blocked(eks[0])
+
+
+def test_permanent_attachment_error_is_recorded_but_not_retried_and_does_not_degrade_run(settings):
+    c, sf = flaky(settings, make_source(), ek_pages(EK1), {EK1: FetchError(EK1, "HTTP 404", 404)})
+    rep = c.run()
+    ch = rep.channels[0]
+    assert rep.status == "success" and ch.att_gave_up == 1 and ch.att_pending == 0
+    m = parent_of(sf).extra["missing_attachments"][0]
+    assert m["permanent"] and m["next_try_at"] is None
+    c.fetcher.requested.clear()
+    c.run(now=datetime.now(timezone.utc) + timedelta(days=3))
+    assert EK1 not in c.fetcher.requested
+
+
+def test_attachment_gives_up_after_max_attempts(settings):
+    settings.collect_attachment_max_attempts = 2
+    c, sf = flaky(settings, make_source(), ek_pages(EK1), {EK1: TransientFetchError(EK1, "reset")})
+    c.run()
+    rep = c.run(now=datetime.now(timezone.utc) + timedelta(hours=2))   # 2. başarısız deneme → vazgeçildi
+    m = parent_of(sf).extra["missing_attachments"][0]
+    assert m["attempts"] == 2 and m["permanent"]
+    assert rep.channels[0].att_gave_up == 1 and rep.channels[0].att_pending == 0
+
+
+def test_attachments_over_the_limit_are_recorded_not_silently_dropped(settings):
+    settings.collect_max_attachments = 1
+    eks = ["https://ornek.gov.tr/ek/1.pdf", "https://ornek.gov.tr/ek/2.pdf"]
+    c, sf = collector(settings, make_source(), ek_pages(*eks))
+    c.run()
+    missing = parent_of(sf).extra["missing_attachments"]
+    assert [m["url"] for m in missing] == [eks[1]] and missing[0]["permanent"] and "sınırı" in missing[0]["last_error"]
+
+
+# ------------------------------------------------------------------------------------------------ ek onarımı
+def forget_missing(sf):
+    """Eski sürümün bıraktığı hasarı taklit eder: ek kaybolmuş ama arşivde bunu gösteren kayıt yok."""
+    with sf() as s:
+        row = s.scalars(select(RawDocument).where(RawDocument.role == "main")).one()
+        row.extra = {k: v for k, v in row.extra.items() if k != "missing_attachments"}
+        s.commit()
+
+
+def test_repair_recovers_attachments_lost_before_tracking_existed(settings):
+    c, sf = flaky(settings, make_source(), ek_pages(EK1), {EK1: TransientFetchError(EK1, "reset")})
+    c.run()
+    forget_missing(sf)
+    del c.fetcher.errors[EK1]
+    c.fetcher.requested.clear()
+
+    rep = c.repair_attachments(dry_run=True)                       # yalnızca sayar
+    assert rep.docs_with_gaps == 1 and rep.gaps == 1 and rep.recovered == 0
+    assert EK1 not in c.fetcher.requested and [r.role for r in docs(sf)] == ["main"]
+
+    rep = c.repair_attachments()
+    assert rep.recovered == 1 and rep.pending == 0 and EK1 in c.fetcher.requested
+    rows = docs(sf)
+    assert [r.role for r in rows] == ["main", "attachment"] and rows[1].parent_id == rows[0].id
+    assert rows[1].fetch_run_id is None and rows[0].version == rows[1].version == 1
+    assert parent_of(sf).extra["missing_attachments"] == []
+    assert run_statuses(sf) == ["partial"]                         # onarım fetch_run açmaz (last_success kaymaz)
+
+    c.fetcher.requested.clear()
+    rep = c.repair_attachments()                                   # idempotent
+    assert rep.docs_with_gaps == 0 and rep.recovered == 0 and EK1 not in c.fetcher.requested
+
+
+def test_repair_ignores_backoff_but_respects_given_up_unless_reopened(settings):
+    settings.collect_attachment_max_attempts = 1                   # ilk hatada vazgeçilir
+    c, sf = flaky(settings, make_source(), ek_pages(EK1), {EK1: TransientFetchError(EK1, "reset")})
+    c.run()
+    assert parent_of(sf).extra["missing_attachments"][0]["permanent"]
+    del c.fetcher.errors[EK1]
+    c.fetcher.requested.clear()
+    rep = c.repair_attachments()
+    assert rep.gave_up == 1 and rep.recovered == 0 and EK1 not in c.fetcher.requested
+    rep = c.repair_attachments(reopen=True)
+    assert rep.recovered == 1 and EK1 in c.fetcher.requested
+    assert parent_of(sf).extra["missing_attachments"] == []
+
+
+def test_repair_failure_keeps_tracking_and_raising_the_limit_recovers_overflow(settings):
+    settings.collect_max_attachments = 1
+    eks = ["https://ornek.gov.tr/ek/1.pdf", "https://ornek.gov.tr/ek/2.pdf"]
+    c, sf = flaky(settings, make_source(), ek_pages(*eks), {eks[1]: TransientFetchError(eks[1], "reset")})
+    c.run()
+    assert [m["url"] for m in parent_of(sf).extra["missing_attachments"]] == [eks[1]]       # sınır nedeniyle
+    rep = c.repair_attachments(max_attachments=5)                  # ek 2 hâlâ erişilemez
+    assert rep.pending == 1 and rep.recovered == 0
+    m = parent_of(sf).extra["missing_attachments"][0]
+    assert not m["permanent"] and m["attempts"] == 1
+    del c.fetcher.errors[eks[1]]
+    rep = c.repair_attachments(max_attachments=5)
+    assert rep.recovered == 1 and parent_of(sf).extra["missing_attachments"] == []
+    assert sorted(r.url for r in docs(sf) if r.role == "attachment") == eks
+
+
+# ------------------------------------------------------------------------------------------------ kesinti telafisi (sayfalama)
+def test_outage_catch_up_collects_items_that_scrolled_past_page_zero(settings):
+    import json as _json
+
+    from app.collectors.http import json_body, request_key
+
+    base = "https://ornek.gov.tr/api/list?page={p}&size=2"
+    src = SourceConfig.model_validate({"code": "ORNEK", "name": "Örnek", "base_url": "https://ornek.gov.tr", "channels": [
+        {"name": "api", "strategy": "json_api", "params": {
+            "method": "POST", "urls": [base.format(p=0)], "body": {}, "items_path": "content", "id": "x-{id}",
+            "url": "https://ornek.gov.tr/x/{id}", "max_pages": 5}}]})
+
+    def page(*ids):
+        return _json.dumps({"content": [{"id": i, "title": f"Başlık {i}"} for i in ids]}), "application/json"
+
+    pages = {f"https://ornek.gov.tr/x/{i}": (f"<p>{i}</p>", "text/html") for i in range(1, 7)}
+    pages[request_key("POST", base.format(p=0), json_body({}))] = page(2, 1)
+    c, sf = collector(settings, src, pages)
+    rep = c.run()                                            # baseline: yalnız sayfa 0, geçmiş çekilmez
+    assert rep.new == 2 and rep.channels[0].baseline_complete and rep.channels[0].pages == 1
+
+    # kesinti: sitede 4 yeni öğe çıktı, bizim sayfa 0 artık tamamen yeni; eski öğeler sayfa 2'de
+    for n, ids in enumerate([(6, 5), (4, 3), (2, 1)]):
+        pages[request_key("POST", base.format(p=n), json_body({}))] = page(*ids)
+    rep = c.run()
+    ch = rep.channels[0]
+    assert rep.new == 4 and ch.pages == 3 and not ch.incomplete and rep.status == "success"
+    assert sorted(r.external_id for r in docs(sf)) == [f"x-{i}" for i in range(1, 7)]
+    assert not any(r.is_baseline for r in docs(sf) if r.external_id in {"x-3", "x-4", "x-5", "x-6"})
+
+
+# ------------------------------------------------------------------------------------------------ kanallar arası kimlik çakışması
+def test_same_numeric_id_in_two_channels_does_not_overwrite_history(settings):
+    """BDDK örneği: /Duyuru/Detay/951 ile /Mevzuat/DokumanGetir/951 aynı external_id'yi üretir. Biri diğerinin geçmişini
+    ezip her koşuda sahte 'değişen' sürüm üretmemeli; çakışma görünür kılınmalı."""
+    ch = lambda name, path: {"name": name, "strategy": "css_list", "params": {   # noqa: E731
+        "urls": [f"https://ornek.gov.tr/{name}"], "item": "ul.liste li", "title": "h5", "date": ".t",
+        "id_pattern": r"/(?:Duyuru|Mevzuat)/\w+/(\d+)"}}
+    src = SourceConfig.model_validate({"code": "ORNEK", "name": "Örnek", "base_url": "https://ornek.gov.tr",
+                                       "channels": [ch("duyuru", "Duyuru"), ch("mevzuat", "Mevzuat")]})
+    pages = {"https://ornek.gov.tr/duyuru": (listing(("/Duyuru/Detay/951", "Duyuru 951", "24.09.2026")), "text/html"),
+             "https://ornek.gov.tr/mevzuat": (listing(("/Mevzuat/DokumanGetir/951", "Rehber 951", "24.09.2026")),
+                                              "text/html"),
+             "https://ornek.gov.tr/Duyuru/Detay/951": ("<p>duyuru</p>", "text/html"),
+             "https://ornek.gov.tr/Mevzuat/DokumanGetir/951": ("<p>rehber</p>", "text/html")}
+    c, sf = collector(settings, src, pages)
+    rep = c.run()
+    assert rep.new == 1 and rep.channels[1].id_conflicts == 1 and rep.status == "partial"
+    assert any("başka kanalın belgesiyle çakışıyor" in e for e in rep.errors)
+    for _ in range(3):                                         # eskiden her koşuda sürüm artıyordu
+        rep = c.run()
+        assert rep.changed == 0 and rep.new == 0
+    rows = docs(sf)
+    assert [(r.channel, r.version) for r in rows] == [("duyuru", 1)]
+
+
+def test_id_prefix_separates_id_spaces(settings):
+    from app.collectors.strategies._html import external_id
+
+    assert external_id("https://x/Duyuru/Detay/951", r"/Duyuru/Detay/(\d+)") == "951"
+    assert external_id("https://x/Mevzuat/Detay/951", r"/Mevzuat/Detay/(\d+)", "mevzuat-") == "mevzuat-951"
+    assert external_id("https://x/a/b?x=1", None, "m-") == "m-/a/b?x=1"

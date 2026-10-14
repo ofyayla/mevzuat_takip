@@ -475,6 +475,7 @@ sources:
           method: POST
           urls: ["https://gib.gov.tr/api/gibportal/mevzuat/ozelge/list?page=0&size=30&sortFieldName=id&sortType=DESC"]
           body: {status: 2}
+          max_pages: 10   # kesinti sonrası telafi: sayfadaki hiçbir öğe arşivde yoksa sonraki sayfaya geçer
           items_path: resultContainer.content
           id: "ozelge-{id}"
           url: "{siteLink}"

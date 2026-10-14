@@ -9,6 +9,7 @@ params:
   date_regex: öğe metninde tarih arayan regex (opsiyonel; ilk grup)
   summary: özet elemanı (CSS, opsiyonel)
   fields: {ad: regex} — öğe metninden ek alanlar (ör. karar sayısı)
+  id_prefix: kimliğin başına eklenen önek (aynı sayıyı paylaşan ayrı kimlik uzayları için; opsiyonel)
   id_pattern: URL'den kimlik regex'i
   pagination: {param: 'page', start: 2, max_pages: 1}  — ilk sayfa urls'deki adres; ek sayfalar ?param=N
 """
@@ -83,5 +84,5 @@ class CssListStrategy:
         if p.get("title_prefix") and title:
             title = p["title_prefix"] + title
         return ItemRef(source=ctx.source.code, channel=ctx.channel.name,
-                       external_id=external_id(url, p.get("id_pattern")), url=url, title=title,
+                       external_id=external_id(url, p.get("id_pattern"), p.get("id_prefix")), url=url, title=title,
                        published_at=published, category=ctx.channel.category, summary=summary, extra=extra)

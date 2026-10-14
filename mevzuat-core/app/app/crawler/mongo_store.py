@@ -1,12 +1,14 @@
 """DMZ crawler'ın kayıt katmanı: meta veri Mongo koleksiyonlarına, ham içerik GridFS'e (bkz. app.mongo)."""
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime, timezone
+from typing import Iterator
 
 from bson import ObjectId
 
 from app.collectors.config import SourceConfig
-from app.collectors.store import CHANNEL_STATS_MAX_RUNS, NewDoc, StoredDoc, merge_channel_stats
+from app.collectors.store import CHANNEL_STATS_MAX_RUNS, MainDocInfo, NewDoc, StoredDoc, merge_channel_stats
 from app.mongo import DOCS, RUNS, SOURCES, utcnow
 from app.storage import GridFsStorage
 
@@ -28,6 +30,35 @@ class MongoCrawlStore:
 
     def put_content(self, content: bytes) -> tuple[str, str]:
         return self.storage.put(content)
+
+    def read_content(self, key: str) -> bytes:
+        return self.storage.get(key)
+
+    def iter_main_documents(self, code: str, channels: list[str] | None = None,
+                            batch: int = 200) -> Iterator[MainDocInfo]:
+        """Kaynağın son sürüm ana belgeleri (_id'ye göre sayfalı). Onarım komutu kullanır."""
+        last = None
+        while True:
+            q: dict = {"source_code": code, "is_latest": True, "role": {"$ne": "attachment"}}
+            if channels:
+                q["channel"] = {"$in": channels}
+            if last is not None:
+                q["_id"] = {"$gt": last}
+            rows = list(self.db[DOCS].find(q, sort=[("_id", 1)], limit=batch))
+            if not rows:
+                return
+            kids: dict = defaultdict(set)
+            for k in self.db[DOCS].find({"parent_id": {"$in": [r["_id"] for r in rows]}, "is_latest": True},
+                                        {"parent_id": 1, "url": 1}):
+                kids[k["parent_id"]].add(k["url"])
+            last = rows[-1]["_id"]
+            for r in rows:
+                pub = r.get("published_at")
+                yield MainDocInfo(
+                    StoredDoc(r["_id"], r["external_id"], r["version"], r.get("listing_hash"), r["content_sha256"],
+                              r["fetched_at"], r.get("is_baseline", False), r.get("extra") or {}, r["channel"], r["url"]),
+                    r["channel"], r["url"], r.get("final_url"), r["content_type"], r["storage_key"], r.get("title"),
+                    pub.date() if isinstance(pub, datetime) else pub, r.get("category"), kids[r["_id"]])
 
     def upsert_source(self, source: SourceConfig) -> None:
         self.db[SOURCES].update_one({"_id": source.code}, _set({
@@ -66,7 +97,7 @@ class MongoCrawlStore:
             for r in rows:
                 out[r["external_id"]] = StoredDoc(r["_id"], r["external_id"], r["version"], r.get("listing_hash"),
                                                   r["content_sha256"], r["fetched_at"], r.get("is_baseline", False),
-                                                  r.get("extra") or {})
+                                                  r.get("extra") or {}, r.get("channel", ""), r.get("url", ""))
         return out
 
     def touch_unchanged(self, prev: StoredDoc, *, listing_hash, version_key, title, checked_at) -> None:
@@ -88,6 +119,14 @@ class MongoCrawlStore:
         if prev is not None:
             self.db[DOCS].update_one({"_id": prev.id}, _set({"is_latest": False}))
             self.db[DOCS].update_many({"parent_id": prev.id, "is_latest": True}, _set({"is_latest": False}))
+
+    def add_late_attachments(self, prev: StoredDoc, run_id, attachments: list[NewDoc], missing: list[dict]) -> None:
+        """Sonradan alınan ekler (sıra: ekler → ana belgenin ``extra.missing_attachments`` güncellemesi). Ekler anahtar
+        üzerinden upsert edilir; yarım kalan denemenin tekrarı çift kayıt üretmez."""
+        for att in attachments:
+            key = {"source_code": att.source_code, "external_id": att.external_id, "version": att.version}
+            self.db[DOCS].replace_one(key, self._doc(att, run_id, prev.id), upsert=True)
+        self.db[DOCS].update_one({"_id": prev.id}, _set({"extra.missing_attachments": missing}))
 
     @staticmethod
     def _doc(d: NewDoc, run_id, parent_id=None) -> dict:

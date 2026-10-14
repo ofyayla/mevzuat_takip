@@ -2,6 +2,7 @@
 
 params:
   urls: [besleme adresleri]
+  id_prefix: kimliğin başına eklenen önek (aynı sayıyı paylaşan ayrı kimlik uzayları için; opsiyonel)
   id_pattern: URL'den kimlik çıkaran regex (opsiyonel)
 """
 from __future__ import annotations
@@ -45,7 +46,7 @@ class FeedStrategy:
                 title = clean(html.unescape(e.get("title") or ""))
                 items.append(ItemRef(
                     source=ctx.source.code, channel=ctx.channel.name,
-                    external_id=external_id(link, p.get("id_pattern")),
+                    external_id=external_id(link, p.get("id_pattern"), p.get("id_prefix")),
                     url=link, title=title, published_at=published,
                     category=ctx.channel.category, summary=clean(html.unescape(e.get("summary") or "")) or None,
                     version_key=e.get("updated") or None,

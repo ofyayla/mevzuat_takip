@@ -17,6 +17,7 @@ DMZ'den Redis'e ve PostgreSQL'e erişim yoktur; bu yüzden Celery kullanılmaz. 
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
 import signal
 import threading
@@ -97,8 +98,22 @@ class CrawlerService:
                 col.fetcher.close()
         out = {"source": code, "status": rep.status, "run_id": str(rep.run_id), "new": rep.new,
                "changed": rep.changed, "requests": rep.requests,
-               "errors": [f"{c.name}: {c.error}" for c in rep.channels if c.error]}
+               "errors": rep.errors}
         log.info("tarama bitti %s", out)
+        return out
+
+    def repair_attachments(self, code: str, **options) -> dict:
+        """Arşivde eksik kalan ekleri yeniden getirir (bkz. ``SourceCollector.repair_attachments``)."""
+        source = self.sources[code]
+        with self._lock(code):
+            col = SourceCollector(source, self.settings, self.store, should_stop=self.stop.is_set,
+                                  fetcher=self.fetcher_factory(source) if self.fetcher_factory else None)
+            try:
+                rep = col.repair_attachments(**options)
+            finally:
+                col.fetcher.close()
+        out = dataclasses.asdict(rep)
+        log.info("ek onarımı bitti %s", out)
         return out
 
     def run_backfill(self, code: str, date_from: date, date_to: date) -> dict:

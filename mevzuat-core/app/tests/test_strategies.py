@@ -67,6 +67,59 @@ def test_json_api_get_unchanged(settings):
     assert f.requested == [url] and item.inline_content is None        # GET, detay ayrıca indirilir
 
 
+def _paged_source(max_pages):
+    base = "https://www.ornek.gov.tr/api/list?page={p}&size=2"
+    ch = {"name": "c", "strategy": "json_api", "params": {
+        "method": "POST", "urls": [base.format(p=0)], "body": {}, "items_path": "content", "id": "x-{id}",
+        "url": "https://www.ornek.gov.tr/x/{id}", "max_pages": max_pages}}
+    return source(ch), base
+
+
+def _rows(*ids):
+    return json.dumps({"content": [{"id": i, "title": f"Başlık {i}"} for i in ids]}), "application/json"
+
+
+def test_json_api_catch_up_pages_until_it_overlaps_with_the_archive(settings):
+    src, base = _paged_source(5)
+    pages = {request_key("POST", base.format(p=n), json_body({})): _rows(*ids)
+             for n, ids in enumerate([(10, 9), (8, 7), (6, 5), (4, 3)])}
+    f = DictFetcher(src, settings, pages)
+    known = {"x-5"}                                              # arşivde son bilinen öğe sayfa 2'de
+    res = list_channel(src, src.channel("c"), f, now=NOW, known_ids=lambda ids: known & set(ids))
+    assert [i.external_id for i in res.items] == ["x-10", "x-9", "x-8", "x-7", "x-6", "x-5"]
+    assert res.pages_fetched == 3 and not res.incomplete        # örtüşme bulununca durur, sayfa 3 çekilmez
+
+
+def test_json_api_no_extra_pages_when_page_zero_overlaps_or_feature_is_off(settings):
+    src, base = _paged_source(5)
+    pages = {request_key("POST", base.format(p=n), json_body({})): _rows(*ids)
+             for n, ids in enumerate([(10, 9), (8, 7)])}
+    f = DictFetcher(src, settings, pages)
+    list_channel(src, src.channel("c"), f, now=NOW, known_ids=lambda ids: {"x-9"})   # günlük işleyiş: tek istek
+    assert len(f.requested) == 1
+    f = DictFetcher(src, settings, pages)
+    list_channel(src, src.channel("c"), f, now=NOW)              # known_ids yok (baseline): sayfalama kapalı
+    assert len(f.requested) == 1
+
+
+def test_json_api_catch_up_marks_listing_incomplete_when_cap_reached_without_overlap(settings):
+    src, base = _paged_source(2)
+    pages = {request_key("POST", base.format(p=n), json_body({})): _rows(*ids)
+             for n, ids in enumerate([(10, 9), (8, 7), (6, 5)])}
+    res = list_channel(src, src.channel("c"), DictFetcher(src, settings, pages), now=NOW,
+                       known_ids=lambda ids: set())
+    assert res.pages_fetched == 2 and res.incomplete and "örtüşme bulunamadı" in res.warnings[0]
+
+
+def test_json_api_catch_up_stops_on_a_short_last_page(settings):
+    src, base = _paged_source(5)
+    pages = {request_key("POST", base.format(p=0), json_body({})): _rows(2, 1),
+             request_key("POST", base.format(p=1), json_body({})): _rows(0)}      # size=2'den az → son sayfa
+    f = DictFetcher(src, settings, pages)
+    res = list_channel(src, src.channel("c"), f, now=NOW, known_ids=lambda ids: set())
+    assert res.pages_fetched == 2 and not res.incomplete and len(res.items) == 3
+
+
 # ------------------------------------------------------------------------------------------------ wordpress_api
 
 def _wp_post(pid, slug, cats):

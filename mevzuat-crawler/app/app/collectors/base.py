@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from app.collectors.config import ChannelConfig, SourceConfig
 from app.collectors.http import Fetcher
@@ -60,6 +60,9 @@ class ChannelContext:
     fetcher: Fetcher
     now: datetime
     since: datetime | None = None   # son başarılı taramanın zamanı (artımlı API'ler için)
+    # Telafi sayfalaması: kimlik listesi → arşivde zaten olanlar. Doluysa (ve kanal baseline dışındaysa) sayfalayan
+    # stratejiler, sayfadaki hiçbir öğe arşivde yokken sonraki sayfaya geçer (kesinti sırasında kaçan öğeler için).
+    known_ids: Callable[[list[str]], set[str]] | None = None
 
 
 class Strategy(Protocol):

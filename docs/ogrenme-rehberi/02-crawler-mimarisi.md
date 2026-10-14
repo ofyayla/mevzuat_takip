@@ -290,7 +290,7 @@ Kullanan kanallar: BDDK `duzenlemeler`, SPK `mevzuat`, Ticaret `tuketici_mevzuat
 | Kanalda `fetch_detail: false` **veya** bağlantı kaynağın `allowed_hosts` listesi dışında (ör. KVKK → resmigazete.gov.tr PDF'i) | Detay istenmez. Liste satırının JSON anlık görüntüsü `role=listing`, `application/json` olarak saklanır. İçeriği RG kaynağı getirir, core tekilleştirmesi birleştirir |
 | Strateji içeriği zaten getirdiyse (`inline_content`: MASAK WordPress API) | Detay isteği atılmaz, içerik doğrudan saklanır |
 | Bağlantı mevzuat.gov.tr'ye gidiyorsa | `resolvers.resolve()` kanonik kimlik (`mevzuat.gov.tr:<tür>.<tertip>.<no>`), kamuya açık URL ve **iframe içerik adresi** üretir. Tam metin iframe adresinden indirilir |
-| Kanalda `attachment_pattern` var ve ana belge HTML | Detay sayfasındaki desene uyan bağlantılar (en fazla `COLLECT_MAX_ATTACHMENTS` = **5**) indirilir. İzin listesi dışındaki ek atlanır. İndirilemeyen ek yalnızca loglanır |
+| Kanalda `attachment_pattern` var ve ana belge HTML | Detay sayfasındaki desene uyan bağlantılar (en fazla `COLLECT_MAX_ATTACHMENTS` = **5**) indirilir. İzin listesi dışındaki ek atlanır. İndirilemeyen ek ana belgenin `extra.missing_attachments` listesine yazılır ve sonraki koşularda yeniden denenir (bkz. [08 §7](08-iyilestirme-plani.md)) |
 
 `_normalize_external` liste aşamasında aynı mevzuat.gov.tr belgesine farklı biçimlerde (eski `Metin.Aspx?MevzuatKod=`,
 yeni `?MevzuatNo=…`, http/https, www) verilen bağlantıları tek kimliğe indirger ve kanal içinde tekilleştirir.
