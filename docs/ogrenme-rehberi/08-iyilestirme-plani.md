@@ -288,14 +288,20 @@ Arşivdeki ana belge içeriğinden ek bağlantılarını yeniden çıkarır; ar�
 açmaz (`last_success` kaymasın). `CRAWL_MODE=local` için `mevzuat-collect repair-attachments` (Linux; `fcntl`).
 Çıkış kodu: hâlâ bekleyen/engelli ek varsa 1.
 
-### 7.4 Bekleyen karar: BDDK kimlik ayrımı (üretim verisini etkiler)
-Koruma sahte sürümleri durdurur ama çakışan ~147 belgenin **diğer** kanaldaki kopyası toplanmaz. Kalıcı çözüm
-Mevzuat ailesi kanallarına `id_prefix` vermektir; bu, ~1100 mevcut belgeyi "yeni kimlik" yapar. Göz önünde tutulacaklar:
-1. Yeni kimlikler baseline sayılmazsa YZ hattına yeni düzenleme olarak girer. Önce o kanalların baseline'ı yeniden
-   açılmalı ya da eski kayıtlardan taşıma betiği yazılmalı.
-2. Daha önce üretilmiş sahte sürümler (BDDK, çakışan kimlikler, `version > 1`) için temizlik/işaretleme kararı gerekir.
-Ölçüm sorgusu (mongosh): çakışan kimlikte kanalı değişen sürümler
-`db.raw_documents.aggregate([{$match:{source_code:"BDDK"}},{$group:{_id:"$external_id",ch:{$addToSet:"$channel"},v:{$max:"$version"}}},{$match:{"ch.1":{$exists:true}}},{$sort:{v:-1}},{$limit:20}])`
+### 7.4 BDDK kimlik ayrımı (uygulandı; geliştirme ortamı verisi için temizlik gerekir)
+`&bddk_mevzuat` parametrelerine `id_prefix: "mevzuat-"` eklendi (rg_kurul_kararlari, kurul_kararlari,
+duzenleme_taslaklari, duzenlemeler). Duyuru ailesi (`/Duyuru/Detay/N`) eski sayısal kimliğini korur. Böylece iki
+kimlik uzayı ayrılır; `test_external_ids_do_not_collide_across_channels` fixture'lı tüm kaynaklarda aynı kimliğin farklı
+URL'ye düşmesini engeller (önek olmadan 100+ çakışma yakalıyordu).
+
+**Mevcut veri için (geliştirme ortamı):** eski çalışmada oluşan karışık sürüm geçmişi (aynı `external_id` altında
+kanalı değişen sürümler) ve önekli yeni kimlikler nedeniyle BDDK'nın arşivi sıfırlanıp yeniden toplanmalı; böylece
+ilk taramada tüm içerik `BASELINE` olur ve YZ hattına girmez. Sıra: (1) crawler'ı durdur, (2) BDDK `raw_documents`,
+`fetch_runs` ve ilgili düzenleme/ingest kayıtlarını sil (Mongo ve ana servis veritabanı), (3) crawler'ı başlat.
+Silmeden bırakılırsa: Mevzuat kanalları ~1100 öğeyi yeni (BASELINE olmayan) sayar; Duyuru kanalında son satırı Mevzuat
+belgesi olan kimlikler kimlik çakışması korumasıyla atlanır (`id_conflicts`).
+Üretime geçişte aynı adımlar uygulanmalı ya da önce yeniden-baseline aracı yazılmalıdır.
+Çakışmanın ölçümü (mongosh): `db.raw_documents.aggregate([{$match:{source_code:"BDDK"}},{$group:{_id:"$external_id",ch:{$addToSet:"$channel"},v:{$max:"$version"}}},{$match:{"ch.1":{$exists:true}}},{$sort:{v:-1}},{$limit:20}])`
 
 ### 7.5 Yeni ayarlar ve doğrulama
 `COLLECT_HOST_BREAKER_THRESHOLD`, `COLLECT_ATTACHMENT_MAX_ATTEMPTS`, `COLLECT_ATTACHMENT_RETRY_ITEMS` (koşu başına

@@ -178,13 +178,13 @@ def test_bddk(sources, settings):
     assert not k.title.startswith("(")
 
     rg = run_channel(sources, settings, "BDDK", "rg_kurul_kararlari").items[0]
-    assert rg.external_id == "1347" and rg.url.endswith("/Mevzuat/DokumanGetir/1347")
+    assert rg.external_id == "mevzuat-1347" and rg.url.endswith("/Mevzuat/DokumanGetir/1347")
     assert rg.published_at == date(2026, 9, 18) and rg.extra["karar_sayisi"] == "11572"
 
     kk = run_channel(sources, settings, "BDDK", "kurul_kararlari").items
     assert kk[0].title == "Bankaların Hisse Geri Alımları Hk. Kurul Kararı"
     assert kk[0].extra["karar_sayisi"] == "11571"
-    tasfiye = next(i for i in kk if i.external_id == "1344")   # "(30.07.2026- 11537)" — boşluk düzensiz
+    tasfiye = next(i for i in kk if i.external_id == "mevzuat-1344")   # "(30.07.2026- 11537)" — boşluk düzensiz
     assert tasfiye.extra == {"karar_tarihi": "30.07.2026", "karar_sayisi": "11537"}
 
     t = run_channel(sources, settings, "BDDK", "duzenleme_taslaklari").items
@@ -315,3 +315,24 @@ def test_kgk_mevzuat_data_href(sources, settings):
     docs = fetch_documents(source, ch, yetki, fetcher, max_attachments=5)
     assert [d.role for d in docs] == ["main", "attachment", "attachment"]
     assert {d.url.rsplit(".", 1)[-1] for d in docs[1:]} == {"pdf", "docx"}
+
+
+def test_external_ids_do_not_collide_across_channels(sources, settings):
+    """Aynı external_id kaynak içinde tek belgeyi göstermeli. Farklı URL'lere düşen kimlik, sürüm geçmişini birbirine
+    yazdırır (BDDK: /Duyuru/Detay/951 ≠ /Mevzuat/DokumanGetir/951). Çözüm: kanal parametresinde ``id_prefix``."""
+    problems = []
+    for source in sources.enabled():
+        fixtures = FIXTURES / source.code.lower()
+        if not (fixtures / "manifest.json").exists():
+            continue
+        seen: dict[str, tuple[str, str]] = {}
+        for ch in source.channels:
+            try:
+                items = run_channel(sources, settings, source.code, ch.name).items
+            except Exception:  # noqa: BLE001 — fixture'ı olmayan kanal bu testin konusu değil
+                continue
+            for it in items:
+                if it.external_id in seen and seen[it.external_id][1] != it.url:
+                    problems.append(f"{source.code}: {it.external_id!r} → {seen[it.external_id]} ≠ {(ch.name, it.url)}")
+                seen.setdefault(it.external_id, (ch.name, it.url))
+    assert not problems, "\n".join(problems[:10])

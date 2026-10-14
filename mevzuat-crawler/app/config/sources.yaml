@@ -109,6 +109,9 @@ sources:
           link_selector: "a.mevzuatBaslik[href]"
           href_pattern: "."
           id_pattern: "/Mevzuat/(?:Detay|DokumanGetir)/(\\d+)"
+          # Duyuru (/Duyuru/Detay/N) ve Mevzuat (/Mevzuat/…/N) ayrı kimlik uzaylarıdır ve sayılar çakışır (147 kimlik,
+          # 13.10.2026). Önek olmadan biri diğerinin sürüm geçmişini ezer.
+          id_prefix: "mevzuat-"
           date_regex: "\\((\\d{2}\\.\\d{2}\\.\\d{4})\\s*-"
           fields: *bddk_karar_fields
           title_strip: ["^\\(\\d{2}\\.\\d{2}\\.\\d{4}\\s*-\\s*\\d+\\)\\s*"]
