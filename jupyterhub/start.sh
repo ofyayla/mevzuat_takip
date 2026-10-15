@@ -76,11 +76,17 @@ LLM_BASE_URL='https://qwen36-35b-a3b-nvfp4.llm.alb.albarakatech.com/v1'
 LLM_MODEL='qwen36-35b-a3b-nvfp4'
 LLM_API_KEY='EMPTY'
 LLM_MAX_CONCURRENCY='2'
+# Qwen thinking: 'false' önerilir (açıkken uzun belgelerde özet çıktısı JSON'a varmadan kesiliyordu)
+LLM_ENABLE_THINKING='false'
 # 'false': LLM sunucusunun TLS sertifikası doğrulanmaz (kurum CA'sı pakete eklenene kadar; YALNIZCA geliştirme)
 LLM_VERIFY_TLS='false'
 
 # Crawler internete proxy ile çıkıyorsa (ör. http://proxy.kurum.local:8080)
 HTTPS_PROXY=''
+
+# Tek indirmenin en büyük boyutu (bayt). 100 MB: KVKK rehber PDF'i 50 MB'ı aşıyordu. Çok büyük dosyalar bellek ve
+# metin çıkarma süresini artırır; gerekmedikçe yükseltmeyin.
+COLLECT_MAX_BYTES='104857600'
 
 # Portal + API (yalnızca localhost; tarayıcıdan: ssh -L 5000:127.0.0.1:5000 <kullanıcı>@atgdevtmirpr01)
 API_BIND='127.0.0.1:5000'
@@ -209,7 +215,7 @@ LLM_API_KEY=$LLM_API_KEY
 LLM_VERIFY_TLS=${LLM_VERIFY_TLS:-true}
 LLM_TIMEOUT_S=120
 LLM_MAX_CONCURRENCY=${LLM_MAX_CONCURRENCY:-2}
-LLM_ENABLE_THINKING=true
+LLM_ENABLE_THINKING=${LLM_ENABLE_THINKING:-false}
 LLM_JSON_MODE=json_schema
 OCR_PROVIDER=none
 AUTH_MODE=disabled
@@ -231,6 +237,7 @@ HTTP_USER_AGENT=MevzuatTakipBot/1.0 (+Mevzuat ve Uyum Baskanligi)
 COLLECT_REQUEST_DELAY_S=1.5
 COLLECT_TIMEOUT_S=30
 COLLECT_MAX_ATTACHMENTS=5
+COLLECT_MAX_BYTES=${COLLECT_MAX_BYTES:-104857600}
 EOF
   umask 022
 }

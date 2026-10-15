@@ -106,7 +106,8 @@ def test_openai_compatible_request_shape(settings):
                                usage=SimpleNamespace(prompt_tokens=50, completion_tokens=10))
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-    vs = settings.model_copy(update={"llm_provider": "vllm", "llm_model": "Qwen/Qwen3.6-35B-A3B-FP8"})
+    vs = settings.model_copy(update={"llm_provider": "vllm", "llm_model": "Qwen/Qwen3.6-35B-A3B-FP8",
+                                     "llm_enable_thinking": True})
     llm = OpenAICompatibleLLM(vs, client=client)
     res = llm.complete_json("relevance", "p", [{"role": "user", "content": "x"}], RelevanceOut, n=3)
     assert captured["response_format"]["type"] == "json_schema" and captured["n"] == 3
@@ -282,3 +283,21 @@ def test_include_baseline_backfill(settings, env):  # noqa: F811
     assert rep.processed == 1                                                         # yalnızca kalan BASELINE
     with sf() as s:
         assert s.scalars(select(Regulation).where(Regulation.processing_status == "BASELINE")).first() is None
+
+
+def test_thinking_is_disabled_by_default_for_every_task(settings):
+    """Düşünme kapalı varsayılan: açıkken uzun belgelerde çıktı JSON'a varmadan kesiliyordu (özet şema hataları)."""
+    captured = {}
+
+    def create(**kw):
+        captured.update(kw)
+        msg = SimpleNamespace(content=json.dumps(rel()), reasoning_content=None, model_extra={})
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)],
+                               usage=SimpleNamespace(prompt_tokens=5, completion_tokens=5))
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    assert settings.llm_enable_thinking is False
+    llm = OpenAICompatibleLLM(settings.model_copy(update={"llm_provider": "vllm"}), client=client)
+    for task in ("relevance", "severity", "summary", "unit_match"):
+        llm.complete_json(task, "p", [{"role": "user", "content": "x"}], RelevanceOut)
+        assert captured["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}, task

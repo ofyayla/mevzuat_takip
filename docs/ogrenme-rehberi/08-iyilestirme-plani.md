@@ -325,3 +325,21 @@ belgesi olan kimlikler kimlik çakışması korumasıyla atlanır (`id_conflicts
 eki yeniden denenecek en çok öğe, 25). Core 228, crawler 141 test geçti; ruff temiz. Gerçek MongoDB ve LAN ingest
 testleri (`test_ingest.py`: geç gelen ek, Mongo onarımı) bu makinede atlandı; `mongo:7` ile bir kez koşulmalı.
 Ingest kodu okunarak geç gelen ekin mevcut ana belgeye bağlanacağı doğrulandı (`DOC_MUTABLE` içinde `extra`).
+
+### 7.6 Qwen thinking kalıcı olarak kapatıldı (14–15 Ekim 2026)
+Özet görevi (`summary`) şema hatasıyla düşüyordu: 30 belgeden 18'i, 41'den 25'i; `ai_failure` alarmında 6 kayıt (547, 550, 627,
+631, 2005, 2393) `ai_attempts=3`. Hatalarda yanıt `**short_content**…` ile başlayan markdown taslağıydı, `{` yoktu: düşünme
+çıktısı, çağrıda `max_tokens` verilmediği için uzun belgelerde sınırı doldurup JSON'a varmadan kesiliyordu (kesin doğrulama için
+`llm_call.completion_tokens` incelenebilir). Karar: `LLM_ENABLE_THINKING` varsayılanı `false` (`settings.py`, `.env.example`,
+`jupyterhub/start.sh`; start.sh'te `mevzuat.env` içindeki `LLM_ENABLE_THINKING` ya da varsayılan `false`). Düşünme kapalıyken
+vLLM yapılandırılmış çıktıyı (`json_schema`) zorlar. `LLM_THINKING_TASKS` listesi dokunulmadan duruyor; düşünme geri açılmak
+istenirse `LLM_ENABLE_THINKING=true` yeterli. Sınıflandırma/ilgililik kalitesinin düşüp düşmediği ayrıca izlenmeli.
+Tükenmiş 6 kayıt için: `mevzuat-monitor reprocess summarize --from … --to … --source …` (aralığı dar tutun).
+
+### 7.7 KVKK rehber PDF'i: `COLLECT_MAX_BYTES` 100 MB (15 Ekim 2026)
+KVKK `mevzuat` kanalında `…/CMSFiles/5a7a3f8a-3b20-4773-970a-01aecfcc5222.pdf` 50 MB sınırını aşıyor ("yanıt çok büyük") ve
+belge hiç kaydedilmediği için her koşuda yeniden deneniyordu (13 Ekim'den beri; 14 Ekim'e kadar `errors`'ta görünmüyordu).
+Geçici çözüm: `jupyterhub/start.sh` crawler `.env`'ine `COLLECT_MAX_BYTES=104857600` (100 MB) yazıyor (`mevzuat.env`'de
+`COLLECT_MAX_BYTES` ile değiştirilebilir; kod varsayılanı 50 MB kaldı). Dikkat: tüm yanıt belleğe alınır (en çok 100 MB/istek,
+`CRAWLER_MAX_PARALLEL=3`) ve ana servisteki metin çıkarma/OCR bu boyutta yavaş olabilir. Dosya yine sınırı aşarsa kalıcı çözüm
+(oversize için `listing` anlık görüntüsü) yazılmalı.
