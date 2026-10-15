@@ -8,7 +8,9 @@
 #     setup    yalnızca kurulum: venv'ler, .env, PostgreSQL kullanıcı/DB, alembic, units-load
 #     update   durdur → setup → başlat (git pull sonrası; değişen requirements.txt venv'e yeniden kurulur)
 #     check    Mongo/Redis/Postgres erişimi, LLM testi (llm-check), crawler kontrolü
-#     stop | restart | status | logs <crawler|api|worker|beat|setup>
+#     stop | restart | status | logs <crawler|api|worker|beat|setup|autodeploy>
+#     autodeploy        git upstream'i her AUTO_UPDATE_INTERVAL sn'de (vars. 30) izler; yeni commit'te update çalıştırır
+#     autodeploy-stop   otomatik güncellemeyi durdurur (stop/update/restart ona dokunmaz)
 #
 # Ayarlar ve parolalar tek dosyada: ~/.mevzuat/mevzuat.env (ilk çalıştırmada şablonu oluşturulur).
 # Her app/.env bu dosyadan üretilir; app/.env elle düzenlenmez (her setup'ta yeniden yazılır).
@@ -409,7 +411,34 @@ status() {
       printf '  %-8s DURUYOR\n' "$name"
     fi
   done
+  if running autodeploy; then
+    printf '  %-8s çalışıyor (pid %s)\n' autodeploy "$(cat "$LOG_DIR/autodeploy.pid")"
+  else
+    printf '  %-8s kapalı (açmak için: %s autodeploy)\n' autodeploy "$0"
+  fi
   curl -fsS -m 5 "http://$API_BIND/readyz" 2>/dev/null && echo || echo "  readyz: yanıt yok"
+}
+
+# Otomatik güncelleme (tools/auto-deploy-compose.sh): PROCS'ta DEĞİL — update, stop ile PROCS'u durdurur ve kendini öldürmemeli
+autodeploy_start() {
+  git -C "$REPO" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
+    || die "Bu branch için Git upstream tanımlı değil (git branch --set-upstream-to=origin/<branch>)"
+  echo "otomatik güncelleme (aralık: ${AUTO_UPDATE_INTERVAL:-30}s):"
+  launch autodeploy "$REPO" bash "$REPO/tools/auto-deploy-compose.sh"
+}
+
+autodeploy_stop() {
+  local pid
+  if running autodeploy; then
+    pid=$(cat "$LOG_DIR/autodeploy.pid")
+    signal_proc "$pid" TERM
+    for _ in {1..10}; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -0 "$pid" 2>/dev/null && signal_proc "$pid" KILL
+    echo "  autodeploy durdu"
+  else
+    echo "  autodeploy çalışmıyor"
+  fi
+  rm -f "$LOG_DIR/autodeploy.pid"
 }
 
 check() {
@@ -443,6 +472,8 @@ case ${1:-start} in
   stop)    stop ;;
   restart) stop; setup; start_procs ;;   # setup: ayar değişiklikleri app/.env'ye yansısın
   status)  load_conf; status ;;
-  logs)    tail -n 100 -f "$LOG_DIR/${2:?süreç adı: ${PROCS[*]} setup}.log" ;;
-  *)       echo "Kullanım: $0 [start|setup|update|check|stop|restart|status|logs <${PROCS[*]}|setup>]" >&2; exit 2 ;;
+  autodeploy)      autodeploy_start ;;
+  autodeploy-stop) autodeploy_stop ;;
+  logs)    tail -n 100 -f "$LOG_DIR/${2:?süreç adı: ${PROCS[*]} setup autodeploy}.log" ;;
+  *)       echo "Kullanım: $0 [start|setup|update|check|stop|restart|status|autodeploy|autodeploy-stop|logs <${PROCS[*]}|setup|autodeploy>]" >&2; exit 2 ;;
 esac
