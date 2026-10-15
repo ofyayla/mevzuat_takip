@@ -24,6 +24,7 @@ CRAWLER_VENV=${CRAWLER_VENV:-$HOME/venv-crawler}
 LOG_DIR=${LOG_DIR:-$HOME/mevzuat-logs}
 CERT_DIR=${CERT_DIR:-$HOME/certs}
 PGDATA=${PGDATA:-$HOME/pgdata}              # yerel PostgreSQL veri dizini (pg_ctl ile başlatılır)
+REDIS_DATA=${REDIS_DATA:-$HOME/redis-data}  # yerel Redis çalışma dizini
 PY_ENV=${PY_ENV:-$CONF_DIR/python312}       # sistemde Python ≥ 3.11 yoksa conda ile buraya kurulur
 CA_CERT_URLS=${CA_CERT_URLS:-"https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"}
 export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -265,7 +266,7 @@ wait_port() {   # host, port, saniye → portun açılmasını bekler
   return 1
 }
 
-ensure_local_services() {   # yerel PostgreSQL ($PGDATA) kapalıysa başlatır; açıksa dokunmaz
+ensure_local_services() {   # yerel PostgreSQL (pgvector'lü kurulum, $PGDATA) ve Redis kapalıysa başlatır; açıksa dokunmaz
   if port_open "$PG_HOST" "$PG_PORT"; then
     say "PostgreSQL zaten açık ($PG_HOST:$PG_PORT)"
   elif [[ -f $PGDATA/PG_VERSION ]] && command -v pg_ctl >/dev/null 2>&1; then
@@ -276,6 +277,18 @@ ensure_local_services() {   # yerel PostgreSQL ($PGDATA) kapalıysa başlatır; 
     say "PostgreSQL $PG_HOST:$PG_PORT kapalı; yerel kurulum ($PGDATA / pg_ctl) bulunamadı, uzak sunucu varsayılıyor"
   fi
 
+  if port_open "$REDIS_HOST" "$REDIS_PORT"; then
+    say "Redis zaten açık ($REDIS_HOST:$REDIS_PORT)"
+  elif command -v redis-server >/dev/null 2>&1; then
+    say "Redis başlatılıyor ($REDIS_DATA, port $REDIS_PORT)"
+    mkdir -p "$REDIS_DATA"
+    redis-server --port "$REDIS_PORT" --bind "$REDIS_HOST" --dir "$REDIS_DATA" \
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"} \
+      --daemonize yes --logfile "$REDIS_DATA/redis.log" >>"$SETUP_LOG" 2>&1 || true
+    wait_port "$REDIS_HOST" "$REDIS_PORT" 10 || die "Redis başlamadı (log: $REDIS_DATA/redis.log)"
+  else
+    say "Redis $REDIS_HOST:$REDIS_PORT kapalı; redis-server bulunamadı, uzak sunucu varsayılıyor"
+  fi
 }
 
 ensure_services_reachable() {
@@ -340,7 +353,7 @@ setup() {
   write_envs
   ensure_ca_bundle
   ca_env
-  say "yerel PostgreSQL"
+  say "yerel PostgreSQL / Redis"
   ensure_local_services
   say "MongoDB / Redis erişimi"
   ensure_services_reachable
