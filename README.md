@@ -60,6 +60,13 @@ komutuyla başlatır. Yerel değişiklikleri ezmemek için kirli çalışma ağa
 bash tools/auto-deploy-compose.sh
 ```
 
+JupyterHub'da aynı döngü `start.sh` üzerinden arka planda başlatılabilir (`stop`/`update`/`restart` ona dokunmaz):
+
+```bash
+jupyterhub/start.sh autodeploy        # başlat; durum: status, log: logs autodeploy
+jupyterhub/start.sh autodeploy-stop   # durdur
+```
+
 Kontrol aralığı `AUTO_UPDATE_INTERVAL=60` gibi saniye cinsinden ayarlanabilir. Scriptin sürekli çalışması ve sunucu
 yeniden başladığında tekrar açılması için bir `systemd` servisi veya süreç yöneticisi altında çalıştırın. Yerel Compose
 geliştirme ortamı `make compose-up` ile yönetilir; kurum Kubernetes dağıtımı Argo CD tarafından yönetilir.

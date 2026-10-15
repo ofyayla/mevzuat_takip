@@ -8,7 +8,9 @@
 #     setup    yalnızca kurulum: venv'ler, .env, PostgreSQL kullanıcı/DB, alembic, units-load
 #     update   durdur → setup → başlat (git pull sonrası; değişen requirements.txt venv'e yeniden kurulur)
 #     check    Mongo/Redis/Postgres erişimi, LLM testi (llm-check), crawler kontrolü
-#     stop | restart | status | logs <crawler|api|worker|beat|setup>
+#     stop | restart | status | logs <crawler|api|worker|beat|setup|autodeploy>
+#     autodeploy        git upstream'i her AUTO_UPDATE_INTERVAL sn'de (vars. 30) izler; yeni commit'te update çalıştırır
+#     autodeploy-stop   otomatik güncellemeyi durdurur (stop/update/restart ona dokunmaz)
 #
 # Ayarlar ve parolalar tek dosyada: ~/.mevzuat/mevzuat.env (ilk çalıştırmada şablonu oluşturulur).
 # Her app/.env bu dosyadan üretilir; app/.env elle düzenlenmez (her setup'ta yeniden yazılır).
@@ -21,6 +23,8 @@ CORE_VENV=${CORE_VENV:-$HOME/venv-core}
 CRAWLER_VENV=${CRAWLER_VENV:-$HOME/venv-crawler}
 LOG_DIR=${LOG_DIR:-$HOME/mevzuat-logs}
 CERT_DIR=${CERT_DIR:-$HOME/certs}
+PGDATA=${PGDATA:-$HOME/pgdata}              # yerel PostgreSQL veri dizini (pg_ctl ile başlatılır)
+REDIS_DATA=${REDIS_DATA:-$HOME/redis-data}  # yerel Redis çalışma dizini
 PY_ENV=${PY_ENV:-$CONF_DIR/python312}       # sistemde Python ≥ 3.11 yoksa conda ile buraya kurulur
 CA_CERT_URLS=${CA_CERT_URLS:-"https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"}
 export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -259,6 +263,41 @@ ensure_ca_bundle() {    # bir kez dener; başarısız olursa sistem/certifi depo
   fi
 }
 
+port_open() {   # host, port → TCP bağlantısı kabul ediliyorsa 0
+  (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null
+}
+
+wait_port() {   # host, port, saniye → portun açılmasını bekler
+  local _
+  for _ in $(seq "$3"); do port_open "$1" "$2" && return 0; sleep 1; done
+  return 1
+}
+
+ensure_local_services() {   # yerel PostgreSQL (pgvector'lü kurulum, $PGDATA) ve Redis kapalıysa başlatır; açıksa dokunmaz
+  if port_open "$PG_HOST" "$PG_PORT"; then
+    say "PostgreSQL zaten açık ($PG_HOST:$PG_PORT)"
+  elif [[ -f $PGDATA/PG_VERSION ]] && command -v pg_ctl >/dev/null 2>&1; then
+    say "PostgreSQL başlatılıyor ($PGDATA, port $PG_PORT)"
+    pg_ctl -D "$PGDATA" -o "-p $PG_PORT -c listen_addresses=$PG_HOST" -l "$PGDATA/pg.log" start >>"$SETUP_LOG" 2>&1 || true
+    wait_port "$PG_HOST" "$PG_PORT" 20 || die "PostgreSQL başlamadı (log: $PGDATA/pg.log)"
+  else
+    say "PostgreSQL $PG_HOST:$PG_PORT kapalı; yerel kurulum ($PGDATA / pg_ctl) bulunamadı, uzak sunucu varsayılıyor"
+  fi
+
+  if port_open "$REDIS_HOST" "$REDIS_PORT"; then
+    say "Redis zaten açık ($REDIS_HOST:$REDIS_PORT)"
+  elif command -v redis-server >/dev/null 2>&1; then
+    say "Redis başlatılıyor ($REDIS_DATA, port $REDIS_PORT)"
+    mkdir -p "$REDIS_DATA"
+    redis-server --port "$REDIS_PORT" --bind "$REDIS_HOST" --dir "$REDIS_DATA" \
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"} \
+      --daemonize yes --logfile "$REDIS_DATA/redis.log" >>"$SETUP_LOG" 2>&1 || true
+    wait_port "$REDIS_HOST" "$REDIS_PORT" 10 || die "Redis başlamadı (log: $REDIS_DATA/redis.log)"
+  else
+    say "Redis $REDIS_HOST:$REDIS_PORT kapalı; redis-server bulunamadı, uzak sunucu varsayılıyor"
+  fi
+}
+
 ensure_services_reachable() {
   MONGO_URL=$MONGO_URL REDIS_URL_CHECK="redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}" REDIS_PASSWORD=${REDIS_PASSWORD:-} \
   "$CORE_VENV/bin/python" - <<'EOF' || die "MongoDB/Redis erişilemiyor (yukarıdaki hata)"
@@ -321,6 +360,8 @@ setup() {
   write_envs
   ensure_ca_bundle
   ca_env
+  say "yerel PostgreSQL / Redis"
+  ensure_local_services
   say "MongoDB / Redis erişimi"
   ensure_services_reachable
   say "PostgreSQL kullanıcı / veritabanı"
@@ -416,7 +457,34 @@ status() {
       printf '  %-8s DURUYOR\n' "$name"
     fi
   done
+  if running autodeploy; then
+    printf '  %-8s çalışıyor (pid %s)\n' autodeploy "$(cat "$LOG_DIR/autodeploy.pid")"
+  else
+    printf '  %-8s kapalı (açmak için: %s autodeploy)\n' autodeploy "$0"
+  fi
   curl -fsS -m 5 "http://$API_BIND/readyz" 2>/dev/null && echo || echo "  readyz: yanıt yok"
+}
+
+# Otomatik güncelleme (tools/auto-deploy-compose.sh): PROCS'ta DEĞİL — update, stop ile PROCS'u durdurur ve kendini öldürmemeli
+autodeploy_start() {
+  git -C "$REPO" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
+    || die "Bu branch için Git upstream tanımlı değil (git branch --set-upstream-to=origin/<branch>)"
+  echo "otomatik güncelleme (aralık: ${AUTO_UPDATE_INTERVAL:-30}s):"
+  launch autodeploy "$REPO" bash "$REPO/tools/auto-deploy-compose.sh"
+}
+
+autodeploy_stop() {
+  local pid
+  if running autodeploy; then
+    pid=$(cat "$LOG_DIR/autodeploy.pid")
+    signal_proc "$pid" TERM
+    for _ in {1..10}; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -0 "$pid" 2>/dev/null && signal_proc "$pid" KILL
+    echo "  autodeploy durdu"
+  else
+    echo "  autodeploy çalışmıyor"
+  fi
+  rm -f "$LOG_DIR/autodeploy.pid"
 }
 
 check() {
@@ -450,6 +518,8 @@ case ${1:-start} in
   stop)    stop ;;
   restart) stop; setup; start_procs ;;   # setup: ayar değişiklikleri app/.env'ye yansısın
   status)  load_conf; status ;;
-  logs)    tail -n 100 -f "$LOG_DIR/${2:?süreç adı: ${PROCS[*]} setup}.log" ;;
-  *)       echo "Kullanım: $0 [start|setup|update|check|stop|restart|status|logs <${PROCS[*]}|setup>]" >&2; exit 2 ;;
+  autodeploy)      autodeploy_start ;;
+  autodeploy-stop) autodeploy_stop ;;
+  logs)    tail -n 100 -f "$LOG_DIR/${2:?süreç adı: ${PROCS[*]} setup autodeploy}.log" ;;
+  *)       echo "Kullanım: $0 [start|setup|update|check|stop|restart|status|autodeploy|autodeploy-stop|logs <${PROCS[*]}|setup|autodeploy>]" >&2; exit 2 ;;
 esac
