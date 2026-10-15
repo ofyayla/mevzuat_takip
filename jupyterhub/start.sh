@@ -23,6 +23,7 @@ CORE_VENV=${CORE_VENV:-$HOME/venv-core}
 CRAWLER_VENV=${CRAWLER_VENV:-$HOME/venv-crawler}
 LOG_DIR=${LOG_DIR:-$HOME/mevzuat-logs}
 CERT_DIR=${CERT_DIR:-$HOME/certs}
+PGDATA=${PGDATA:-$HOME/pgdata}              # yerel PostgreSQL veri dizini (pg_ctl ile başlatılır)
 PY_ENV=${PY_ENV:-$CONF_DIR/python312}       # sistemde Python ≥ 3.11 yoksa conda ile buraya kurulur
 CA_CERT_URLS=${CA_CERT_URLS:-"https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"}
 export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -254,6 +255,29 @@ ensure_ca_bundle() {    # bir kez dener; başarısız olursa sistem/certifi depo
   fi
 }
 
+port_open() {   # host, port → TCP bağlantısı kabul ediliyorsa 0
+  (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null
+}
+
+wait_port() {   # host, port, saniye → portun açılmasını bekler
+  local _
+  for _ in $(seq "$3"); do port_open "$1" "$2" && return 0; sleep 1; done
+  return 1
+}
+
+ensure_local_services() {   # yerel PostgreSQL ($PGDATA) kapalıysa başlatır; açıksa dokunmaz
+  if port_open "$PG_HOST" "$PG_PORT"; then
+    say "PostgreSQL zaten açık ($PG_HOST:$PG_PORT)"
+  elif [[ -f $PGDATA/PG_VERSION ]] && command -v pg_ctl >/dev/null 2>&1; then
+    say "PostgreSQL başlatılıyor ($PGDATA, port $PG_PORT)"
+    pg_ctl -D "$PGDATA" -o "-p $PG_PORT -c listen_addresses=$PG_HOST" -l "$PGDATA/pg.log" start >>"$SETUP_LOG" 2>&1 || true
+    wait_port "$PG_HOST" "$PG_PORT" 20 || die "PostgreSQL başlamadı (log: $PGDATA/pg.log)"
+  else
+    say "PostgreSQL $PG_HOST:$PG_PORT kapalı; yerel kurulum ($PGDATA / pg_ctl) bulunamadı, uzak sunucu varsayılıyor"
+  fi
+
+}
+
 ensure_services_reachable() {
   MONGO_URL=$MONGO_URL REDIS_URL_CHECK="redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}" REDIS_PASSWORD=${REDIS_PASSWORD:-} \
   "$CORE_VENV/bin/python" - <<'EOF' || die "MongoDB/Redis erişilemiyor (yukarıdaki hata)"
@@ -316,6 +340,8 @@ setup() {
   write_envs
   ensure_ca_bundle
   ca_env
+  say "yerel PostgreSQL"
+  ensure_local_services
   say "MongoDB / Redis erişimi"
   ensure_services_reachable
   say "PostgreSQL kullanıcı / veritabanı"
