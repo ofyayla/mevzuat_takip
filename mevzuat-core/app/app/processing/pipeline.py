@@ -17,7 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.config import ChannelConfig, SourcesFile, load_sources
-from app.db import RawDocument, utcnow
+from app.db import RawDocument, Regulation, RegulationSourceLink, utcnow
 from app.processing.dedupe import Confirmer, Linker, LinkResult
 from app.processing.extract import UnsupportedContent, extract
 from app.processing.ocr import OcrEngine, OcrError, get_ocr_engine
@@ -169,3 +169,40 @@ class DocumentProcessor:
                     raw.processing_status = status if status == "LINKED" else raw.processing_status
                 session.commit()
         return report
+
+    def catch_up_ocr(self, session_factory: sessionmaker[Session], *,
+                     limit: int = 10) -> tuple[ProcessReport, list[int]]:
+        """OCR kapalıyken bağlanmış taranmış belgeler: OCR açılınca metin küçük gruplar halinde yeniden çıkarılır.
+
+        Metni gelen ve bu yüzden özetlenemeyen (``summary_blocked``) düzenlemelerin metinsiz yapılmış YZ birim
+        önerisi işareti silinir; özet ve birim eşleştirme yeni metinle yeniden çalışır (uzman kararlarına dokunulmaz).
+        Dönüş: rapor + özetlenmesi gereken düzenleme no'ları. Başarısız belge ``process_max_attempts`` kez denenir.
+        """
+        if self.ocr is None:
+            return ProcessReport(), []
+        with session_factory() as session:
+            q = select(RawDocument).where(RawDocument.text.is_not(None), RawDocument.is_latest.is_(True),
+                                          RawDocument.extra["ocr_pending_pages"].is_not(None)).order_by(RawDocument.id)
+            if not self.settings.ocr_baseline:
+                q = q.where(RawDocument.is_baseline.is_(False))
+            ids = [d.id for d in session.scalars(q)
+                   if (d.extra or {}).get("ocr_pending_pages")
+                   and (d.extra or {}).get("extract_attempts", 0) < self.settings.process_max_attempts][:limit]
+        if not ids:
+            return ProcessReport(), []
+        report = self.reextract(session_factory, raw_ids=ids, limit=limit)
+        refreshed: list[int] = []
+        with session_factory() as session:
+            done = [d.id for d in session.scalars(select(RawDocument).where(RawDocument.id.in_(ids)))
+                    if not (d.extra or {}).get("ocr_pending_pages")]
+            reg_ids = session.scalars(select(RegulationSourceLink.regulation_id).where(
+                RegulationSourceLink.raw_document_id.in_(done)).distinct()) if done else []
+            for reg_id in sorted(reg_ids):
+                reg = session.get(Regulation, reg_id)
+                if reg.processing_status == "RELEVANT" and (reg.extra or {}).get("summary_blocked"):
+                    reg.extra = {k: v for k, v in reg.extra.items() if k != "unit_match"}
+                    refreshed.append(reg_id)
+            session.commit()
+        log.info("OCR telafisi: %d belge yeniden çıkarıldı, %d düzenleme yeniden özetlenecek",
+                 len(done), len(refreshed))
+        return report, refreshed

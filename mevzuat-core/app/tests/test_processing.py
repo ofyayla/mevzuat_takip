@@ -21,7 +21,7 @@ from app.db import RawDocument, Regulation, RegulationKey, RegulationSourceLink,
 from app.processing.dedupe import fit_key, merge_regulations, split_document
 from app.processing.extract import extract
 from app.processing.ocr import AzureDocumentIntelligenceOcr, OcrError, OcrResult, page_ranges
-from app.processing.pipeline import DocumentProcessor
+from app.processing.pipeline import DocumentProcessor, ProcessReport
 from app.storage import FileSystemStorage
 from tests.conftest import FIXTURES
 
@@ -333,6 +333,32 @@ def test_reextract_fills_ocr_pending(settings, env):
         raw = s.get(RawDocument, rid)
         assert rep.processed == 1 and raw.processing_status == "LINKED" and "OCR METNİ" in raw.text
         assert "ocr_pending_pages" not in raw.extra
+
+
+def test_catch_up_ocr_refreshes_blocked_regulation(settings, env):
+    sf, storage = env
+    content, ctype = fixture_bytes("processing", RG_PDF)
+    rid = add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260919-5", url=RG_PDF,
+                  title="Kurul Kararı", published=date(2026, 9, 19), content=content, content_type=ctype)
+    base = add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260101-1", url=RG_PDF + "?b",
+                   title="Eski Karar", published=date(2026, 1, 1), content=content, content_type=ctype, baseline=True)
+    DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
+    assert DocumentProcessor(settings, storage, use_default_ocr=False).catch_up_ocr(sf) == (ProcessReport(), [])
+    with sf() as s:   # OCR kapalıyken: özet metin bekliyor, birim eşleştirme başlıktan yapılmış
+        reg = s.get(Regulation, s.get(RawDocument, rid).regulation_id)
+        reg.processing_status, reg.is_relevant = "RELEVANT", True
+        reg.extra = {**(reg.extra or {}), "summary_blocked": "metin_yok", "unit_match": {"status": "önerilemedi"}}
+        reg_id = reg.id
+        s.commit()
+    p = DocumentProcessor(settings, storage, ocr=FakeOcr({1: "OCR METNİ " * 40}))
+    rep, refreshed = p.catch_up_ocr(sf)
+    assert rep.processed == 1 and refreshed == [reg_id]
+    with sf() as s:
+        raw = s.get(RawDocument, rid)
+        assert raw.processing_status == "LINKED" and "OCR METNİ" in raw.text and "ocr_pending_pages" not in raw.extra
+        assert "unit_match" not in s.get(Regulation, reg_id).extra
+        assert s.get(RawDocument, base).extra["ocr_pending_pages"] == [1]   # ilk tarama belgesi OCR'a gitmez
+    assert p.catch_up_ocr(sf) == (ProcessReport(), [])
 
 
 # ------------------------------------------------------------------------------------------------ Azure DI istemcisi
