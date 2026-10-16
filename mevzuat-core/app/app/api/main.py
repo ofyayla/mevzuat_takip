@@ -613,6 +613,7 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     app.include_router(evaluation)
 
     @app.get("/", include_in_schema=False)
+    @app.get("/admin", include_in_schema=False)   # aynı sayfa; portal adresi görünce Yönetim görünümünü açar
     def portal():
         return FileResponse(settings.portal_dir / PORTAL_FILE, media_type="text/html; charset=utf-8")
 

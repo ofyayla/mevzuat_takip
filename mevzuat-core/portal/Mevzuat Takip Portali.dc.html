@@ -120,7 +120,7 @@ window.__resources = {
     <div style="flex:1; overflow-y:auto; padding:28px 32px 60px;">
 
       <sc-if value="{{ isAdminView }}" hint-placeholder-val="{{ false }}">
-        <div class="mtp-fade-in" style="display:flex; flex-direction:column; gap:20px; max-width:1180px;">
+        <div class="mtp-fade-in" style="display:flex; flex-direction:column; gap:20px; width:100%;">
           <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
             <div>
               <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Yönetim</h1>
@@ -157,11 +157,11 @@ window.__resources = {
               </label>
             </div>
             <div style="overflow-x:auto;">
-              <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 190px; gap:10px; padding:0 0 8px; font-size:11.5px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; min-width:900px;">
+              <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 230px; gap:10px; padding:0 0 8px; font-size:11.5px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; min-width:940px;">
                 <span>Kaynak</span><span>Son tarama</span><span>Süre</span><span>İstek</span><span>Yeni/Liste</span><span>Sonraki</span><span></span>
               </div>
               <sc-for list="{{ metricRows }}" as="m" hint-placeholder-count="6">
-                <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 190px; gap:10px; align-items:center; padding:9px 0; border-top:1px solid var(--border); font-size:13px; min-width:900px;">
+                <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 230px; gap:10px; align-items:center; padding:9px 0; border-top:1px solid var(--border); font-size:13px; min-width:940px;">
                   <span style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ m.name }}">{{ m.name }}</span>
                   <span style="color:{{ m.runColor }};">{{ m.runText }}</span>
                   <span>{{ m.durationText }}</span>
@@ -907,14 +907,18 @@ class Component extends DCLogic {
 
   componentDidMount() {
     window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('popstate', this.handlePopState);
     this.renderIcons();
     this.loadMeta();
     this.loadList();
+    if (location.pathname === '/admin') this.openAdmin();
     // Süreç haritasından gelen bağlantı: /#kayit=<id> doğrudan ayrıntıyı açar
     const m = /^#kayit=(\d+)$/.exec(location.hash);
     if (m) { history.replaceState(null, '', location.pathname); this.openDetail(Number(m[1])); }
   }
-  componentWillUnmount() { window.removeEventListener('keydown', this.handleKeyDown); }
+  componentWillUnmount() { window.removeEventListener('keydown', this.handleKeyDown); window.removeEventListener('popstate', this.handlePopState); }
+  // /admin adresi doğrudan Yönetim sayfasını açar; tarayıcı geri/ileri düğmeleri görünümü izler
+  handlePopState = () => { if (location.pathname === '/admin') this.openAdmin(); else if (this.state.view === 'admin') this.goToList(); };
   componentDidUpdate() { this.renderIcons(); }
   renderIcons() { if (window.lucide) window.lucide.createIcons(); }
 
@@ -950,7 +954,7 @@ class Component extends DCLogic {
   update = (patch) => { this.setState(patch); this.loadList(patch); };
 
   // ------------------------------------------------------------------ gezinme ve filtreler
-  goToList = () => { this.setState({ view: 'list', unitModalOpen: false, contentModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
+  goToList = () => { if (location.pathname === '/admin') history.pushState(null, '', '/'); this.setState({ view: 'list', unitModalOpen: false, contentModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
   openDetail = (id) => {
     this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, contentModalOpen: false, detail: null });
     api('/regulations/' + id).then(r => this.setState({ detail: toRecord(r.data), detailEtag: r.etag })).catch(this.fail);
@@ -1019,6 +1023,7 @@ class Component extends DCLogic {
   // Sunucu her admin ucunda ROLE_ADMIN ister; sekme yalnız /me.isAdmin ise görünür. Ayar tipi ve aralığı
   // GET /admin/settings?detail=true yanıtından gelir, 400 yanıtındaki details.fields alan bazında gösterilir.
   openAdmin = () => {
+    if (location.pathname !== '/admin') history.pushState(null, '', '/admin');
     this.setState({ view: 'admin', detail: null, unitModalOpen: false, contentModalOpen: false, confirmType: null });
     this.loadAdmin();
   };

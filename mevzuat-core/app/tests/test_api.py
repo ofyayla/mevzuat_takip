@@ -246,6 +246,7 @@ def test_admin_settings_and_health_endpoints(settings, env, client):  # noqa: F8
     assert c.get("/healthz").json() == {"status": "ok"} and c.get("/readyz").json()["checks"]["db"] == "ok"
     assert len(c.get("/api/v1/units").json()) == 0 or True
     assert c.get("/").status_code == 200 and "Mevzuat" in c.get("/").text
+    assert c.get("/admin").status_code == 200 and c.get("/admin").text == c.get("/").text   # aynı sayfa, /admin Yönetim'i açar
 
 
 def test_runtime_settings_validate_type_range_and_consistency(settings, env, client):  # noqa: F811
