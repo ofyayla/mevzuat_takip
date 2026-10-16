@@ -343,3 +343,20 @@ Geçici çözüm: `jupyterhub/start.sh` crawler `.env`'ine `COLLECT_MAX_BYTES=10
 `COLLECT_MAX_BYTES` ile değiştirilebilir; kod varsayılanı 50 MB kaldı). Dikkat: tüm yanıt belleğe alınır (en çok 100 MB/istek,
 `CRAWLER_MAX_PARALLEL=3`) ve ana servisteki metin çıkarma/OCR bu boyutta yavaş olabilir. Dosya yine sınırı aşarsa kalıcı çözüm
 (oversize için `listing` anlık görüntüsü) yazılmalı.
+
+## 8. 16 Ekim 2026 taraması: portal ve API sağlamlaştırma
+
+Kod taramasından çıkan ve doğrulanan portal/API işleri (dağıtım ve YZ hattı işleri ayrı paketlerde). Yapılanlar:
+
+| Konu | Değişiklik |
+|---|---|
+| Ayar doğrulama hatası | `PUT /admin/settings` yalnız `float()` denetliyordu; `relevance_samples="3.0"` kaydedilince `effective_settings` her okumada `int("3.0")` ile kırılıp tüm YZ hattını düşürüyordu. Artık `RUNTIME_SPECS` (tip, aralık, açıklama) ve çapraz kontroller (`dedupe_review < dedupe_auto`, `confidence_medium < confidence_high`) var; bozuk satır uyarıyla atlanır. `mevzuat-ai setting` aynı denetimi yapar |
+| Türkçe arama | I/İ/ı/i aynı harf sayılır, `%` ve `_` joker değildir (`processing.normalize.search_fold` + `regulations._fold_sql`). tsvector bilinçli eklenmedi (yılda ≈4 bin kayıt) |
+| Eşzamanlı karar | Karar/birim/içerik uçları satırı `FOR UPDATE` ile okur (`get_visible(for_update=True)`); iki uzman aynı anda karar verirse ikincisi bekler, güncel kaydı görür ve 412/409 alır. PostgreSQL'de `lock_timeout` 5 sn |
+| `/readyz` | Veritabanı hata metni (sunucu adresi, kullanıcı) yanıta konmuyor, loga yazılıyor |
+| Güvenlik başlıkları | `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy` |
+| Portal dış bağımlılık | React, react-dom ve lucide `portal/vendor/` altına alındı (sabit sürüm, özetler `vendor/README.md`); `lucide@latest` ve Google Fonts kaldırıldı |
+| Portal | `lang="tr"`; karar/birim düğmeleri yalnız yetkili rolde; detayda yürürlük tarihi ifadesi, ilgililik ve önem gerekçesi, doğrulanamayıp çıkarılan ifadeler |
+
+Yapılmayanlar: portal Keycloak girişi (`window.MTP_TOKEN_PROVIDER` hâlâ tanımsız; kapsam dışı bırakıldı), arama süresinin
+PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki bağlantıyla denenmesi.

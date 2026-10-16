@@ -1,18 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mevzuat Takip Portalı</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b625b'/%3E%3Cpath d='M32 10 49 17v13c0 12-7.3 20.5-17 25-9.7-4.5-17-13-17-25V17l17-7Z' fill='none' stroke='white' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='m24 31 6 6 11-12' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>
+// support.js React'ı varsayılan olarak unpkg.com'dan yükler; kurum ağında dışarı çıkılmaz, bu yüzden sunucudan sunulan
+// kopyalar kullanılır (sürümler portal/vendor/README.md). Anahtarlar support.js'teki adreslerle birebir aynı olmalı.
+window.__resources = {
+  "https://unpkg.com/react@18.3.1/umd/react.production.min.js": "/vendor/react.production.min.js",
+  "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js": "/vendor/react-dom.production.min.js"
+};
+</script>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <helmet>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="/vendor/lucide.min.js"></script>
   <style>
     body { margin: 0; }
     * { box-sizing: border-box; }
@@ -314,6 +320,19 @@
                       </span>
                     </div>
                     <p style="font-size:14px; line-height:1.65; color:var(--foreground); margin:0;">{{ selected.summary }}</p>
+                    <sc-if value="{{ selected.hasRemovedClaims }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:14px; padding:12px 14px; border-radius:var(--radius-md); background:color-mix(in oklch, var(--warning) 14%, white); border:1px solid color-mix(in oklch, var(--warning) 45%, white);">
+                        <div style="font-size:12.5px; font-weight:600; color:var(--foreground); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                          <i data-lucide="alert-triangle" style="width:13px; height:13px;"></i>
+                          Kaynak metinde doğrulanamadığı için özetten çıkarılan ifadeler
+                        </div>
+                        <ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.55; color:var(--muted-foreground);">
+                          <sc-for list="{{ selected.removedClaims }}" as="rc" hint-placeholder-count="1">
+                            <li>{{ rc.label }}: {{ rc.text }}</li>
+                          </sc-for>
+                        </ul>
+                      </div>
+                    </sc-if>
                   </div>
 
                   <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
@@ -417,6 +436,19 @@
                 <div style="height:1px; background:var(--border);"></div>
 
                 <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Yürürlük tarihi</span>
+                  <i data-lucide="bot" style="width:12px; height:12px; color:var(--primary);" title="YZ tarafından"></i>
+                </div>
+                <div style="margin-top:-8px;">
+                  <div style="font-size:14px; color:var(--foreground); font-weight:500;">{{ selected.effectiveDate }}</div>
+                  <sc-if value="{{ selected.effectiveDateText }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12.5px; color:var(--muted-foreground); line-height:1.5; margin-top:3px;">{{ selected.effectiveDateText }}</div>
+                  </sc-if>
+                </div>
+
+                <div style="height:1px; background:var(--border);"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
                   <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">YZ güven skoru</span>
                   <i data-lucide="bot" style="width:12px; height:12px; color:var(--primary);" title="YZ tarafından"></i>
                 </div>
@@ -424,6 +456,16 @@
                   <span style="font-size:13px; letter-spacing:2px; color:{{ selected.confColor }};">{{ selected.confDots }}</span>
                   <span style="font-size:14px; color:var(--foreground); font-weight:500;">{{ selected.confidence }} güven</span>
                 </div>
+                <sc-if value="{{ selected.relevanceRationale }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12.5px; color:var(--muted-foreground); line-height:1.5; margin-top:-6px;">
+                    <strong style="color:var(--foreground); font-weight:500;">İlgililik gerekçesi{{ selected.relevanceScoreText }}:</strong> {{ selected.relevanceRationale }}
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selected.severityRationale }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12.5px; color:var(--muted-foreground); line-height:1.5;">
+                    <strong style="color:var(--foreground); font-weight:500;">Önem gerekçesi:</strong> {{ selected.severityRationale }}
+                  </div>
+                </sc-if>
 
                 <a href="{{ selected.sourceUrl }}" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:7px; height:40px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13.5px; font-weight:500; text-decoration:none; margin-top:4px;">
                   Orijinal belgeyi görüntüle
@@ -434,7 +476,7 @@
               <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; display:flex; flex-direction:column; gap:10px;">
                 <span style="font-size:11px; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; font-weight:500;">Aksiyonlar</span>
 
-                <sc-if value="{{ isPending }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ showDecisionActions }}" hint-placeholder-val="{{ true }}">
                   <button onClick="{{ openApprove }}" style="height:42px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center; gap:7px;">
                     <i data-lucide="check" style="width:15px; height:15px;"></i>
                     Onayla
@@ -447,6 +489,12 @@
                     <i data-lucide="shuffle" style="width:14px; height:14px;"></i>
                     Birim değiştir
                   </button>
+                </sc-if>
+
+                <sc-if value="{{ pendingReadOnly }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px; color:var(--muted-foreground); line-height:1.5; background:var(--muted); padding:12px; border-radius:var(--radius-md);">
+                    Bu kayıt karar bekliyor. Karar verme ve birim değiştirme yetkiniz yok (yalnızca görüntüleyebilirsiniz).
+                  </div>
                 </sc-if>
 
                 <sc-if value="{{ isDecided }}" hint-placeholder-val="{{ false }}">
@@ -600,6 +648,13 @@ function toRecord(r) {
     hasSummary: !!r.summary,
     summary: r.summary || ('Özet henüz hazır değil (' + (r.analysisStatus || 'analiz sürüyor') + ').'),
     topics: r.topics || [], suggestedUnits: r.suggestedUnits || [], decidedBy: decided,
+    // YZ gerekçesi (yalnız ayrıntı yanıtında gelir): uzman, YZ çıktısını nedenini görerek onaylasın
+    effectiveDateText: r.effectiveDateText || '',
+    relevanceRationale: (r.relevance && r.relevance.rationale) || '',
+    relevanceScoreText: r.relevance && typeof r.relevance.score === 'number' ? ' (skor ' + r.relevance.score.toFixed(2) + ')' : '',
+    severityRationale: r.severityRationale || '',
+    removedClaims: (r.removedClaims || []).map(c => ({ label: REMOVED_CLAIM_LABELS[c.kind] || 'İfade', text: c.text || '' })),
+    hasRemovedClaims: (r.removedClaims || []).length > 0,
     sourceUrl: r.sourceUrl || '#',
     auditTrail: (r.auditTrail || []).map(ev => Object.assign({}, ev, { timestamp: fmtDateTime(ev.timestamp) }))
   });
@@ -622,6 +677,7 @@ function confMeta(c) {
   return { dots: '● ○ ○', color: 'var(--muted-foreground)' };
 }
 
+const REMOVED_CLAIM_LABELS = { sentence: 'Özet cümlesi', topic: 'İlgili konu', effective_date: 'Yürürlük tarihi' };
 const REJECTION_REASON_LABELS = {
   not_banking_related: 'Bankacılıkla ilişkili değil',
   outdated: 'Güncelliğini yitirmiş',
@@ -1016,6 +1072,10 @@ class Component extends DCLogic {
       sourceHealthOpen, toggleSourceHealth: this.toggleSourceHealth, sourceList,
       showRunHint: canRunSources && sourceList.length > 0, healthPanelWidth: canRunSources ? '340px' : '280px',
       selected, isPending: !!selected && selected.status === 'Bekliyor', isDecided: !!selected && selected.status !== 'Bekliyor',
+      // Karar/birim düğmeleri yalnız yetkili rolde (sunucu da ROLE_EXPERT ister; görüntüleyici 403 alırdı). `me` henüz
+      // yüklenmediyse yetki bilinmez: düğme gösterilmez, "yetkiniz yok" notu da gösterilmez.
+      showDecisionActions: !!selected && selected.status === 'Bekliyor' && !!me && !!me.canDecide,
+      pendingReadOnly: !!selected && selected.status === 'Bekliyor' && !!me && !me.canDecide,
       canEditContent: !!selected && selected.status === 'Bekliyor' && !!me && me.canDecide,
       contentModalOpen, contentTitleDraft, contentSummaryDraft,
       contentSummaryDisabled: !selRaw || !selRaw.hasSummary,
