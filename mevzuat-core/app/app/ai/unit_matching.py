@@ -262,13 +262,19 @@ def match_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Se
                 reg.processing_status = "SUMMARIZED" if current_summary(session, reg.id) else "RELEVANT"
             try:
                 res = match_regulation(session, llm, reg, settings, force=force or retry)
-            except LLMError as e:
+            except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
+                if isinstance(e, LLMError):
+                    msg = str(e)
+                else:
+                    session.rollback()
+                    msg = f"{type(e).__name__}: {e}"
+                    log.exception("düzenleme %s için birim eşleştirmede beklenmeyen hata", reg_id)
                 extra = dict(reg.extra or {})
-                extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_error=str(e)[:500], ai_stage="unit_match")
+                extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_error=msg[:500], ai_stage="unit_match")
                 reg.extra, reg.processing_status = extra, "AI_FAILED"
                 session.commit()
                 rep.failed += 1
-                rep.errors.append(f"#{reg_id}: {e}")
+                rep.errors.append(f"#{reg_id}: {msg}")
                 continue
             session.commit()
             rep.matched += bool(res.kept)

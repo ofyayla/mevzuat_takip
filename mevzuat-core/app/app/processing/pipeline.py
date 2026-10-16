@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.config import ChannelConfig, SourcesFile, load_sources
@@ -123,9 +123,13 @@ class DocumentProcessor:
                         source: str | None = None, raw_ids: list[int] | None = None) -> ProcessReport:
         report = ProcessReport()
         with session_factory() as session:
+            # deneme hakkı biten belge SQL'de elenir: Python'da sonradan elenseydi tükenmiş kayıtlar LIMIT'i doldurup
+            # yeni belgelerin önünü keserdi
+            attempts = func.coalesce(RawDocument.extra["extract_attempts"].as_integer(), 0)
             q = select(RawDocument.id).where(or_(
                 RawDocument.processing_status.in_(PENDING),
-                RawDocument.processing_status == "EXTRACT_FAILED",
+                and_(RawDocument.processing_status == "EXTRACT_FAILED",
+                     attempts < self.settings.process_max_attempts),
             )).order_by(RawDocument.id).limit(limit)
             if source:
                 q = q.where(RawDocument.source_code == source)
@@ -135,9 +139,6 @@ class DocumentProcessor:
         for raw_id in ids:
             with session_factory() as session:
                 raw = session.get(RawDocument, raw_id)
-                attempts = (raw.extra or {}).get("extract_attempts", 0)
-                if raw.processing_status == "EXTRACT_FAILED" and attempts >= self.settings.process_max_attempts:
-                    continue
                 try:
                     self.process(session, raw, report)
                     session.commit()

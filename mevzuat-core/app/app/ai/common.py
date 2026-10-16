@@ -7,6 +7,7 @@ kriterlerle üretildiği izlenebilir.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -24,11 +25,24 @@ REG_TYPES = ["Kanun", "Cumhurbaşkanı Kararı", "Cumhurbaşkanlığı Kararname
              "Rehber", "Kurul Kararı", "İlke Kararı", "Usul ve Esaslar", "Düzenleme Taslağı", "Duyuru",
              "Basın Duyurusu", "Bülten", "İlan", "Resmi Yazı", "Diğer"]
 SEVERITIES = ["Kritik", "Yüksek", "Orta", "Düşük"]
+_SOURCE_TAG = re.compile(r"<(\s*/?\s*kaynak_metin\b[^<>]*)>", re.I)
+
+
+def neutralize_source_tags(value):
+    """Belge metnindeki ``<kaynak_metin>`` / ``</kaynak_metin>`` etiketleri ``[…]`` biçimine çevrilir: metin
+    istemdeki sınırı kapatıp ardından gelen satırları talimat gibi gösteremez (prompt injection)."""
+    return _SOURCE_TAG.sub(r"[\1]", value) if isinstance(value, str) else value
+
+
 _env = Environment(loader=FileSystemLoader(PROMPTS_DIR), undefined=StrictUndefined, keep_trailing_newline=False,
                    trim_blocks=False, autoescape=False)
 # tojson varsayılan olarak Türkçe karakterleri \u011f biçiminde kaçırır; model alıntıları bu kaçış dizileriyle kopyalayıp
 # bozuyor (canlı ölçüm: map-reduce'ta "Tebli\u001fin" gibi alıntılar). Prompt'a düz UTF-8 JSON verilir.
 _env.policies["json.dumps_kwargs"] = {"ensure_ascii": False, "sort_keys": False}
+# Kullanıcı mesajı şablonları belge verisi taşır: her {{ … }} çıktısında etiketler etkisizleştirilir. Şablondaki gerçek
+# etiketler şablon metnidir, ifade değildir; etkilenmez. Sistem istemine uygulanmaz: güvenilir kılavuz etiketi adıyla
+# anar ("Kaynak metin `<kaynak_metin>` etiketleri arasındadır").
+_user_env = _env.overlay(finalize=neutralize_source_tags)
 
 
 @dataclass(frozen=True)
@@ -52,7 +66,8 @@ def knowledge(settings: Settings) -> Knowledge:
 
 
 def render(name: str, **ctx) -> str:
-    return _env.get_template(name).render(**ctx).strip()
+    env = _user_env if name.endswith(".user.j2") else _env
+    return env.get_template(name).render(**ctx).strip()
 
 
 def messages(task: str, version: str, system_ctx: dict, user_ctx: dict) -> list[dict]:

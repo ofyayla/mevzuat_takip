@@ -201,7 +201,7 @@ Sınırlar (dürüst not):
 | 4.4 | `make api-reference` (ana servis ortamında); `PATCH /api/v1/regulations/{id}/content` eksik | Core geliştiricisi |
 | 4.5 | Hafta sonu/gece için kabul edilebilir gecikme (SLA) yazılı hale getirilmeli | Başkanlık kararı |
 | 4.6 | Aylık GridFS büyüklüğü sorgusu | İşletim |
-| 4.7 | Önce doğrula: tükenmiş `EXTRACT_FAILED`/`AI_FAILED` kayıtlar güvenlik ağı turunu gerçekten tıkıyor mu | Core geliştiricisi |
+| 4.7 | ~~Önce doğrula: tükenmiş `EXTRACT_FAILED`/`AI_FAILED` kayıtlar güvenlik ağı turunu gerçekten tıkıyor mu~~ **Uygulandı**: tıkıyordu; deneme sayısı SQL filtresine taşındı (06 §20) | Core geliştiricisi |
 | 4.8 | Ortak kodu sürümlü pakete taşıma | Uzun vade |
 | R-7 | Sürekli hatalı detaylar için öğe başına üstel geri çekilme (şimdi saatte 1 istek) | Gerekirse |
 
