@@ -56,6 +56,13 @@ window.__resources = {
         </div>
       </div>
 
+      <sc-if value="{{ isAdminView }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans);">
+          <i data-lucide="arrow-left" style="width:14px; height:14px; color:var(--primary);"></i>
+          Kayıtlar
+        </button>
+        <div style="flex:1 1 auto;"></div>
+      </sc-if>
       <sc-if value="{{ isDetailView }}" hint-placeholder-val="{{ false }}">
         <div style="height:32px; width:1px; background:var(--border); flex:0 0 auto;"></div>
         <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1 1 auto;">
@@ -103,12 +110,6 @@ window.__resources = {
         <button onClick="{{ openAdmin }}" title="Ayarlar, alarmlar, tarama ve yeniden işleme" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans);">
           <i data-lucide="settings-2" style="width:14px; height:14px; color:var(--primary);"></i>
           Yönetim
-        </button>
-      </sc-if>
-      <sc-if value="{{ isAdminView }}" hint-placeholder-val="{{ false }}">
-        <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans);">
-          <i data-lucide="arrow-left" style="width:14px; height:14px; color:var(--primary);"></i>
-          Kayıtlar
         </button>
       </sc-if>
       <a href="./surec" title="İşleme hattının durumları ve canlı sayıları" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); color:var(--foreground); text-decoration:none; font-size:12.5px; white-space:nowrap; flex:0 0 auto;">
