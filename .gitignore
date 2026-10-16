@@ -8,3 +8,4 @@ mevzuat-*/app/data/
 .ruff_cache/
 .DS_Store
 .claude/
+tools/log_ozet*.txt

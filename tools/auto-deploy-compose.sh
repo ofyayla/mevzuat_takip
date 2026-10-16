@@ -43,7 +43,7 @@ sync_remote() {
 
   if [[ "$current_commit" != "$target_commit" ]]; then
     if git merge-base --is-ancestor "$current_commit" "$target_commit"; then
-      if [[ -n "$(git status --porcelain)" ]]; then
+      if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
         log 'Yerel değişiklikler var; Git güncellemesi güvenlik için uygulanmadı.'
         return 1
       fi
