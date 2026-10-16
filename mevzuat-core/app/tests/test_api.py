@@ -281,6 +281,54 @@ def test_runtime_settings_validate_type_range_and_consistency(settings, env, cli
         assert effective_settings(s, settings).relevance_weight_model == settings.relevance_weight_model
 
 
+def test_admin_settings_detail_and_field_level_errors(settings, env, client):  # noqa: F811
+    c, _ = client
+    d = c.get("/api/v1/admin/settings?detail=true").json()
+    assert d["values"]["relevance_samples"] == settings.relevance_samples
+    assert d["specs"]["relevance_samples"] == {"type": "int", "min": 1, "max": 9,
+                                               "description": d["specs"]["relevance_samples"]["description"]}
+    assert d["specs"]["relevance_threshold"]["type"] == "float" and "relevance_threshold" not in d["specs"]["relevance_samples"]
+    assert "specs" not in c.get("/api/v1/admin/settings").json()          # düz biçim geriye uyumlu
+    r = c.put("/api/v1/admin/settings", json={"values": {"relevance_samples": "3.0", "relevance_threshold": "2",
+                                                         "relevance_weight_rules": "0.3"}})
+    fields = r.json()["error"]["details"]["fields"]
+    assert r.status_code == 400 and set(fields) == {"relevance_samples", "relevance_threshold"}   # geçerli alan hata değil
+    assert c.get("/api/v1/admin/settings").json()["relevance_weight_rules"] == settings.relevance_weight_rules  # hiçbiri yazılmadı
+    cross = c.put("/api/v1/admin/settings", json={"values": {"dedupe_review_threshold": "0.95"}})
+    assert set(cross.json()["error"]["details"]["fields"]) == {"dedupe_review_threshold"}
+    unknown = c.put("/api/v1/admin/settings", json={"values": {"llm_api_key": "x"}})
+    assert unknown.status_code == 400 and "llm_api_key" in unknown.json()["error"]["details"]["fields"]
+    ok = c.put("/api/v1/admin/settings?detail=true", json={"values": {"relevance_samples": "5"}}).json()
+    assert ok["values"]["relevance_samples"] == 5 and "specs" in ok
+
+
+def test_admin_metrics_last_run_next_due_and_llm_latency(settings, env, client):  # noqa: F811
+    from datetime import datetime, timezone
+
+    from app.collectors.config import load_sources
+    from app.db import FetchRun, LlmCall
+
+    c, sf = client
+    first = load_sources(settings.sources_file).enabled()[0]
+    t0 = datetime(2026, 1, 5, 6, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    with sf() as s:
+        s.add(FetchRun(source_code=first.code, started_at=t0, finished_at=t0 + timedelta(seconds=42), status="success",
+                       requests=7, items_new=3, items_listed=20))
+        for i, ms in enumerate([100, 200, 300, 400, 5000]):
+            s.add(LlmCall(task="summary", provider="fake", model="m", prompt_version="p", input_hash=f"h{i}",
+                          latency_ms=ms, status="ok", created_at=now))
+        s.add(LlmCall(task="summary", provider="fake", model="m", prompt_version="p", input_hash="bad",
+                      latency_ms=None, status="error", created_at=now))
+        s.commit()
+    m = c.get("/api/v1/admin/metrics").json()
+    row = next(x for x in m["sources"] if x["code"] == first.code)
+    assert row["lastRun"]["durationSec"] == 42 and row["lastRun"]["requests"] == 7 and row["lastRun"]["status"] == "success"
+    assert row["nextDue"] is not None                       # yerel kurulumda sources.yaml takviminden hesaplanır
+    assert m["pendingIngest"] is None and m["crawlMode"] == settings.crawl_mode
+    assert m["llm"]["calls"] == 6 and m["llm"]["failed"] == 1 and m["llm"]["p50Ms"] == 300 and m["llm"]["p95Ms"] == 4080
+
+
 def test_search_folds_turkish_dotted_dotless_i_and_escapes_wildcards(settings, env, client):  # noqa: F811
     reg_id = _ready(settings, env)
     c, sf = client

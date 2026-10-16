@@ -99,6 +99,18 @@ window.__resources = {
         </sc-if>
       </div>
 
+      <sc-if value="{{ showAdminNav }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ openAdmin }}" title="Ayarlar, alarmlar, tarama ve yeniden işleme" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans);">
+          <i data-lucide="settings-2" style="width:14px; height:14px; color:var(--primary);"></i>
+          Yönetim
+        </button>
+      </sc-if>
+      <sc-if value="{{ isAdminView }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ goToList }}" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans);">
+          <i data-lucide="arrow-left" style="width:14px; height:14px; color:var(--primary);"></i>
+          Kayıtlar
+        </button>
+      </sc-if>
       <a href="./surec" title="İşleme hattının durumları ve canlı sayıları" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); color:var(--foreground); text-decoration:none; font-size:12.5px; white-space:nowrap; flex:0 0 auto;">
         <i data-lucide="workflow" style="width:14px; height:14px; color:var(--primary);"></i>
         Süreç haritası
@@ -106,6 +118,159 @@ window.__resources = {
     </header>
 
     <div style="flex:1; overflow-y:auto; padding:28px 32px 60px;">
+
+      <sc-if value="{{ isAdminView }}" hint-placeholder-val="{{ false }}">
+        <div class="mtp-fade-in" style="display:flex; flex-direction:column; gap:20px; max-width:1180px;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+            <div>
+              <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Yönetim</h1>
+              <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Çalışma zamanı ayarları, alarmlar, kaynak taramaları, yeniden işleme ve denetim izi doğrulama.</p>
+            </div>
+            <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
+              <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
+              Yenile
+            </button>
+          </div>
+
+          <div style="display:flex; gap:12px;">
+            <div style="flex:1; padding:16px 20px; border-radius:var(--radius-lg); background:var(--card); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+              <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">LLM gecikmesi p95</span>
+              <span style="font-size:28px; font-weight:600; color:var(--foreground);">{{ llmP95 }}</span>
+              <span style="font-size:12px; color:var(--muted-foreground);">ortanca {{ llmP50 }} · {{ llmCalls }}</span>
+            </div>
+            <div style="flex:1; padding:16px 20px; border-radius:var(--radius-lg); background:var(--card); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+              <span style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em;">Bekleyen aktarım</span>
+              <span style="font-size:28px; font-weight:600; color:var(--foreground);">{{ pendingIngest }}</span>
+              <span style="font-size:12px; color:var(--muted-foreground);">{{ pendingNote }}</span>
+            </div>
+          </div>
+
+          <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+            <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Kaynaklar</h2>
+            <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 14px;">Son tarama, süre, istek sayısı ve sonraki planlı tarama. Backfill, aşağıdaki tarih aralığını (en fazla 62 gün) kaynağa uygular.</p>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px;">Backfill başlangıç
+                <input type="date" onChange="{{ setBackfillFrom }}" style="height:34px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px;">bitiş
+                <input type="date" onChange="{{ setBackfillTo }}" style="height:34px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+              </label>
+            </div>
+            <div style="overflow-x:auto;">
+              <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 190px; gap:10px; padding:0 0 8px; font-size:11.5px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; min-width:900px;">
+                <span>Kaynak</span><span>Son tarama</span><span>Süre</span><span>İstek</span><span>Yeni/Liste</span><span>Sonraki</span><span></span>
+              </div>
+              <sc-for list="{{ metricRows }}" as="m" hint-placeholder-count="6">
+                <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.6fr) 80px 70px 80px minmax(130px,1fr) 190px; gap:10px; align-items:center; padding:9px 0; border-top:1px solid var(--border); font-size:13px; min-width:900px;">
+                  <span style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ m.name }}">{{ m.name }}</span>
+                  <span style="color:{{ m.runColor }};">{{ m.runText }}</span>
+                  <span>{{ m.durationText }}</span>
+                  <span>{{ m.requestsText }}</span>
+                  <span>{{ m.newText }}</span>
+                  <span>{{ m.nextDueText }}</span>
+                  <span style="display:flex; gap:6px; justify-content:flex-end;">
+                    <button onClick="{{ m.runFn }}" disabled="{{ m.runDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.runOpacity }}; font-family:var(--font-sans); white-space:nowrap;">{{ m.runLabel }}</button>
+                    <button onClick="{{ m.backfillFn }}" disabled="{{ m.backfillDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.backfillOpacity }}; font-family:var(--font-sans);">Backfill</button>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start;">
+            <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+              <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Çalışma zamanı ayarları</h2>
+              <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 14px;">Kod dağıtımı gerekmeden değişir. Yalnız değiştirdiğiniz alanlar gönderilir; hatalı değer hiçbir ayarı kaydetmez.</p>
+              <div style="display:flex; flex-direction:column; gap:12px;">
+                <sc-for list="{{ settingRows }}" as="s" hint-placeholder-count="9">
+                  <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+                    <span style="display:flex; justify-content:space-between; gap:8px;"><span style="font-weight:500; font-family:var(--font-mono); font-size:12.5px;">{{ s.key }}</span><span style="font-size:12px; color:var(--muted-foreground);">{{ s.hint }}</span></span>
+                    <input type="text" value="{{ s.value }}" onChange="{{ s.onChange }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid {{ s.border }}; font-size:13.5px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+                    <span style="font-size:12px; color:var(--muted-foreground);">{{ s.description }}</span>
+                    <sc-if value="{{ s.hasError }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:12.5px; color:var(--destructive);">{{ s.error }}</span>
+                    </sc-if>
+                  </label>
+                </sc-for>
+              </div>
+              <sc-if value="{{ hasSettingsError }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px; font-size:13px; color:var(--destructive);">{{ settingsError }}</div>
+              </sc-if>
+              <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                <button onClick="{{ saveSettings }}" disabled="{{ settingsSaveDisabled }}" style="height:38px; padding:0 18px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13.5px; font-weight:600; cursor:pointer; opacity:{{ settingsSaveOpacity }}; font-family:var(--font-sans);">Ayarları kaydet</button>
+              </div>
+            </section>
+
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 12px;">Yeniden işleme</h2>
+                <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
+                  <label style="display:flex; flex-direction:column; gap:4px;">Kaynak
+                    <select class="mtp-select" value="{{ rpSource }}" onChange="{{ setRpSource }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--background); color:var(--foreground); font-family:var(--font-sans);">
+                      <option value="">Tüm kaynaklar</option>
+                      <sc-for list="{{ sourceOptions }}" as="so" hint-placeholder-count="9">
+                        <option value="{{ so.code }}">{{ so.name }}</option>
+                      </sc-for>
+                    </select>
+                  </label>
+                  <div style="display:flex; gap:10px;">
+                    <label style="display:flex; flex-direction:column; gap:4px; flex:1;">Başlangıç
+                      <input type="date" onChange="{{ setRpFrom }}" style="height:36px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+                    </label>
+                    <label style="display:flex; flex-direction:column; gap:4px; flex:1;">Bitiş
+                      <input type="date" onChange="{{ setRpTo }}" style="height:36px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+                    </label>
+                  </div>
+                  <label style="display:flex; flex-direction:column; gap:4px;">Aşama
+                    <select class="mtp-select" value="{{ rpStage }}" onChange="{{ setRpStage }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--background); color:var(--foreground); font-family:var(--font-sans);">
+                      <sc-for list="{{ stageOptions }}" as="st" hint-placeholder-count="4">
+                        <option value="{{ st.value }}">{{ st.label }}</option>
+                      </sc-for>
+                    </select>
+                  </label>
+                  <div style="display:flex; justify-content:flex-end;">
+                    <button onClick="{{ runReprocess }}" disabled="{{ reprocessDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13px; font-weight:600; cursor:pointer; opacity:{{ reprocessOpacity }}; font-family:var(--font-sans);">Yeniden işle</button>
+                  </div>
+                </div>
+              </section>
+
+              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Denetim izi</h2>
+                <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Hash zincirini baştan sona doğrular; kopuk veya değiştirilmiş olay varsa listeler.</p>
+                <button onClick="{{ verifyAudit }}" disabled="{{ auditDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ auditOpacity }}; font-family:var(--font-sans);">Zinciri doğrula</button>
+                <sc-if value="{{ hasAuditResult }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px; font-size:13.5px; font-weight:500; color:{{ auditColor }};">{{ auditText }}</div>
+                  <sc-for list="{{ auditProblems }}" as="ap" hint-placeholder-count="0">
+                    <div style="margin-top:4px; font-size:12.5px; color:var(--muted-foreground);">{{ ap.text }}</div>
+                  </sc-for>
+                </sc-if>
+              </section>
+            </div>
+          </div>
+
+          <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <h2 style="font-size:16px; font-weight:600; margin:0;">Alarmlar</h2>
+              <div style="display:flex; gap:6px;">
+                <sc-for list="{{ alertTabs }}" as="t" hint-placeholder-count="3">
+                  <button onClick="{{ t.fn }}" style="height:30px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:{{ t.bg }}; color:{{ t.color }}; font-size:12.5px; cursor:pointer; font-family:var(--font-sans);">{{ t.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ noAlerts }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13.5px; color:var(--muted-foreground); padding:8px 0;">{{ alertEmptyText }}</div>
+            </sc-if>
+            <sc-for list="{{ alertRows }}" as="a" hint-placeholder-count="3">
+              <div style="display:grid; grid-template-columns:90px 160px minmax(0,1fr) 300px; gap:12px; padding:9px 0; border-top:1px solid var(--border); font-size:13px; align-items:start;">
+                <span style="font-weight:600; color:{{ a.sevColor }};">{{ a.severity }}</span>
+                <span style="color:var(--muted-foreground);">{{ a.source }}</span>
+                <span>{{ a.message }}</span>
+                <span style="font-size:12px; color:var(--muted-foreground);">{{ a.when }}</span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </sc-if>
 
       <sc-if value="{{ isListView }}" hint-placeholder-val="{{ true }}">
         <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px;">
@@ -630,6 +795,7 @@ async function api(path, opts = {}) {
   if (!res.ok) {
     const err = new Error((data.error && data.error.message) || ('HTTP ' + res.status));
     err.status = res.status; err.code = data.error && data.error.code;
+    err.fields = (data.error && data.error.details && data.error.details.fields) || {};
     throw err;
   }
   return { data, etag: res.headers.get('ETag') };
@@ -685,6 +851,11 @@ const REJECTION_REASON_LABELS = {
 
 const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
 const RUN_COOLDOWN_MS = 60000;
+const REPROCESS_STAGES = { extract: 'Metin çıkarma', classify: 'Sınıflandırma', summarize: 'Özetleme', match: 'Birim eşleme' };
+const RUN_STATUS_LABELS = { success: 'Başarılı', partial: 'Kısmi', failed: 'Başarısız', running: 'Sürüyor' };
+const ALERT_SEVERITY_LABELS = { down: 'Kesinti', delayed: 'Gecikme', warning: 'Uyarı' };
+function fmtDuration(sec) { return sec == null ? '—' : sec >= 60 ? Math.floor(sec / 60) + ' dk ' + Math.round(sec % 60) + ' sn' : sec + ' sn'; }
+function fmtMs(ms) { return ms == null ? '—' : ms >= 1000 ? (ms / 1000).toFixed(1) + ' sn' : ms + ' ms'; }
 const TEXT_SORT_KEYS = ['title', 'issuer', 'unit'];   // ilk tıklama A→Z; diğerlerinde (tarih, önem, durum) ↓
 
 class Component extends DCLogic {
@@ -719,7 +890,11 @@ class Component extends DCLogic {
     health: { sources: [], overall: 'healthy', bannerText: '' },
     me: null,
     busy: false,
-    runningSources: {}   // kod → true: tarama talebi gönderildi (art arda tetiklemeyi önler)
+    runningSources: {},  // kod → true: tarama talebi gönderildi (art arda tetiklemeyi önler)
+    // yönetim sayfası
+    adminSettings: null, settingsDraft: {}, settingsErrors: {}, settingsError: '',
+    alerts: [], alertStatus: 'open', metrics: null, auditResult: null, adminBusy: {},
+    adminForm: { from: '', to: '', rpSource: '', rpFrom: '', rpTo: '', rpStage: 'extract' }
   };
 
   handleKeyDown = (event) => {
@@ -838,6 +1013,81 @@ class Component extends DCLogic {
         setTimeout(() => { this.setSourceRunning(src.code, false); this.loadMeta(); }, RUN_COOLDOWN_MS);
       })
       .catch(e => { this.setSourceRunning(src.code, false); this.fail(e); });
+  };
+
+  // ------------------------------------------------------------------ yönetim sayfası (admin)
+  // Sunucu her admin ucunda ROLE_ADMIN ister; sekme yalnız /me.isAdmin ise görünür. Ayar tipi ve aralığı
+  // GET /admin/settings?detail=true yanıtından gelir, 400 yanıtındaki details.fields alan bazında gösterilir.
+  openAdmin = () => {
+    this.setState({ view: 'admin', detail: null, unitModalOpen: false, contentModalOpen: false, confirmType: null });
+    this.loadAdmin();
+  };
+  loadAdmin = () => {
+    this.loadAdminSettings();
+    this.loadAlerts();
+    this.loadMetrics();
+  };
+  loadAdminSettings = () => api('/admin/settings?detail=true').then(r => {
+    const draft = {};
+    Object.keys(r.data.values).forEach(k => { draft[k] = String(r.data.values[k]); });
+    this.setState({ adminSettings: r.data, settingsDraft: draft, settingsErrors: {}, settingsError: '' });
+  }).catch(this.fail);
+  setSettingDraft = (key, value) => this.setState({
+    settingsDraft: Object.assign({}, this.state.settingsDraft, { [key]: value }),
+    settingsErrors: Object.assign({}, this.state.settingsErrors, { [key]: '' })
+  });
+  saveSettings = () => {
+    const { adminSettings, settingsDraft, adminBusy } = this.state;
+    if (!adminSettings || adminBusy.settings) return;
+    // yalnız değişen alanlar gönderilir: dokunulmayan eşik başka bir ayarın kısıtına takılmasın
+    const values = {};
+    Object.keys(settingsDraft).forEach(k => { if (settingsDraft[k].trim() !== String(adminSettings.values[k])) values[k] = settingsDraft[k].trim(); });
+    if (!Object.keys(values).length) { this.showToast('Değişen ayar yok.'); return; }
+    this.setAdminBusy('settings', true);
+    api('/admin/settings?detail=true', { method: 'PUT', body: { values } })
+      .then(r => {
+        const draft = {};
+        Object.keys(r.data.values).forEach(k => { draft[k] = String(r.data.values[k]); });
+        this.setState({ adminSettings: r.data, settingsDraft: draft, settingsErrors: {}, settingsError: '' });
+        this.showToast('Ayarlar kaydedildi.');
+      })
+      .catch(e => this.setState({ settingsErrors: e.fields || {}, settingsError: Object.keys(e.fields || {}).length ? '' : e.message }))
+      .then(() => this.setAdminBusy('settings', false));
+  };
+  setAdminBusy = (key, on) => this.setState({ adminBusy: Object.assign({}, this.state.adminBusy, { [key]: on }) });
+
+  loadAlerts = (status) => {
+    const st = status || this.state.alertStatus;
+    if (status) this.setState({ alertStatus: status });
+    return api('/admin/alerts?status=' + st).then(r => { if (st === this.state.alertStatus) this.setState({ alerts: r.data }); }).catch(this.fail);
+  };
+  loadMetrics = () => api('/admin/metrics').then(r => this.setState({ metrics: r.data })).catch(this.fail);
+
+  setAdminField = (key, value) => this.setState({ adminForm: Object.assign({}, this.state.adminForm, { [key]: value }) });
+  backfillSource = (src) => {
+    const { from, to } = this.state.adminForm;
+    if (!from || !to) { this.showToast('Backfill için başlangıç ve bitiş tarihini seçin.'); return; }
+    this.setAdminBusy('backfill:' + src.code, true);
+    api('/admin/sources/' + encodeURIComponent(src.code) + '/backfill', { method: 'POST', body: { from, to } })
+      .then(r => this.showToast(`${src.name}: ${r.data.days} günlük backfill ${r.data.via === 'crawler' ? "crawler'a iletildi" : 'başlatıldı'}.`))
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('backfill:' + src.code, false));
+  };
+  runReprocess = () => {
+    const { rpSource, rpFrom, rpTo, rpStage } = this.state.adminForm;
+    if (!rpFrom || !rpTo) { this.showToast('Yeniden işleme için tarih aralığını seçin.'); return; }
+    this.setAdminBusy('reprocess', true);
+    api('/admin/reprocess', { method: 'POST', body: { stage: rpStage, from: rpFrom, to: rpTo, source: rpSource || null } })
+      .then(() => this.showToast(`Yeniden işleme kuyruğa alındı (${REPROCESS_STAGES[rpStage]}).`))
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('reprocess', false));
+  };
+  verifyAudit = () => {
+    this.setAdminBusy('audit', true);
+    api('/admin/audit/verify')
+      .then(r => this.setState({ auditResult: r.data }))
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('audit', false));
   };
 
   // ------------------------------------------------------------------ karar
@@ -1041,7 +1291,62 @@ class Component extends DCLogic {
     };
     const cm2 = confirmType ? confirmMeta[confirmType] : null;
 
+    // ---- yönetim sayfası
+    const { adminSettings, settingsDraft, settingsErrors, settingsError, alerts, alertStatus, metrics, auditResult, adminBusy, adminForm } = this.state;
+    const specs = (adminSettings && adminSettings.specs) || {};
+    const settingRows = Object.keys(specs).map(k => {
+      const sp = specs[k], err = settingsErrors[k] || '';
+      return { key: k, description: sp.description,
+        hint: `${sp.type === 'int' ? 'tam sayı' : 'ondalık sayı'}, ${sp.min}–${sp.max}`,
+        value: settingsDraft[k] === undefined ? '' : settingsDraft[k], onChange: (e) => this.setSettingDraft(k, e.target.value),
+        error: err, hasError: !!err, border: err ? 'var(--destructive)' : 'var(--border)' };
+    });
+    const tabStyle = (on) => ({ bg: on ? 'var(--foreground)' : 'var(--card)', color: on ? 'var(--background)' : 'var(--foreground)' });
+    const alertTabs = [['open', 'Açık'], ['closed', 'Kapalı'], ['all', 'Tümü']].map(([v, label]) => ({
+      label, fn: () => this.loadAlerts(v), bg: tabStyle(alertStatus === v).bg, color: tabStyle(alertStatus === v).color }));
+    const alertRows = alerts.map(a => ({
+      id: a.id, type: a.type, message: a.message, source: a.source || 'Sistem',
+      severity: ALERT_SEVERITY_LABELS[a.severity] || a.severity,
+      sevColor: a.severity === 'down' ? 'var(--destructive)' : a.severity === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)',
+      when: a.resolvedAt ? `${fmtDateTime(a.openedAt)} → ${fmtDateTime(a.resolvedAt)}` : `${fmtDateTime(a.openedAt)} · son: ${fmtDateTime(a.lastSeenAt)}` }));
+    const metricRows = ((metrics && metrics.sources) || []).map(s => {
+      const run = s.lastRun, running = !!runningSources[s.code], bf = !!adminBusy['backfill:' + s.code];
+      return { code: s.code, name: s.name,
+        runText: run ? `${RUN_STATUS_LABELS[run.status] || run.status} · ${fmtDateTime(run.startedAt)}` : 'Henüz tarama yok',
+        runColor: !run ? 'var(--muted-foreground)' : run.status === 'success' ? 'color-mix(in oklch, var(--success) 45%, black)' : run.status === 'failed' ? 'var(--destructive)' : 'var(--foreground)',
+        durationText: run ? fmtDuration(run.durationSec) : '—', requestsText: run ? String(run.requests) : '—',
+        newText: run ? `${run.itemsNew} / ${run.itemsListed}` : '—', nextDueText: s.nextDue ? fmtDateTime(s.nextDue) : '—',
+        runFn: () => this.runSource(s), runDisabled: running, runLabel: running ? 'İstendi' : 'Şimdi tara', runOpacity: running ? 0.5 : 1,
+        backfillFn: () => this.backfillSource(s), backfillDisabled: bf, backfillOpacity: bf ? 0.5 : 1 };
+    });
+    const llm = metrics && metrics.llm;
+    const pending = metrics ? metrics.pendingIngest : null;
+
     return {
+      isAdminView: view === 'admin', showAdminNav: !!me && !!me.isAdmin && view !== 'admin',
+      openAdmin: this.openAdmin, loadAdmin: this.loadAdmin,
+      settingRows, hasSettings: settingRows.length > 0, saveSettings: this.saveSettings, settingsError, hasSettingsError: !!settingsError,
+      settingsSaveDisabled: !!adminBusy.settings, settingsSaveOpacity: adminBusy.settings ? 0.5 : 1,
+      alertTabs, alertRows, hasAlerts: alertRows.length > 0, noAlerts: alertRows.length === 0,
+      alertEmptyText: alertStatus === 'open' ? 'Açık alarm yok.' : 'Alarm kaydı yok.',
+      metricRows, hasMetrics: metricRows.length > 0,
+      llmP95: llm ? fmtMs(llm.p95Ms) : '—', llmP50: llm ? fmtMs(llm.p50Ms) : '—',
+      llmCalls: llm ? `${llm.calls} çağrı, ${llm.failed} hatalı (son ${llm.windowHours} sa)` : '',
+      pendingIngest: pending == null ? '—' : String(pending),
+      pendingNote: !metrics ? '' : pending == null ? 'Yerel kurulumda aktarım kuyruğu yok.' : 'Crawler\'dan PostgreSQL\'e aktarılmayı bekleyen belge',
+      backfillFrom: adminForm.from, backfillTo: adminForm.to,
+      setBackfillFrom: (e) => this.setAdminField('from', e.target.value), setBackfillTo: (e) => this.setAdminField('to', e.target.value),
+      rpSource: adminForm.rpSource, rpFrom: adminForm.rpFrom, rpTo: adminForm.rpTo, rpStage: adminForm.rpStage,
+      setRpSource: (e) => this.setAdminField('rpSource', e.target.value), setRpFrom: (e) => this.setAdminField('rpFrom', e.target.value),
+      setRpTo: (e) => this.setAdminField('rpTo', e.target.value), setRpStage: (e) => this.setAdminField('rpStage', e.target.value),
+      stageOptions: Object.keys(REPROCESS_STAGES).map(k => ({ value: k, label: REPROCESS_STAGES[k] })),
+      runReprocess: this.runReprocess, reprocessDisabled: !!adminBusy.reprocess, reprocessOpacity: adminBusy.reprocess ? 0.5 : 1,
+      verifyAudit: this.verifyAudit, auditDisabled: !!adminBusy.audit, auditOpacity: adminBusy.audit ? 0.5 : 1,
+      hasAuditResult: !!auditResult,
+      auditOk: !!auditResult && auditResult.ok,
+      auditText: !auditResult ? '' : auditResult.ok ? 'Denetim zinciri sağlam.' + (auditResult.problems.length ? ` (${auditResult.problems.length} eski olay zincir öncesi, hash'siz.)` : '') :`${auditResult.problems.length} sorun bulundu.`,
+      auditColor: auditResult && auditResult.ok ? 'color-mix(in oklch, var(--success) 45%, black)' : 'var(--destructive)',
+      auditProblems: !auditResult ? [] : auditResult.problems.slice(0, 20).map(p => ({ text: `Kayıt ${p.regulation_id == null ? '—' : p.regulation_id} · olay ${p.id == null ? '—' : p.id}: ${p.problem}` })),
       isListView: view === 'list' || view === 'detail', isDetailView: view === 'detail',
       filters, unitOptions: units, sourceOptions: sources, hasActiveFilters,
       setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,

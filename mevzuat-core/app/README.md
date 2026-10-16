@@ -303,7 +303,8 @@ uvicorn app.api.main:app --port 8000      # portal: http://localhost:8000/   API
 | POST | `/api/v1/regulations/{id}/decision` | `{"decision": "approve"\|"reject", "note"?, "rejection_reason"?}`; reddetmede neden: `not_banking_related`, `outdated`, `duplicate`, `other` zorunlu; `other` için `note` zorunlu; yalnızca `Bekliyor` (aksi 409); `If-Match` (aksi 412) |
 | PUT | `/api/v1/regulations/{id}/units` | `{"unit_codes": [...], "note"?}`; YZ gerekçesi korunur, yeni birim "Uzman tarafından manuel olarak atandı." |
 | GET | `/api/v1/units`, `/sources`, `/sources/health`, `/me` | Seçenekler, kaynak sağlığı (durum çubuğu + uyarı şeridi), kullanıcı |
-| GET/PUT | `/api/v1/admin/settings` | Çalışma zamanı eşikleri (admin) |
+| GET/PUT | `/api/v1/admin/settings` | Çalışma zamanı eşikleri (admin). `?detail=true` → `{values, specs}` (specs: `type`, `min`, `max`, `description`). Geçersiz değerde 400 `invalid_setting`, alan bazlı ileti `error.details.fields`; hiçbir ayar yazılmaz |
+| GET | `/api/v1/admin/metrics` | Yönetim sayfası metrikleri (admin): kaynak başına son tarama (durum, süre, istek), `nextDue`, `pendingIngest` (yalnız `CRAWL_MODE=remote`, yoksa `null`), `llm` (24 saat p50/p95, hata) |
 | POST | `/api/v1/admin/regulations/{id}/regenerate`, `/split`, `/admin/sources/{code}/run` | Yeniden üretim, tekilleştirme geri alma, anında tarama (admin) |
 | GET | `/healthz`, `/readyz` | Canlılık / hazır olma (DB, LLM, OCR) |
 
@@ -328,6 +329,9 @@ detay açılınca `views` çağrılır; tarihler `tr-TR` biçiminde. Demo sürü
 görünmemesi hatası düzeltildi. `window.MTP_API_BASE` API adresini değiştirir.
 Portal dış CDN'e çıkmaz: React ve lucide `portal/vendor/` altında sabit sürümle durur ve `/vendor/<ad>` adresinden
 sunulur (sürümler ve özetler `portal/vendor/README.md`); Google Fonts yok, yazı tipi sistem yazı tipine düşer.
+**Yönetim sayfası:** `/me.isAdmin` ise üst çubukta "Yönetim" düğmesi görünür; sayfa admin uçlarını çağırır (ayar formu,
+açık/kapalı alarmlar, kaynak başına "Şimdi tara" ve backfill, yeniden işleme, denetim zinciri doğrulama) ve
+`/admin/metrics` ile LLM p95, bekleyen aktarım, kaynak başına son tarama süresi ve `next_due` gösterir.
 Karar ve birim düğmeleri yalnız `mevzuat_expert`/`mevzuat_admin` rolünde görünür; detayda YZ'nin yürürlük tarihi
 ifadesi, ilgililik ve önem gerekçesi ile kaynakta doğrulanamadığı için özetten çıkarılan ifadeler gösterilir. API
 yanıtlarına `X-Content-Type-Options`, `X-Frame-Options: DENY`, `frame-ancestors 'none'` ve `Referrer-Policy` eklenir

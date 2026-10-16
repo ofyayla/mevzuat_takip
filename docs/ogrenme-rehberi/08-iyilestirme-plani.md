@@ -34,7 +34,7 @@ kodla çözülemeyen (işletim/karar) işler olarak bırakıldı. Gerekçeler a�
 | 3.2 | Yönlendirme izin listesi | **Uygulandı, daha dar** | Son adım denetlenir; adım adım takip gereksiz. |
 | 3.3 | Süreç geneli hız sınırı | **Gereksiz (şimdilik)** | Etki küçük, test kırılganlığı yaratır. |
 | 3.4 | `browser` istemcisi | **Gereksiz** | Hiçbir kaynak kullanmıyor; kullanıldığında zaten açık hata verir. |
-| 4.1 | Webhook, panel, metrik | **Bekliyor (işletim)** | Yapılandırma ve ürün işi. |
+| 4.1 | Webhook, panel, metrik | **Panel uygulandı**; webhook **bekliyor (işletim)** | Portalda "Yönetim" sayfası (§8); webhook yapılandırması işletim işi. |
 | 4.2 | Sertifika takvimi | **Bekliyor (işletim)** | Takvim kaydı; kodla yapılamaz. |
 | 4.3 | Sürümlü imaj etiketi | **Bekliyor (işletim)** | Pipeline ve dağıtım kararı. |
 | 4.4 | `API_REFERENCE.md` | **Bekliyor** | Üretici betik tüm ana servis bağımlılıklarını gerektirir; bu ortamda çalıştırılamadı. |
@@ -195,7 +195,7 @@ Sınırlar (dürüst not):
 | 0.4 / §5 | Üretim ölçümleri | İşletim, dağıtımdan önce ve sonra |
 | 1.2 onarım | ~~Eksik ekleri yeniden getiren komut~~ **Uygulandı** (§7.3): `mevzuat-crawler repair-attachments`. Çalıştırmak işletim işi | Firewall düzeldikten sonra |
 | 2.4 bölme | Uzun (saatler süren) RG backfill'inde zamanlanmış RG taramaları atlanır (`tick`). Backfill rutin ve uzun hale gelirse gün başına ayrı taleplere bölünmeli. Şimdilik ≤62 gün sınırı ve süren backfill'in kendisi bugünü de kapsıyorsa risk düşük. | Rutinleşirse |
-| 4.1 | `ALERT_WEBHOOK_URL`'i kurum izlemesine bağlama; panel/metrik | İşletim + ürün |
+| 4.1 | `ALERT_WEBHOOK_URL`'i kurum izlemesine bağlama. (Panel/metrik: portaldaki "Yönetim" sayfası uygulandı, §8; Prometheus ucu yok) | İşletim |
 | 4.2 | Sertifika hatırlatmaları: `geotrust-tls-rsa-ca-g1.pem` (2027-11-02) için 2027-09-03; `globalsign-rsa-ov-ssl-ca-2018.pem` (2028-11-21) için 2028-09-22 | Sorumlu kişinin takvimi |
 | 4.3 | `latest` yerine sürümlü etiket; Quadlet `Image=` sabit etiket | Pipeline sahibi |
 | 4.4 | `make api-reference` (ana servis ortamında); `PATCH /api/v1/regulations/{id}/content` eksik | Core geliştiricisi |
@@ -363,6 +363,7 @@ Kod taramasından çıkan ve doğrulanan portal/API işleri (dağıtım ve YZ ha
 | `/readyz` | Veritabanı hata metni (sunucu adresi, kullanıcı) yanıta konmuyor, loga yazılıyor |
 | Güvenlik başlıkları | `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy` |
 | Portal dış bağımlılık | React, react-dom ve lucide `portal/vendor/` altına alındı (sabit sürüm, özetler `vendor/README.md`); `lucide@latest` ve Google Fonts kaldırıldı |
+| Yönetim sayfası (06 §10) | Yönetim işleri yalnız API/Swagger/CLI'daydı. Portala `/me.isAdmin` ise görünen "Yönetim" sayfası eklendi: ayar formu (tip/aralık `GET /admin/settings?detail=true`'dan; `PUT` 400 yanıtı `details.fields` ile alan bazlı), açık/kapalı alarmlar, kaynak başına "Şimdi tara" ve tarih aralıklı "Backfill", yeniden işleme formu, denetim zinciri doğrulama. Yeni okuma ucu `GET /admin/metrics`: kaynak başına son tarama (durum, süre, istek, yeni/liste), `next_due` (DMZ kurulumunda crawler sinyalinden, yerelde `sources.yaml` takviminden), bekleyen aktarım (yalnız `CRAWL_MODE=remote`; Mongo okunamazsa `null`) ve son 24 saat LLM gecikmesi (p50/p95, hata sayısı; `llm_call`). Prometheus ucu hâlâ yok |
 | Portal | `lang="tr"`; karar/birim düğmeleri yalnız yetkili rolde; detayda yürürlük tarihi ifadesi, ilgililik ve önem gerekçesi, doğrulanamayıp çıkarılan ifadeler |
 
 Yapılmayanlar: arama süresinin PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki
