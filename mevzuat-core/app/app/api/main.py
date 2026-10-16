@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request, UploadFile
@@ -40,6 +41,12 @@ from app.settings import Settings, get_settings
 log = logging.getLogger(__name__)
 PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
 PIPELINE_FILE = "surec-haritasi.html"
+VENDOR_TYPES = {".js": "application/javascript", ".css": "text/css", ".map": "application/json"}
+# Tam bir CSP (script-src vb.) bilinçli yok: portal satır içi betik ve stil kullanıyor. Yalnızca çerçeveye gömülmeyi
+# (clickjacking) ve içerik türü koklamayı kapatır; Keycloak girişi üst pencerede yönlendirmeyle yapıldığı için etkilenmez.
+SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+                    "Content-Security-Policy": "frame-ancestors 'none'",
+                    "Referrer-Policy": "strict-origin-when-cross-origin"}
 
 
 # ------------------------------------------------------------------------------------------------ bağımlılıklar
@@ -140,7 +147,7 @@ def regulation_detail(reg_id: int, session: SessionDep, settings: SettingsDep, a
 def regulation_content(reg_id: int, body: ContentIn, session: SessionDep, settings: SettingsDep,
                        actor: ActorDep, response: Response, if_match: Annotated[str | None, Header()] = None):
     require(actor, ROLE_EXPERT)
-    reg = get_visible(session, reg_id)
+    reg = get_visible(session, reg_id, for_update=True)
     edit_content(session, reg, body.title, body.summary, actor, if_match)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
@@ -159,7 +166,7 @@ def regulation_viewed(reg_id: int, session: SessionDep, actor: ActorDep):
 def regulation_decision(reg_id: int, body: DecisionIn, session: SessionDep, settings: SettingsDep, actor: ActorDep,
                         response: Response, if_match: Annotated[str | None, Header()] = None):
     require(actor, ROLE_EXPERT)
-    reg = get_visible(session, reg_id)
+    reg = get_visible(session, reg_id, for_update=True)
     decide(session, reg, body.decision, body.note, actor, if_match, body.rejection_reason)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
@@ -170,7 +177,7 @@ def regulation_decision(reg_id: int, body: DecisionIn, session: SessionDep, sett
 def regulation_units(reg_id: int, body: UnitsIn, session: SessionDep, settings: SettingsDep, actor: ActorDep,
                      response: Response, if_match: Annotated[str | None, Header()] = None):
     require(actor, ROLE_EXPERT)
-    reg = get_visible(session, reg_id)
+    reg = get_visible(session, reg_id, for_update=True)
     change_units(session, reg, body.unit_codes, body.note, actor, if_match)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
@@ -250,13 +257,15 @@ def admin_settings(session: SessionDep, settings: SettingsDep, actor: ActorDep):
 
 @admin.put("/settings")
 def admin_settings_put(body: SettingsIn, session: SessionDep, settings: SettingsDep, actor: ActorDep):
-    from app.ai.common import set_runtime_setting
+    from app.ai.common import check_runtime_settings, set_runtime_setting
 
     require(actor, ROLE_ADMIN)
     try:
         for key, value in body.values.items():
             set_runtime_setting(session, key, value, by=actor.name)
+        check_runtime_settings(session, settings)   # birbirine bağlı eşikler; tümü yazıldıktan sonra denetlenir
     except (KeyError, ValueError) as e:
+        session.rollback()
         raise ApiError(400, "invalid_setting", str(e)) from e
     session.commit()
     return admin_settings(session, settings, actor)
@@ -543,6 +552,13 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
         return JSONResponse({"error": {"code": "validation_error", "message": "geçersiz istek",
                                        "details": {"errors": _jsonable(exc.errors())}}}, status_code=422)
 
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
@@ -554,8 +570,10 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
             with request.app.state.session_factory() as s:
                 s.execute(text("select 1"))
             checks["db"] = "ok"
-        except Exception as e:  # noqa: BLE001
-            checks["db"] = f"hata: {e}"
+        except Exception:  # noqa: BLE001
+            # kimlik doğrulamasız uç: istisna metni (sunucu adresi, kullanıcı adı) yanıta konmaz, yalnızca loga yazılır
+            log.exception("readyz: veritabanına erişilemedi")
+            checks["db"] = "hata"
         checks["llm"] = "yapılandırılmış" if settings.llm_provider not in ("", "none", None) else "kapalı"
         checks["ocr"] = "yapılandırılmış" if settings.ocr_provider not in ("", "none", None) else "kapalı"
         ok = checks["db"] == "ok"
@@ -576,6 +594,16 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     @app.get("/support.js", include_in_schema=False)
     def support_js():
         return FileResponse(settings.portal_dir / "support.js", media_type="application/javascript")
+
+    @app.get("/vendor/{name}", include_in_schema=False)
+    def vendor_file(name: str):
+        """Portalın üçüncü taraf betikleri (React, lucide, keycloak-js): kurum ağında dış CDN'e (unpkg) çıkılmaz.
+        Dosya adları sürüm içerir ve sabittir; yalnızca düz dosya adı kabul edilir (dizin gezinmesi yok)."""
+        path = settings.portal_dir / "vendor" / name
+        if name != Path(name).name or path.suffix not in VENDOR_TYPES or not path.is_file():
+            raise ApiError(404, "not_found", "dosya bulunamadı")
+        return FileResponse(path, media_type=VENDOR_TYPES[path.suffix],
+                            headers={"Cache-Control": "public, max-age=86400"})
 
     return app
 

@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.ai.unit_matching import current_summary, record_unit_decision
@@ -26,6 +27,7 @@ from app.db import (
     UnitSuggestion,
     utcnow,
 )
+from app.processing.normalize import SEARCH_FOLD_PAIRS, search_fold
 from app.services.audit import Actor, add_event, trail
 from app.settings import Settings
 
@@ -85,6 +87,19 @@ class ListQuery:
     direction: str = "desc"
 
 
+def _fold_sql(col):
+    """``search_fold``'un SQL karşılığı. SQLite'ın ``lower()``'ı yalnız ASCII'yi küçülttüğü ve PostgreSQL'in
+    ``ILIKE``'ı veritabanı yereline (çoğu kurulumda en_US) göre I → i yaptığı için eşleme açıkça uygulanır."""
+    for src, dst in SEARCH_FOLD_PAIRS:
+        col = func.replace(col, src, dst)
+    return func.lower(col)
+
+
+def _like_escape(value: str) -> str:
+    """Kullanıcı girdisindeki ``%`` ve ``_`` joker olmasın."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _filters(query: ListQuery, settings: Settings) -> list:
     conds = [visible()]
     if query.source:
@@ -100,11 +115,11 @@ def _filters(query: ListQuery, settings: Settings) -> list:
                                     UnitSuggestion.is_active.is_(True), UnitSuggestion.unit_code == query.unit))
     if query.date_range:
         conds.append(Regulation.publish_date >= today(settings) - timedelta(days=query.date_range))
-    if query.q:
-        like = f"%{query.q.strip()}%"
-        conds.append(or_(Regulation.title.ilike(like), exists().where(
+    if query.q and query.q.strip():
+        like = "%" + _like_escape(search_fold(query.q.strip())) + "%"
+        conds.append(or_(_fold_sql(Regulation.title).like(like, escape="\\"), exists().where(
             RegulationSummary.regulation_id == Regulation.id, RegulationSummary.is_current.is_(True),
-            RegulationSummary.short_content.ilike(like))))
+            _fold_sql(RegulationSummary.short_content).like(like, escape="\\"))))
     if query.metric:
         conds.append(_metric_cond(query.metric, settings))
     return conds
@@ -238,8 +253,25 @@ def serialize(session: Session, reg: Regulation, settings: Settings, *, detail: 
 # ------------------------------------------------------------------------------------------------ iş kuralları
 
 
-def get_visible(session: Session, reg_id: int) -> Regulation:
-    reg = session.get(Regulation, reg_id)
+LOCK_TIMEOUT = "5s"
+
+
+def get_visible(session: Session, reg_id: int, *, for_update: bool = False) -> Regulation:
+    """``for_update=True`` (karar, birim, içerik): satır commit'e kadar kilitlenir. İki uzman aynı anda karar verirse
+    ikincisi birincisini bekler, güncel kaydı görür ve 412/409 alır (eskiden ikisi de geçip iki karar olayı yazıyordu).
+    SQLite'ta ``FOR UPDATE`` yoktur; tek yazıcı olduğu için gerekmez."""
+    if not for_update:
+        reg = session.get(Regulation, reg_id)
+    else:
+        postgres = session.get_bind().dialect.name == "postgresql"
+        if postgres:
+            session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))   # YZ işçisi kaydı tutuyorsa sonsuz bekleme
+        try:
+            reg = session.get(Regulation, reg_id, with_for_update=True, populate_existing=True)
+        except OperationalError as e:
+            if postgres and getattr(e.orig, "sqlstate", None) == "55P03":   # lock_not_available
+                raise ApiError(409, "record_busy", "kayıt şu an işleniyor, birkaç saniye sonra yeniden deneyin") from e
+            raise
     if reg is None or not reg.is_relevant or reg.processing_status not in VISIBLE_STATUSES:
         raise ApiError(404, "not_found", "düzenleme bulunamadı")
     return reg

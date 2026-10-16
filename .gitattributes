@@ -1,0 +1,2 @@
+# Üçüncü taraf betikler bayt bayt aynı kalmalı (SRI/sha384 özetleri portal/vendor/README.md'de); satır sonu çevrilmez
+mevzuat-core/portal/vendor/*.js -text
