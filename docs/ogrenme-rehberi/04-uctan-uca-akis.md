@@ -72,9 +72,11 @@ görevleri ise kaçan tetiklemeler ve yeniden denemeler için güvenlik ağıdı
 | Desteklenmeyen (.doc, .xlsx …) | Hata sayılmaz. Metin boş kalır, belge başlığıyla bağlanır |
 
 - BASELINE belgeler varsayılan olarak OCR'a **gönderilmez** (`OCR_BASELINE=false`), çünkü yükü azaltır.
-- OCR servisi hatasında (veya `OSError`, ör. GridFS'te dosya yoksa) belge `EXTRACT_FAILED` olur. Toplam
-  `PROCESS_MAX_ATTEMPTS` (**3**) deneme yapılır (ilk deneme + 2 tekrar). Tekrarlar Beat'in 15 dk'lık görevinden
-  veya ingest'in tetiklediği `process_pending`'den gelir. `ocr_pending_pages` olan belgeler OCR açılınca `reextract` ile tamamlanabilir.
+- OCR servisi hatasında belge **düşmez**: taranmış sayfalar `ocr_pending_pages`'e yazılır, belge metin katmanıyla
+  bağlanır ve `catch_up_ocr` her koşuda en çok 30 belgeyi (en yeni önce) yeniden dener. Her OCR hatası `extract_attempts`'ı
+  artırır; `PROCESS_MAX_ATTEMPTS` (**3**) dolunca telafi turları belgeyi bırakır (elle `reextract` çalışır).
+- `OSError` (ör. GridFS'te dosya yoksa) belgeyi `EXTRACT_FAILED` yapar; `PROCESS_MAX_ATTEMPTS` kez denenir (ilk deneme +
+  2 tekrar). Tekrarlar Beat'in 15 dk'lık görevinden veya ingest'in tetiklediği `process_pending`'den gelir.
 
 ### 3.2 Tekilleştirme (`processing/dedupe.py:Linker`)
 
@@ -103,7 +105,7 @@ stateDiagram-v2
   direction LR
   state "raw_document" as RAW {
     FETCHED --> EXTRACTED: metin çıkarma
-    FETCHED --> EXTRACT_FAILED: OCR/okuma hatası
+    FETCHED --> EXTRACT_FAILED: okuma hatası (OCR hatası değil)
     EXTRACT_FAILED --> EXTRACTED: yeniden deneme (≤3)
     EXTRACTED --> LINKED: tekilleştirme
   }

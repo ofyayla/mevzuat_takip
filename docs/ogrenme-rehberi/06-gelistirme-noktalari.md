@@ -28,6 +28,11 @@ Bu liste kod okunarak çıkarıldı. Her madde için kanıt (dosya/fonksiyon), e
 | 18 | Aynı içerikli iki ek taramayı yarıda keser | Crawler | Orta |
 | 19 | Yalnızca `FetchError` yakalanıyor; diğer hatalar taramayı keser | Crawler | Orta |
 | 20 | Tükenmiş hatalı kayıtlar güvenlik ağı görevlerini tıkayabilir | Core | Düşük |
+| 21 | OCR kesintisi belgeyi kalıcı başarısız yapıyor | Core | Orta |
+| 22 | LLM kesintisi deneme hakkını tüketiyor | Core | Orta |
+| 23 | Aynı kayıt iki işçi tarafından eşzamanlı işlenebiliyor | Core | Orta |
+| 24 | Önem kuralları kırpılmış metne uygulanıyor | Core | Orta |
+| 25 | Birim kararı few-shot havuzunu kirletiyor; süreç haritası yanlış anlatıyor | Core | Düşük |
 
 ---
 
@@ -241,6 +246,56 @@ Quadlet'e `HostName=mevzuat-crawler` ekleyin, uzun işlerde kilidi periyodik yen
 - **Durum: giderildi.** Deneme sayısı `process_pending`, `classify_pending` ve `summarize_pending` sorgularında
   SQL'de süzülür (`extra["…_attempts"].as_integer()`). Özette metin bekleyen (`summary_blocked`) kayıtlar sona
   alınır. Kayıt başına beklenmeyen istisna toplu işi kesmez: geri alınır, deneme sayılır, loglanır.
+
+## 21. OCR kesintisi belgeyi kalıcı başarısız yapıyor — Orta
+
+- **Kanıt:** `extract_pdf`/`extract_image` `OcrError`'u yakalamıyordu; `extract_document` belgeyi `EXTRACT_FAILED` yapıp
+  `extract_attempts`'ı artırıyordu. OCR POST'u ayrıca 429'u hiç yeniden denemiyordu (`processing/ocr.py`).
+- **Etki:** Servis birkaç saat kapalı kalırsa taranmış belgeler 3 denemede tükenir ve hiçbir telafi turu onları
+  almazdı (`catch_up_ocr` yalnızca `ocr_pending_pages` taşıyan belgeleri seçer).
+- **Durum: giderildi.** `OcrError` artık `extract_pdf`/`extract_image` içinde yakalanır: taranmış sayfalar OCR kapalıyken
+  kullanılan yolla `ocr_pending_pages`'e yazılır, `ExtractResult.ocr_error` hatayı taşır. Belge metin katmanıyla bağlanır,
+  `catch_up_ocr` onu sonraki koşuda yeniden dener. Her OCR hatası `extract_attempts`'ı artırır; `process_max_attempts`
+  dolunca telafi turları belgeyi bırakır (sonsuz döngü yok; elle `reprocess` yine çalışır). POST isteği 429'da
+  `Retry-After` kadar (en çok 30 sn) bekleyip en çok 3 kez denenir.
+
+## 22. LLM kesintisi deneme hakkını tüketiyor — Orta
+
+- **Kanıt:** `classify_pending`, `summarize_pending` ve `match_pending` döngüleri her `LLMError`'u kayda yazıp
+  `ai_attempts`'ı artırıyordu. Bağlantı, zaman aşımı, 5xx ve 429 hataları da `LLMError`'a çevriliyordu.
+- **Etki:** 30–60 dakikalık bir vLLM kesintisi, o koşudaki tüm kayıtların 3 deneme hakkını tüketebilir (`ai_failure`
+  alarmı + elle `reprocess` gerektirir).
+- **Durum: giderildi.** `ai/llm_client.py`'de `LLMUnavailable(LLMError)`: bağlantı, zaman aşımı, 5xx ve 429 hataları
+  tenacity tükenince bu sınıfla yükseltilir. Üç döngü bu hatada kaydı geri alır (deneme sayılmaz, durum değişmez),
+  `rapor.unavailable=True` yazar ve toplu işi keser; kalanlar sonraki Beat turuna kalır. Geçersiz istek (400) gibi kayda
+  ait hatalar eskisi gibi sayılır.
+
+## 23. Aynı kayıt iki işçi tarafından eşzamanlı işlenebiliyor — Orta
+
+- **Kanıt:** Zincir görevi (`.delay(ids)`) ile Beat güvenlik ağı aynı kaydı seçebilir; döngüler kaydı kilitsiz yüklüyordu.
+- **Etki:** Aynı kayıt için LLM iki kez çağrılır; özet adımında `uq_summary_version` çakışması kaydı `AI_FAILED` yapardı.
+- **Durum: giderildi.** Üç döngüde kayıt `session.get(Regulation, id, with_for_update={"skip_locked": True})` ile
+  yüklenir (PostgreSQL; SQLite'ta etkisiz). `None` (başka işçi kilitli) ya da SQL uygunluk koşulunu artık sağlamayan
+  kayıt atlanır (`rapor.skipped`). `uq_summary_version` `IntegrityError`'ı "zaten yapıldı" sayılır, hata sayılmaz.
+  Not: PostgreSQL'de iki bağlantıyla elle denenmeli (testler kilidi `Session.get` yerine koyarak taklit eder).
+
+## 24. Önem kuralları kırpılmış metne uygulanıyor — Orta
+
+- **Kanıt:** `classify_regulation`, bağlamı `relevance_max_input_chars` (18.000) ile kırpıp `severity.apply_rules`'a da bunu
+  veriyordu.
+- **Etki:** "Yayımı tarihinde yürürlüğe girer" cümlesi ve kritik kalıplar uzun metnin sonunda kalınca taban kuralı
+  tetiklenmiyordu; önem "Orta/Düşük" kalabiliyordu.
+- **Durum: giderildi.** Kurallar `regulation_context(session, reg, 10**9)` ile kurulan tam metne uygulanır
+  (`severity.assess(..., rules_text=…)`). LLM'e giden kırpılmış bağlam değişmedi. Değerlendirme aracı (`run_eval`) da
+  aynı biçimde tam metni kullanır.
+
+## 25. Birim kararı few-shot havuzunu kirletiyor; süreç haritası yanlış anlatıyor — Düşük
+
+- **Kanıt:** `record_unit_decision` her çağrıda yeni `FewshotExample` ekliyordu (önce onay, sonra düzeltme: iki satır
+  etkin). `services/pipeline.py` süreç haritası "reddedilenler few-shot olarak geri beslenir" diyordu; gerçekte
+  reddetmede yalnızca denetim olayı ve outbox yazılır.
+- **Durum: giderildi.** Yeni satırdan önce aynı `regulation_id` ve `task='unit_match'` satırları `active=False` yapılır
+  (başka kayıtların örneklerine dokunulmaz). Süreç haritası metni düzeltildi.
 
 ---
 

@@ -7,6 +7,8 @@
   (taranmış) OCR servisine yalnızca o sayfalar olarak gönderilir; sayfalar ``\\f`` ile ayrılır.
 - OCR yapılandırılmamışsa veya belge ilk taramaya aitse (``ocr_baseline=False``) taranmış sayfalar boş kalır ve
   ``ocr_pending_pages`` doldurulur; belge daha sonra ``mevzuat-process reprocess`` ile yeniden işlenebilir.
+- OCR servisi hata verirse (``OcrError``) aynı yol izlenir; ``ExtractResult.ocr_error`` hatayı taşır. Belge
+  EXTRACT_FAILED'e düşüp deneme hakkını tüketmez, ``catch_up_ocr`` sonraki koşularda yeniden dener.
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ from dataclasses import dataclass, field
 from app.collectors.http import Response
 from app.collectors.strategies._html import clean, parse_html
 from app.processing.normalize import normalize_text, text_quality
-from app.processing.ocr import OcrEngine
+from app.processing.ocr import OcrEngine, OcrError
 from app.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -46,6 +48,7 @@ class ExtractResult:
     ocr_confidence: float | None = None
     ocr_pages: list[int] = field(default_factory=list)
     ocr_pending_pages: list[int] = field(default_factory=list)
+    ocr_error: str | None = None      # OCR çağrısı hata verdi; sayfalar ``ocr_pending_pages``ta bekliyor
 
 
 def decode_html(content: bytes) -> str:
@@ -98,12 +101,17 @@ def extract_pdf(content: bytes, settings: Settings, ocr: OcrEngine | None, *, al
         scanned = [i + 1 for i, page in enumerate(doc) if _needs_ocr(page, texts[i], settings)]
     res = ExtractResult("", "pdf_text", page_count=len(texts))
     if scanned and ocr is not None and allow_ocr:
-        o = ocr.analyze(content, "application/pdf", pages=scanned)
-        for n in scanned:
-            if (t := o.pages.get(n)) and len(t.strip()) > len(texts[n - 1].strip()):
-                texts[n - 1] = t
-        res.ocr_pages, res.ocr_confidence = scanned, o.confidence
-        res.method = "ocr" if len(scanned) == len(texts) else "pdf_text+ocr"
+        try:
+            o = ocr.analyze(content, "application/pdf", pages=scanned)
+        except OcrError as e:     # servis kesintisi belgeyi düşürmesin: OCR kapalıymış gibi bekletilir
+            log.warning("OCR başarısız, %d sayfa OCR bekliyor: %s", len(scanned), e)
+            res.ocr_pending_pages, res.ocr_error = scanned, str(e)
+        else:
+            for n in scanned:
+                if (t := o.pages.get(n)) and len(t.strip()) > len(texts[n - 1].strip()):
+                    texts[n - 1] = t
+            res.ocr_pages, res.ocr_confidence = scanned, o.confidence
+            res.method = "ocr" if len(scanned) == len(texts) else "pdf_text+ocr"
     elif scanned:
         res.ocr_pending_pages = scanned
     res.text = PAGE_SEP.join(normalize_text(t) for t in texts)
@@ -131,8 +139,12 @@ def _needs_ocr(page, text: str, settings: Settings) -> bool:
 def extract_image(content: bytes, content_type: str, ocr: OcrEngine | None, *, allow_ocr: bool) -> ExtractResult:
     if ocr is None or not allow_ocr:
         return ExtractResult("", "image", page_count=1, ocr_pending_pages=[1])
-    o = ocr.analyze(content, content_type)
-    text = PAGE_SEP.join(normalize_text(o.pages[n]) for n in sorted(o.pages))
+    try:
+        o = ocr.analyze(content, content_type)
+    except OcrError as e:
+        log.warning("OCR başarısız, görüntü OCR bekliyor: %s", e)
+        return ExtractResult("", "image", page_count=1, ocr_pending_pages=[1], ocr_error=str(e))
+    text =PAGE_SEP.join(normalize_text(o.pages[n]) for n in sorted(o.pages))
     return ExtractResult(text, "ocr", page_count=len(o.pages) or 1, ocr_confidence=o.confidence,
                          ocr_pages=sorted(o.pages))
 

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai import relevance, severity
 from app.ai.common import effective_settings, knowledge, regulation_context
-from app.ai.llm_client import LLM, LLMError
+from app.ai.llm_client import LLM, LLMError, LLMUnavailable
 from app.collectors.dates import tr_lower
 from app.db import Regulation, utcnow
 from app.settings import Settings
@@ -34,6 +34,8 @@ class ClassifyReport:
     by_severity: dict[str, int] = field(default_factory=dict)
     relevant_ids: list[int] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    skipped: int = 0           # kilitli (başka işçi işliyor) ya da seçimden sonra durumu değişmiş kayıtlar
+    unavailable: bool = False  # LLM sunucusuna ulaşılamadı; toplu iş kesildi, kalanlar sonraki koşuya kaldı
 
 
 def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: Settings, *,
@@ -51,8 +53,12 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
            "knowledge_version": kn.version}
     reg.severity = reg.severity_rationale = None
     if rel.is_relevant:
+        # LLM kırpılmış bağlamı görür; deterministik kurallar ise tam metne uygulanır (yürürlük cümlesi / kritik kalıp
+        # metnin sonunda kalabiliyor)
+        full_text = regulation_context(session, reg, 10**9).text
         sev = severity.assess(llm, ctx, kn, reg_type=rel.reg_type or reg.reg_type, topics=rel.topics,
-                              relevance_rationale=rel.rationale, session=session, force=force)
+                              relevance_rationale=rel.rationale, session=session, force=force,
+                              rules_text=full_text)
         reg.severity, reg.severity_rationale = sev.severity, sev.rationale
         cls["severity"] = {"llm": sev.llm_severity, "rules": sev.applied_rules}
     reg.classification = cls
@@ -75,6 +81,20 @@ def _mark_failed(reg: Regulation, error: str) -> None:
     extra["ai_error"] = error[:500]
     extra["ai_stage"] = "relevance"
     reg.extra, reg.processing_status = extra, "AI_FAILED"
+
+
+def _still_eligible(reg: Regulation, *, force: bool, include_baseline: bool) -> bool:
+    """``classify_pending``'in SQL uygunluk koşulunun Python karşılığı: kayıt seçimden sonra başka işçi tarafından
+    işlenmiş ya da birleştirilmiş olabilir. ``force`` açık yeniden işlemedir; MERGED yine atlanır."""
+    status, extra = reg.processing_status, reg.extra or {}
+    if status == "MERGED":
+        return False
+    if force or status == "NEW":
+        return True
+    if status == "BASELINE":
+        return include_baseline
+    return (status == "AI_FAILED" and extra.get("ai_stage", "relevance") == "relevance"
+            and extra.get("ai_attempts", 0) < AI_MAX_ATTEMPTS)
 
 
 def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,
@@ -100,13 +120,23 @@ def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings:
         todo = list(session.scalars(q))
     for reg_id in todo:
         with session_factory() as session:
-            reg = session.get(Regulation, reg_id)
-            if reg.processing_status == "MERGED" or (reg.processing_status == "BASELINE" and not force
-                                                         and not include_baseline):
+            # Satır kilidi: zincir görevi ile Beat güvenlik ağı aynı kaydı eşzamanlı işlemesin (SQLite'ta etkisiz).
+            # Kilitliyse (None) başka işçi işliyordur; kayıt seçim ile kilit arasında durum değiştirmiş olabilir
+            reg = session.get(Regulation, reg_id, with_for_update={"skip_locked": True})
+            if reg is None or not _still_eligible(reg, force=force, include_baseline=include_baseline):
+                report.skipped += 1
                 continue
             report.processed += 1
             try:
                 classify_regulation(session, llm, reg, settings, force=force)
+            except LLMUnavailable as e:
+                # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
+                session.rollback()
+                report.processed -= 1
+                report.unavailable = True
+                report.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
+                log.warning("LLM kullanılamıyor; sınıflandırma durduruldu (düzenleme %s): %s", reg_id, e)
+                break
             except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
                 if isinstance(e, LLMError):
                     # geri alma yok: başarısız çağrının llm_call kaydı denetim için korunur

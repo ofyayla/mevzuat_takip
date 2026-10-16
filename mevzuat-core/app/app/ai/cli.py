@@ -65,7 +65,7 @@ def cmd_classify(args) -> int:
           f"önem={rep.by_severity}")
     for e in rep.errors[:20]:
         print(f"  HATA {e}")
-    return 1 if rep.failed else 0
+    return 1 if rep.failed or rep.unavailable else 0
 
 
 def cmd_summarize(args) -> int:
@@ -78,7 +78,7 @@ def cmd_summarize(args) -> int:
           f"ort. dayandırma={rep.avg_grounding} kaldırılan ifade={rep.removed_claims}")
     for e in rep.errors[:20]:
         print(f"  HATA {e}")
-    return 1 if rep.failed else 0
+    return 1 if rep.failed or rep.unavailable else 0
 
 
 def cmd_units_load(args) -> int:
@@ -113,7 +113,7 @@ def cmd_match(args) -> int:
           f"hata={rep.failed} toplam öneri={rep.suggestions}")
     for e in rep.errors[:20]:
         print(f"  HATA {e}")
-    return 1 if rep.failed else 0
+    return 1 if rep.failed or rep.unavailable else 0
 
 
 def cmd_show(args) -> int:

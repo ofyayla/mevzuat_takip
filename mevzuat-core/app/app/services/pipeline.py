@@ -55,7 +55,7 @@ NODES: list[Node] = [
     Node("raw:FETCHED", "İndirildi", "belge", "wait",
          "Arşive yazıldı, metin çıkarma bekliyor.", "app/collectors/store.py"),
     Node("raw:EXTRACT_FAILED", "Çıkarma hatası", "belge", "fail",
-         "Metin çıkarılamadı; PROCESS_MAX_ATTEMPTS'e kadar yeniden denenir.", "app/processing/pipeline.py"),
+         "Metin okunamadı (depolama); PROCESS_MAX_ATTEMPTS'e kadar yeniden denenir. OCR hatası belgeyi düşürmez.", "app/processing/pipeline.py"),
     Node("raw:EXTRACTED", "Metin çıkarıldı", "belge", "wait",
          "HTML/PDF/DOCX/OCR metni hazır, tekilleştirme bekliyor.", "app/processing/extract.py"),
     Node("raw:LINKED", "Bağlandı", "belge", "ok",
@@ -81,7 +81,8 @@ NODES: list[Node] = [
     Node("review:Onaylandı", "Onaylandı", "portal", "ok",
          "Uzman onayladı; birimlere iletilir (outbox).", "app/services/regulations.py"),
     Node("review:Reddedildi", "Reddedildi", "portal", "terminal",
-         "Uzman reddetti; few-shot örneği olarak geri beslenir.", "app/services/regulations.py"),
+         "Uzman reddetti; denetim olayı ve outbox kaydı yazılır (few-shot örneği üretilmez; yalnız birim "
+         "onay/düzeltmeleri öğrenme havuzuna girer).", "app/services/regulations.py"),
 ]
 
 EDGES: list[Edge] = [

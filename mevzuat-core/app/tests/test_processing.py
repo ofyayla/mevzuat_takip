@@ -295,28 +295,47 @@ def test_baseline_regulation_not_new(settings, env):
     assert rep.new_regulations == 1
 
 
-def test_ocr_failure_retries_then_gives_up(settings, env):
+def test_extract_ocr_error_leaves_pages_pending_instead_of_failing(settings):
+    content, ctype = fixture_bytes("processing", RG_PDF)
+    res = extract(content, ctype, "main", settings, FakeOcr(fail=True))
+    assert res.ocr_pending_pages == [1] and res.ocr_error == "servis kapalı" and res.text == ""
+    assert res.method == "pdf_text" and not res.ocr_pages
+    res = extract(b"\x89PNG-resim", "image/png", "main", settings, FakeOcr(fail=True))
+    assert res.method == "image" and res.ocr_pending_pages == [1] and res.ocr_error == "servis kapalı"
+
+
+def test_ocr_failure_keeps_document_and_catch_up_gives_up_after_max_attempts(settings, env):
+    """OCR servisi kapalıyken belge EXTRACT_FAILED'e düşüp kaybolmaz: bağlanır, sayfalar OCR bekler;
+    telafi turları her hatada denemeyi sayar ve hak dolunca bırakır."""
     sf, storage = env
     content, ctype = fixture_bytes("processing", RG_PDF)
     rid = add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260919-5", url=RG_PDF,
                   title="Bankacılık Düzenleme ve Denetleme Kurulunun 18/09/2026 Tarihli ve 11572 Sayılı Kararı",
                   published=date(2026, 9, 19), content=content, content_type=ctype)
-    p = DocumentProcessor(settings, storage, ocr=FakeOcr(fail=True))
-    for _ in range(settings.process_max_attempts + 1):
-        rep = p.process_pending(sf)
+    broken = FakeOcr(fail=True)
+    p = DocumentProcessor(settings, storage, ocr=broken)
+    rep = p.process_pending(sf)
+    assert (rep.failed, rep.linked, rep.ocr_pending) == (0, 1, 1)
     with sf() as s:
         raw = s.get(RawDocument, rid)
-        assert raw.processing_status == "EXTRACT_FAILED" and raw.extra["extract_attempts"] == 3
-    assert rep.processed == 0                                   # deneme hakkı bitti, artık seçilmiyor
-    # servis düzelince yeniden işleme: OCR metni + bağlama
+        assert raw.processing_status == "LINKED" and raw.extra["ocr_pending_pages"] == [1]
+        assert raw.extra["extract_attempts"] == 1 and raw.extract_error == "servis kapalı"
+    for _ in range(settings.process_max_attempts + 2):
+        p.catch_up_ocr(sf)
+    with sf() as s:
+        raw = s.get(RawDocument, rid)
+        assert raw.extra["extract_attempts"] == settings.process_max_attempts     # sonsuz döngü yok
+        assert raw.processing_status == "LINKED" and raw.extra["ocr_pending_pages"] == [1]
+    calls = len(broken.calls)
+    assert p.catch_up_ocr(sf) == (ProcessReport(), []) and len(broken.calls) == calls   # hak bitti, OCR çağrılmaz
+    # servis düzelince elle yeniden işleme (reextract): OCR metni gelir, bekleme işareti kalkar
     ok = DocumentProcessor(settings, storage, ocr=FakeOcr({1: "Bankacılık Düzenleme ve Denetleme Kurumundan:\n"
                                                                "Karar Sayısı: 11572\n" + "metin " * 80}))
+    rep = ok.reextract(sf, raw_ids=[rid])
     with sf() as s:
         raw = s.get(RawDocument, rid)
-        raw.extra = {}
-        ok.process(s, raw)
-        s.commit()
-        assert raw.processing_status == "LINKED" and raw.extraction_method == "ocr"
+        assert rep.processed == 1 and raw.processing_status == "LINKED" and raw.extraction_method == "ocr"
+        assert "ocr_pending_pages" not in raw.extra and raw.extract_error is None
         assert s.get(Regulation, raw.regulation_id).issuer == "BDDK"
 
 
@@ -439,6 +458,34 @@ def test_azure_client_errors(settings):
         make(lambda r: httpx.Response(202, headers={"Operation-Location": "https://di/op"}) if r.method == "POST"
              else httpx.Response(200, json={"status": "failed", "error": {"code": "InvalidContent"}})
              ).analyze(b"x", "application/pdf")
+
+
+def test_azure_post_retries_on_429_with_retry_after(settings):
+    s = settings.model_copy(update={"ocr_provider": "azure_di", "ocr_endpoint": "https://di.kurum"})
+    posts, sleeps = [], []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posts.append(1)
+            if len(posts) < 3:
+                return httpx.Response(429, headers={"Retry-After": "7"}, json={"error": {"code": "429"}})
+            return httpx.Response(202, headers={"Operation-Location": "https://di.kurum/op/1"})
+        return httpx.Response(200, json=ANALYZE_RESULT)
+
+    ocr = AzureDocumentIntelligenceOcr(s, client=httpx.Client(transport=httpx.MockTransport(handler)),
+                                       sleep=sleeps.append)
+    assert ocr.analyze(b"%PDF-1.4", "application/pdf", pages=[1]).pages[1].startswith("Bankacılık")
+    assert len(posts) == 3 and sleeps[:2] == [7.0, 7.0]               # Retry-After beklendi, sonra yoklama
+    # sürekli 429: sınırlı sayıda denenir, sonra OcrError (belge extract içinde OCR bekliyor olur)
+    posts.clear()
+    sleeps.clear()
+    always = AzureDocumentIntelligenceOcr(
+        s, client=httpx.Client(transport=httpx.MockTransport(
+            lambda r: (posts.append(1), httpx.Response(429, headers={"Retry-After": "999"}))[1])),
+        sleep=sleeps.append)
+    with pytest.raises(OcrError, match="429"):
+        always.analyze(b"x", "application/pdf")
+    assert len(posts) == 3 and max(sleeps) <= 30.0                    # Retry-After üst sınırlı
 
 
 def test_page_ranges():

@@ -8,11 +8,11 @@ from sqlalchemy import select
 
 from app.ai.classify import classify_pending
 from app.ai.grounding import SourceText, find_effective_sentence, find_quote, resolve_effective_date
-from app.ai.llm_client import FakeLLM
+from app.ai.llm_client import FakeLLM, LLMUnavailable
 from app.ai.summary import AI_MAX_ATTEMPTS, split_chunks, summarize_pending
 from app.db import Regulation, RegulationSummary
 from app.processing.pipeline import DocumentProcessor
-from tests.test_ai import _bank_and_tokat, _processed, handler_from, rel, sev
+from tests.test_ai import LockSpy, _bank_and_tokat, _processed, handler_from, rel, sev
 from tests.test_processing import add_bank_mellat, add_raw, env  # noqa: F401
 
 KARAR = ("Bankacılık Düzenleme ve Denetleme Kurumundan:\n\nKarar Sayısı: 11572\n\nKurulun 18.09.2026 tarihli "
@@ -315,3 +315,105 @@ def test_unexpected_summary_error_fails_one_regulation(settings, env, monkeypatc
         reg = s.get(Regulation, bank)
         assert reg.processing_status == "AI_FAILED" and reg.extra["ai_stage"] == "summary"
         assert reg.extra["ai_attempts"] == 1 and reg.extra["ai_error"].startswith("KeyError")
+
+
+# ------------------------------------------------------------------------------------------------ ikinci tur (PR-B)
+
+
+def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    _set_extra(sf, bank, "AI_FAILED", ai_stage="summary", ai_attempts=1)
+
+    def down(task, messages, n):
+        raise LLMUnavailable("zaman aşımı")
+
+    llm = FakeLLM(settings, down)
+    rep = summarize_pending(sf, llm, settings)
+    assert rep.unavailable and (rep.processed, rep.failed, rep.summarized) == (0, 0, 0)
+    assert len(llm.calls) == 1                     # ilk kayıtta (yeni RELEVANT önce gelir) kesildi, AI_FAILED'a geçilmedi
+    with sf() as s:
+        failed, fresh = s.get(Regulation, bank), s.get(Regulation, tokat)
+        assert failed.processing_status == "AI_FAILED" and failed.extra["ai_attempts"] == 1   # deneme artmadı
+        assert fresh.processing_status == "RELEVANT" and "ai_attempts" not in (fresh.extra or {})
+    assert summarize_pending(sf, FakeLLM(settings, down), settings, ids=[bank]).unavailable   # AI_FAILED kayıtta da
+    with sf() as s:
+        assert s.get(Regulation, bank).extra["ai_attempts"] == 1
+    # sunucu geri gelince ikisi de özetlenir
+    assert summarize_pending(sf, _summary_llm(settings), settings).ids == [tokat, bank]   # yeni kayıt önce
+
+
+def test_locked_or_changed_regulation_is_skipped(settings, env, monkeypatch):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    spy = LockSpy(monkeypatch, locked={bank})                            # başka işçi banka kaydını özetliyor
+    rep = summarize_pending(sf, _summary_llm(settings), settings)
+    assert (rep.processed, rep.skipped, rep.ids) == (1, 1, [tokat])
+    spy.assert_skip_locked(bank, tokat)
+    with sf() as s:
+        assert s.get(Regulation, bank).processing_status == "RELEVANT"
+    # seçimden sonra durumu değişen kayıt: SQL koşulu Python'da yeniden denetlenir, LLM çağrılmaz
+    monkeypatch.undo()
+    _set_extra(sf, tokat, "RELEVANT")
+    inner, done = _summary_llm(settings).handler, []
+
+    def handler(task, messages, n):
+        if "Mellat" in messages[-1]["content"] and not done:             # banka özetlenirken Tokat'ı başkası bitirir
+            done.append(1)                                               # ilk çağrıda: dış oturum henüz yazmadı
+            _set_extra(sf, tokat, "SUMMARIZED")
+        return inner(task, messages, n)
+
+    llm = FakeLLM(settings, handler)
+    rep = summarize_pending(sf, llm, settings)
+    assert (rep.processed, rep.skipped, rep.ids) == (1, 1, [bank])
+    assert not any("Tokat" in c[1][-1]["content"] for c in llm.calls)
+
+
+def _integrity_error(orig_message):
+    from sqlalchemy.exc import IntegrityError
+
+    return IntegrityError("INSERT INTO regulation_summary (regulation_id, version) VALUES (?, ?)", (1, 1),
+                          Exception(orig_message))
+
+
+@pytest.mark.parametrize("message", [
+    "UNIQUE constraint failed: regulation_summary.regulation_id, regulation_summary.version",   # SQLite
+    'duplicate key value violates unique constraint "uq_summary_version"',                      # PostgreSQL
+])
+def test_duplicate_summary_version_counts_as_already_done(settings, env, monkeypatch, message):  # noqa: F811
+    import app.ai.summary as summary_mod
+
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    original = summary_mod.summarize_regulation
+
+    def summarize(session, llm, reg, *a, **kw):
+        if reg.id == bank:
+            raise _integrity_error(message)
+        return original(session, llm, reg, *a, **kw)
+
+    monkeypatch.setattr(summary_mod, "summarize_regulation", summarize)
+    rep = summarize_pending(sf, _summary_llm(settings), settings)
+    assert (rep.processed, rep.skipped, rep.failed, rep.ids) == (1, 1, 0, [tokat])
+    with sf() as s:
+        reg = s.get(Regulation, bank)
+        assert reg.processing_status == "RELEVANT" and "ai_attempts" not in (reg.extra or {})
+
+
+def test_other_integrity_errors_still_fail_the_regulation(settings, env, monkeypatch):  # noqa: F811
+    import app.ai.summary as summary_mod
+
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    original = summary_mod.summarize_regulation
+
+    def summarize(session, llm, reg, *a, **kw):
+        if reg.id == bank:
+            raise _integrity_error("NOT NULL constraint failed: regulation_summary.short_content")
+        return original(session, llm, reg, *a, **kw)
+
+    monkeypatch.setattr(summary_mod, "summarize_regulation", summarize)
+    rep = summarize_pending(sf, _summary_llm(settings), settings)
+    assert (rep.processed, rep.skipped, rep.failed, rep.ids) == (2, 0, 1, [tokat])
+    with sf() as s:
+        assert s.get(Regulation, bank).extra["ai_attempts"] == 1

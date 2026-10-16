@@ -133,7 +133,7 @@ mevzuat-process reextract            # OCR bekleyen belgeleri yeniden işle (ser
 
 Toplama görevi yeni belge bulduğunda işleme görevini tetikler; Beat ayrıca 15 dakikada bir bekleyenleri tarar.
 
-**Durumlar:** `raw_document`: `FETCHED → EXTRACTED → LINKED`, geçici hatada `EXTRACT_FAILED` (3 deneme).
+**Durumlar:** `raw_document`: `FETCHED → EXTRACTED → LINKED`, depolama okuma hatasında `EXTRACT_FAILED` (3 deneme); OCR hatası belgeyi düşürmez (sayfalar `ocr_pending_pages`'te bekler, `catch_up_ocr` dener).
 `regulation`: `NEW` (YZ hattına girer, İK-3) veya `BASELINE` (ilk taramada sitede zaten duran içerik; arşivlenir ve
 tekilleştirmeye katılır, YZ'ye gitmez), birleştirilmiş kayıtlar `MERGED`.
 
