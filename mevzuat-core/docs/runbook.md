@@ -209,7 +209,20 @@ modellerle aynı olduğunu doğrular.
   kayıtlar kalır ama yeniden işleme yapılamaz. Redis yedeklenmez (yalnızca tetikleyici).
 - **Yapılandırma:** `config/` depoda; `.env` kasada.
 - Geri yükleme: `pg_restore -d mevzuat yedek.dump` → `alembic upgrade head` → `mevzuat-monitor audit-verify` →
-  yedek tarihinden bugüne `backfill` (RG) ve normal tarama.
+  **Mongo `synced` işaretlerini sıfırla** (aşağıda) → yedek tarihinden bugüne `backfill` (RG) ve normal tarama.
+- **Mongo `synced` sıfırlama (yalnızca PostgreSQL geri yüklendiyse zorunlu):** ana servis Mongo'daki kaydı PostgreSQL'e
+  aktarınca `synced=True` yapar ve yalnızca `synced=False` kayıtları okur (`ingest.py`). Yedekten sonra aktarılmış
+  belgeler PostgreSQL'de yoktur ama Mongo'da `synced=True` kalır; sıfırlanmazsa bir daha aktarılmaz ve `backfill` da
+  değişmemiş belgeyi atladığı için onları geri getirmez. Önce ingest/beat/worker'ı durdurun, sonra:
+
+  ```js
+  // mongosh, mevzuat_crawl; `mevzuat_core` kullanıcısı yeterli (bu üç koleksiyonda find+update yetkisi var)
+  ["raw_documents", "fetch_runs", "sources"].forEach(c => printjson(
+    db[c].updateMany({}, {$set: {synced: false}, $inc: {rev: 1}})))
+  ```
+
+  Ingest idempotenttir (`ext_id` ile), zaten PostgreSQL'de olan kayıtlar çoğalmaz; yalnızca eksikler gelir. Sonra
+  servisleri açıp `mevzuat-crawler check` ile "aktarılmayı bekleyen" sayısının 0'a indiğini doğrulayın.
 
 ## 9. Kapasite
 
