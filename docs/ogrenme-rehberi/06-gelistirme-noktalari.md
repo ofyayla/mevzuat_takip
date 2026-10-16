@@ -238,6 +238,9 @@ Quadlet'e `HostName=mevzuat-crawler` ekleyin, uzun işlerde kilidi periyodik yen
 - **Etki:** Bu kayıtlar limit kadar birikirse Beat'in güvenlik ağı turu daha yeni kayıtlara hiç ulaşmaz. Normal
   akışta `.delay()` zinciri id listesiyle çalıştığı için etkisi yalnızca kaçan tetiklemelerde görülür.
 - **Öneri:** Deneme sayısını sorgu filtresine taşıyın (`extra->>'extract_attempts'` veya ayrı sütun).
+- **Durum: giderildi.** Deneme sayısı `process_pending`, `classify_pending` ve `summarize_pending` sorgularında
+  SQL'de süzülür (`extra["…_attempts"].as_integer()`). Özette metin bekleyen (`summary_blocked`) kayıtlar sona
+  alınır. Kayıt başına beklenmeyen istisna toplu işi kesmez: geri alınır, deneme sayılır, loglanır.
 
 ---
 

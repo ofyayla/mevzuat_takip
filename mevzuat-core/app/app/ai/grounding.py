@@ -156,9 +156,15 @@ _NUM_WORDS = {"bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5, "altı": 6, 
               "yüz seksen": 180, "üç yüz altmış beş": 365}
 _NUM_ALT = "|".join(sorted((re.escape(k) for k in _NUM_WORDS), key=len, reverse=True))
 _RELATIVE = re.compile(rf"yayım\w*(?:\s+tarih\w*)?\s+(?:itibaren\s+)?(?P<n>\d+|{_NUM_ALT})\s+(?P<unit>gün|ay|yıl)\s+sonra")
-_ON_PUBLICATION = re.compile(r"yayım\w*\s+tarih\w*(?:nde|nden itibaren)\s+yürürlüğe\s+gir|yayımlandığı\s+tarihte")
+_ON_PUBLICATION = re.compile(r"yayım\w*\s+tarih\w*(?:nde|nden itibaren)\s+yürürlüğe\s+gir|yayımlandığı\s+tarihte"
+                             r"|yayım\w*\s+tarih\w*nden\s+itibaren\s+uygulan")
 _EXPLICIT = re.compile(rf"(\d{{1,2}}[./]\d{{1,2}}[./]\d{{4}}|{DATE_TEXT_PATTERN})")
-_YURURLUK_SENTENCE = re.compile(r"[^.\n]{0,300}?yürürlüğe\s+gir(?:er|ecek)[^.\n]{0,80}", re.I)
+# cümle karakteri: nokta ve satır sonu cümleyi bitirir; rakamlar arasındaki nokta (01.01.2027) bitirmez
+_SENTENCE_CHAR = r"(?:[^.\n]|(?<=\d)\.(?=\d))"
+_YURURLUK_SENTENCE = re.compile(rf"{_SENTENCE_CHAR}{{0,300}}?yürürlüğe\s+gir(?:er|ecek){_SENTENCE_CHAR}{{0,80}}",
+                                re.I)
+_UYGULAMA_SENTENCE = re.compile(rf"{_SENTENCE_CHAR}{{0,300}}?tarih\w*\s+itibaren\s+uygulan(?:ır|acak)"
+                                rf"{_SENTENCE_CHAR}{{0,80}}", re.I)
 
 
 @dataclass
@@ -201,7 +207,12 @@ def resolve_effective_date(quote_or_text: str | None, publish_date: date | None,
 
 
 def find_effective_sentence(text: str) -> str | None:
-    """Metindeki "…yürürlüğe girer" cümlesi (Yürürlük maddesi genellikle sonlardadır → son eşleşme)."""
-    hits = [m.group(0).strip() for m in _YURURLUK_SENTENCE.finditer(text or "")]
-    hits = [h for h in hits if not re.search(r"yürürlükten kaldır", tr_lower(h))]
-    return re.sub(r"^(?:MADDE\s+\d+\s*[-–]\s*)?(?:\(\d+\)\s*)?", "", hits[-1]).strip() if hits else None
+    """Metindeki "…yürürlüğe girer" cümlesi (Yürürlük maddesi genellikle sonlardadır → son eşleşme). Yoksa
+    "…tarihinden itibaren uygulanır" cümlesi (yürürlük maddesi olmayan genelge/kurul kararları); yürürlük maddesi
+    varken uygulama cümlesi çoğunlukla tek bir maddenin ertelenmesidir, o yüzden yalnızca yedektir."""
+    for pattern in (_YURURLUK_SENTENCE, _UYGULAMA_SENTENCE):
+        hits = [m.group(0).strip() for m in pattern.finditer(text or "")]
+        hits = [h for h in hits if not re.search(r"yürürlükten kaldır", tr_lower(h))]
+        if hits:
+            return re.sub(r"^(?:MADDE\s+\d+\s*[-–]\s*)?(?:\(\d+\)\s*)?", "", hits[-1]).strip()
+    return None

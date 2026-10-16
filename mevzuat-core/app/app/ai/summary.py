@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai.common import RegulationContext, effective_settings, knowledge, messages, regulation_context
@@ -322,20 +322,28 @@ def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings
     rep = SummarizeReport()
     scores = []
     with session_factory() as session:
+        # Sıra: yeni RELEVANT → yeniden denenecek AI_FAILED → metin bekleyen (summary_blocked) RELEVANT. Deneme hakkı
+        # biten kayıt SQL'de elenir, metin bekleyenler sona kalır: ikisi de LIMIT'i doldurup yenilerin önünü kesmez
         statuses = ("RELEVANT", "SUMMARIZED") if force else ("RELEVANT",)
-        q = select(Regulation.id).where(Regulation.processing_status.in_(statuses)).order_by(Regulation.id)
+        blocked = Regulation.extra["summary_blocked"].as_string().is_not(None)
+        q = select(Regulation.id).where(Regulation.processing_status.in_(statuses), ~blocked)
         q_failed = select(Regulation.id).where(Regulation.processing_status == "AI_FAILED",
-                                               Regulation.is_relevant.is_(True)).order_by(Regulation.id)
-        if ids:
-            q, q_failed = q.where(Regulation.id.in_(ids)), q_failed.where(Regulation.id.in_(ids))
-        todo = (list(session.scalars(q)) + list(session.scalars(q_failed)))[:limit]
+                                               Regulation.is_relevant.is_(True))
+        if not force:
+            q_failed = q_failed.where(
+                Regulation.extra["ai_stage"].as_string() == "summary",
+                func.coalesce(Regulation.extra["ai_attempts"].as_integer(), 0) < AI_MAX_ATTEMPTS)
+        q_blocked = select(Regulation.id).where(Regulation.processing_status.in_(statuses), blocked)
+        todo: list[int] = []
+        for qq in (q, q_failed, q_blocked):
+            if ids:
+                qq = qq.where(Regulation.id.in_(ids))
+            todo += session.scalars(qq.order_by(Regulation.id).limit(limit - len(todo)))
+            if len(todo) >= limit:
+                break
     for reg_id in todo:
         with session_factory() as session:
             reg = session.get(Regulation, reg_id)
-            if reg.processing_status == "AI_FAILED" and (
-                    (reg.extra or {}).get("ai_stage") != "summary"
-                    or (reg.extra or {}).get("ai_attempts", 0) >= AI_MAX_ATTEMPTS) and not force:
-                continue
             if sum(len(src.text) for src in sources_for(session, reg)) < MIN_SOURCE_CHARS:
                 # LLM çağrılmaz, deneme hakkı tüketilmez; reextract/OCR sonrası metin gelince özetlenir
                 reg.extra = {**{k: v for k, v in (reg.extra or {}).items() if k not in ("ai_error", "ai_stage")},
@@ -350,13 +358,19 @@ def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings
             retry = reg.processing_status == "AI_FAILED"
             try:
                 row = summarize_regulation(session, llm, reg, settings, force=force or retry)
-            except (LLMError, SummaryError) as e:
+            except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
+                if isinstance(e, (LLMError, SummaryError)):
+                    msg = str(e)
+                else:
+                    session.rollback()
+                    msg = f"{type(e).__name__}: {e}"
+                    log.exception("düzenleme %s özetlenirken beklenmeyen hata", reg_id)
                 extra = dict(reg.extra or {})
-                extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_error=str(e)[:500], ai_stage="summary")
+                extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_error=msg[:500], ai_stage="summary")
                 reg.extra, reg.processing_status = extra, "AI_FAILED"
                 session.commit()
                 rep.failed += 1
-                rep.errors.append(f"#{reg_id}: {e}")
+                rep.errors.append(f"#{reg_id}: {msg}")
                 continue
             session.commit()
             rep.summarized += 1

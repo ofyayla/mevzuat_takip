@@ -22,7 +22,7 @@ from app.ai.unit_matching import (
 from app.db import FewshotExample, Regulation, Unit, UnitSuggestion
 from app.settings import BACKEND_DIR
 from tests.test_processing import env  # noqa: F401
-from tests.test_summary import GOOD, _relevant_bank_mellat, summary_out
+from tests.test_summary import GOOD, _relevant_bank_mellat, _summary_llm, _two_relevant, summary_out
 
 UNITS = yaml.safe_load((BACKEND_DIR / "config" / "units.yaml").read_text("utf-8"))
 
@@ -170,6 +170,30 @@ def test_no_suggestion_and_unknown_code(settings, env):  # noqa: F811
         reg = s.get(Regulation, reg_id)
         assert reg.processing_status == "READY" and reg.extra["unit_match"]["status"] == "önerilemedi"
         assert s.scalars(select(UnitSuggestion)).first() is None
+
+
+def test_unexpected_error_fails_one_regulation_not_the_batch(settings, env, monkeypatch):  # noqa: F811
+    import app.ai.unit_matching as um
+
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    summarize_pending(sf, _summary_llm(settings), settings)
+    original = um.match_regulation
+
+    def match(session, llm, reg, *a, **kw):
+        if reg.id == bank:
+            raise ValueError("beklenmedik")
+        return original(session, llm, reg, *a, **kw)
+
+    monkeypatch.setattr(um, "match_regulation", match)
+    rep = match_pending(sf, FakeLLM(settings, lambda t, m, n: [{"suggestions": []}]), settings)
+    assert (rep.processed, rep.failed, rep.no_suggestion) == (2, 1, 1)
+    assert rep.errors == [f"#{bank}: ValueError: beklenmedik"]
+    with sf() as s:
+        reg = s.get(Regulation, bank)
+        assert reg.processing_status == "AI_FAILED" and reg.extra["ai_stage"] == "unit_match"
+        assert reg.extra["ai_attempts"] == 1
+        assert s.get(Regulation, tokat).processing_status == "READY"
 
 
 def test_learning_loop_examples(settings, env):  # noqa: F811

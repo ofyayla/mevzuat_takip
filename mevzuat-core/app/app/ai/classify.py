@@ -11,7 +11,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai import relevance, severity
@@ -66,20 +66,37 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
     reg.extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
 
 
+def _mark_failed(reg: Regulation, error: str) -> None:
+    """YZ alanları sıfırlanır, deneme sayılır; ``ai_max_attempts`` dolana dek sonraki koşularda yeniden denenir."""
+    reg.is_relevant = reg.relevance_score = reg.confidence_band = reg.ai_reg_type = None
+    reg.severity = reg.severity_rationale = None
+    extra = dict(reg.extra or {})
+    extra["ai_attempts"] = extra.get("ai_attempts", 0) + 1
+    extra["ai_error"] = error[:500]
+    extra["ai_stage"] = "relevance"
+    reg.extra, reg.processing_status = extra, "AI_FAILED"
+
+
 def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,
                      ids: list[int] | None = None, limit: int = 100, force: bool = False,
                      include_baseline: bool = False) -> ClassifyReport:
     """``include_baseline``: ilk taramadaki eski kayıtları da geriye dönük sınıflandırır (bilinçli backfill)."""
     report = ClassifyReport()
     with session_factory() as session:
+        # deneme hakkı biten (veya özet/birim aşamasında kalan) AI_FAILED kayıt SQL'de elenir; Python'da sonradan
+        # elenseydi tükenmiş kayıtlar LIMIT'i doldurup yeni kayıtların önünü keserdi
+        retryable = and_(Regulation.processing_status == "AI_FAILED",
+                         func.coalesce(Regulation.extra["ai_stage"].as_string(), "relevance") == "relevance",
+                         func.coalesce(Regulation.extra["ai_attempts"].as_integer(), 0) < AI_MAX_ATTEMPTS)
         q = select(Regulation.id).order_by(Regulation.id).limit(limit)
         if ids:
             q = q.where(Regulation.id.in_(ids))
             if not force:
-                q = q.where(Regulation.processing_status.in_(("NEW", "AI_FAILED")))
+                q = q.where(or_(Regulation.processing_status == "NEW", retryable))
         else:
-            statuses = ("NEW", "AI_FAILED", "BASELINE") if include_baseline else ("NEW", "AI_FAILED")
-            q = q.where(Regulation.processing_status.in_(statuses))
+            statuses = ("NEW", "BASELINE") if include_baseline else ("NEW",)
+            q = q.where(Regulation.processing_status.in_((*statuses, "AI_FAILED")) if force
+                        else or_(Regulation.processing_status.in_(statuses), retryable))
         todo = list(session.scalars(q))
     for reg_id in todo:
         with session_factory() as session:
@@ -87,26 +104,22 @@ def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings:
             if reg.processing_status == "MERGED" or (reg.processing_status == "BASELINE" and not force
                                                          and not include_baseline):
                 continue
-            if reg.processing_status == "AI_FAILED" and not force and (
-                    (reg.extra or {}).get("ai_stage", "relevance") != "relevance"      # özet aşaması kendi dener
-                    or (reg.extra or {}).get("ai_attempts", 0) >= AI_MAX_ATTEMPTS):
-                continue
             report.processed += 1
             try:
                 classify_regulation(session, llm, reg, settings, force=force)
-            except LLMError as e:
-                # geri alma yok: başarısız çağrının llm_call kaydı denetim için korunur; YZ alanları sıfırlanır
-                reg.is_relevant = reg.relevance_score = reg.confidence_band = reg.ai_reg_type = None
-                reg.severity = reg.severity_rationale = None
-                extra = dict(reg.extra or {})
-                extra["ai_attempts"] = extra.get("ai_attempts", 0) + 1
-                extra["ai_error"] = str(e)[:500]
-                extra["ai_stage"] = "relevance"
-                reg.extra, reg.processing_status = extra, "AI_FAILED"
+            except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
+                if isinstance(e, LLMError):
+                    # geri alma yok: başarısız çağrının llm_call kaydı denetim için korunur
+                    msg = str(e)
+                    log.warning("düzenleme %s sınıflandırılamadı: %s", reg_id, e)
+                else:
+                    session.rollback()
+                    msg = f"{type(e).__name__}: {e}"
+                    log.exception("düzenleme %s sınıflandırılırken beklenmeyen hata", reg_id)
+                _mark_failed(reg, msg)
                 session.commit()
                 report.failed += 1
-                report.errors.append(f"#{reg_id}: {e}")
-                log.warning("düzenleme %s sınıflandırılamadı: %s", reg_id, e)
+                report.errors.append(f"#{reg_id}: {msg}")
                 continue
             session.commit()
             if reg.is_relevant:

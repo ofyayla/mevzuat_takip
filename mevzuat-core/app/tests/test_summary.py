@@ -9,10 +9,10 @@ from sqlalchemy import select
 from app.ai.classify import classify_pending
 from app.ai.grounding import SourceText, find_effective_sentence, find_quote, resolve_effective_date
 from app.ai.llm_client import FakeLLM
-from app.ai.summary import split_chunks, summarize_pending
+from app.ai.summary import AI_MAX_ATTEMPTS, split_chunks, summarize_pending
 from app.db import Regulation, RegulationSummary
 from app.processing.pipeline import DocumentProcessor
-from tests.test_ai import rel, sev
+from tests.test_ai import _bank_and_tokat, _processed, handler_from, rel, sev
 from tests.test_processing import add_bank_mellat, add_raw, env  # noqa: F401
 
 KARAR = ("Bankacılık Düzenleme ve Denetleme Kurumundan:\n\nKarar Sayısı: 11572\n\nKurulun 18.09.2026 tarihli "
@@ -55,6 +55,28 @@ def test_effective_date_rules():
     text = "MADDE 25- (1) Bu Yönetmelik yayımı tarihinde yürürlüğe girer.\nMADDE 26- (1) … Bakan yürütür."
     assert find_effective_sentence(text) == "Bu Yönetmelik yayımı tarihinde yürürlüğe girer"
     assert find_effective_sentence("X Yönetmeliği yürürlükten kaldırılmıştır.") is None
+
+
+def test_effective_sentence_keeps_dotted_dates():
+    pub = date(2026, 9, 24)
+    # rakamlar arasındaki nokta cümleyi bitirmez: eşleşme "2027"den başlayıp tarihi kaybetmemeli
+    text = "MADDE 12 – (1) Bu Yönetmelik 01.01.2027 tarihinde yürürlüğe girer.\nMADDE 13 – (1) … Kurul yürütür."
+    sentence = find_effective_sentence(text)
+    assert sentence == "Bu Yönetmelik 01.01.2027 tarihinde yürürlüğe girer"
+    assert resolve_effective_date(sentence, pub).value == date(2027, 1, 1)
+    assert find_effective_sentence("Bu Tebliğin 5.1 inci maddesi 1.7.2027 tarihinde yürürlüğe girecektir. Diğer") == \
+        "Bu Tebliğin 5.1 inci maddesi 1.7.2027 tarihinde yürürlüğe girecektir"
+    # yürürlük maddesi yoksa "…tarihinden itibaren uygulanır" yedektir
+    genelge = "Bankalar bu esaslara uyar. Bu Genelge 01.03.2027 tarihinden itibaren uygulanır."
+    sentence = find_effective_sentence(genelge)
+    assert sentence == "Bu Genelge 01.03.2027 tarihinden itibaren uygulanır"
+    assert resolve_effective_date(sentence, pub).value == date(2027, 3, 1)
+    chk = resolve_effective_date("Bu Genelge yayımı tarihinden itibaren uygulanır", pub)
+    assert (chk.value, chk.basis) == (pub, "on_publication")
+    # yürürlük maddesi varken tek bir maddenin ertelenmiş uygulaması yürürlük sayılmaz
+    both = ("GEÇİCİ MADDE 1 – (1) 5 inci madde 01.07.2027 tarihinden itibaren uygulanır.\n"
+            "MADDE 20 – (1) Bu Yönetmelik yayımı tarihinde yürürlüğe girer.")
+    assert find_effective_sentence(both) == "Bu Yönetmelik yayımı tarihinde yürürlüğe girer"
 
 
 def test_split_chunks_on_paragraphs():
@@ -225,3 +247,71 @@ def test_no_text_waits_without_llm_call(settings, env):  # noqa: F811
     with sf() as s:
         reg = s.scalars(select(Regulation)).one()
         assert reg.processing_status == "RELEVANT" and reg.extra["summary_blocked"] == "metin_yok"
+
+
+# ------------------------------------------------------------------------------------------------ toplu iş sırası
+
+
+TOKAT = {"sentence": "Tıp fakültesi sınav notlarına ilişkin hükümler değişti.", "quotes": ["Öğrencilerin sınav notları"]}
+
+
+def _two_relevant(settings, env):  # noqa: F811
+    """Banka kararı + Tokat yönetmeliği, ikisi de RELEVANT (banka kaydı id sırasında önde)."""
+    sf, _ = env
+    _processed(settings, env)
+    classify_pending(sf, FakeLLM(settings, handler_from([rel()])), settings)
+    return _bank_and_tokat(sf)
+
+
+def _summary_llm(settings):
+    return FakeLLM(settings, lambda t, m, n: [summary_out([TOKAT], topics=()) if "Tokat" in m[-1]["content"]
+                                              else summary_out([GOOD])])
+
+
+def _set_extra(sf, reg_id, status, **extra):
+    with sf() as s:
+        reg = s.get(Regulation, reg_id)
+        reg.processing_status, reg.extra = status, {**(reg.extra or {}), **extra}
+        s.commit()
+
+
+def test_text_waiting_regulations_do_not_block_new_ones(settings, env):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    _set_extra(sf, bank, "RELEVANT", summary_blocked="metin_yok")
+    rep = summarize_pending(sf, _summary_llm(settings), settings, limit=1)
+    assert rep.ids == [tokat]                                         # metin bekleyen kayıt sona kalır
+    # sonraki koşuda metin bekleyen yine denenir (metni sonradan gelmiş olabilir)
+    assert summarize_pending(sf, _summary_llm(settings), settings, limit=1).ids == [bank]
+
+
+def test_exhausted_summary_failures_do_not_block_retries(settings, env):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    _set_extra(sf, bank, "AI_FAILED", ai_stage="summary", ai_attempts=AI_MAX_ATTEMPTS)
+    _set_extra(sf, tokat, "AI_FAILED", ai_stage="summary", ai_attempts=1)
+    rep = summarize_pending(sf, _summary_llm(settings), settings, limit=1)
+    assert rep.ids == [tokat] and rep.processed == 1
+    with sf() as s:
+        assert s.get(Regulation, bank).processing_status == "AI_FAILED"
+
+
+def test_unexpected_summary_error_fails_one_regulation(settings, env, monkeypatch):  # noqa: F811
+    import app.ai.summary as summary_mod
+
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    original = summary_mod.summarize_regulation
+
+    def summarize(session, llm, reg, *a, **kw):
+        if reg.id == bank:
+            raise KeyError("beklenmedik")
+        return original(session, llm, reg, *a, **kw)
+
+    monkeypatch.setattr(summary_mod, "summarize_regulation", summarize)
+    rep = summarize_pending(sf, _summary_llm(settings), settings)
+    assert (rep.processed, rep.failed, rep.ids) == (2, 1, [tokat])
+    with sf() as s:
+        reg = s.get(Regulation, bank)
+        assert reg.processing_status == "AI_FAILED" and reg.extra["ai_stage"] == "summary"
+        assert reg.extra["ai_attempts"] == 1 and reg.extra["ai_error"].startswith("KeyError")

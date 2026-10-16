@@ -320,6 +320,29 @@ def test_ocr_failure_retries_then_gives_up(settings, env):
         assert s.get(Regulation, raw.regulation_id).issuer == "BDDK"
 
 
+def test_exhausted_extract_failed_does_not_block_new_documents(settings, env):
+    """Deneme hakkı biten EXTRACT_FAILED belgeler LIMIT'i doldurup yeni belgelerin önünü kesmez (SQL'de elenir)."""
+    sf, storage = env
+    exhausted = [add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id=f"eski-{i}",
+                         url=f"https://www.resmigazete.gov.tr/eskiler/2026/09/eski-{i}.pdf", title=f"Eski belge {i}",
+                         content=f"eski {i}".encode(), content_type="application/pdf",
+                         extra={"extract_attempts": settings.process_max_attempts}) for i in range(2)]
+    with sf() as s:
+        for rid in exhausted:
+            s.get(RawDocument, rid).processing_status = "EXTRACT_FAILED"
+        s.commit()
+    new = add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260925-3",
+                  url="https://www.resmigazete.gov.tr/eskiler/2026/09/20260925-3.htm", published=date(2026, 9, 25),
+                  title="Tokat Gaziosmanpaşa Üniversitesi Tıp Fakültesi Eğitim-Öğretim ve Sınav Yönetmeliğinde "
+                        "Değişiklik Yapılmasına Dair Yönetmelik",
+                  content=b"<html><body><p>MADDE 1- " + "Öğrencilerin sınav notları ".encode() * 20 + b"</p></body></html>")
+    rep = DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf, limit=len(exhausted))
+    assert (rep.processed, rep.linked) == (1, 1)
+    with sf() as s:
+        assert s.get(RawDocument, new).processing_status == "LINKED"
+        assert all(s.get(RawDocument, rid).processing_status == "EXTRACT_FAILED" for rid in exhausted)
+
+
 def test_reextract_fills_ocr_pending(settings, env):
     sf, storage = env
     content, ctype = fixture_bytes("processing", RG_PDF)
