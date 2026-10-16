@@ -43,7 +43,7 @@ PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
 PIPELINE_FILE = "surec-haritasi.html"
 VENDOR_TYPES = {".js": "application/javascript", ".css": "text/css", ".map": "application/json"}
 # Tam bir CSP (script-src vb.) bilinçli yok: portal satır içi betik ve stil kullanıyor. Yalnızca çerçeveye gömülmeyi
-# (clickjacking) ve içerik türü koklamayı kapatır; Keycloak girişi üst pencerede yönlendirmeyle yapıldığı için etkilenmez.
+# (clickjacking) ve içerik türü koklamayı kapatır.
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
                     "Content-Security-Policy": "frame-ancestors 'none'",
                     "Referrer-Policy": "strict-origin-when-cross-origin"}
@@ -228,8 +228,8 @@ def pipeline_node(node_id: str, session: SessionDep, actor: ActorDep,
 
 
 @api.get("/me")
-def me(actor: ActorDep, settings: SettingsDep):
-    return {"name": actor.name, "title": actor.title, "roles": sorted(actor.roles), "authMode": settings.auth_mode,
+def me(actor: ActorDep):
+    return {"name": actor.name, "title": actor.title, "roles": sorted(actor.roles),
             "canDecide": _has(actor, ROLE_EXPERT), "isAdmin": _has(actor, ROLE_ADMIN)}
 
 
@@ -626,7 +626,7 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
 
     @app.get("/vendor/{name}", include_in_schema=False)
     def vendor_file(name: str):
-        """Portalın üçüncü taraf betikleri (React, lucide, keycloak-js): kurum ağında dış CDN'e (unpkg) çıkılmaz.
+        """Portalın üçüncü taraf betikleri (React, lucide): kurum ağında dış CDN'e (unpkg) çıkılmaz.
         Dosya adları sürüm içerir ve sabittir; yalnızca düz dosya adı kabul edilir (dizin gezinmesi yok)."""
         path = settings.portal_dir / "vendor" / name
         if name != Path(name).name or path.suffix not in VENDOR_TYPES or not path.is_file():

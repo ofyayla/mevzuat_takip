@@ -1,15 +1,11 @@
 """İK-6 Portal API: liste/detay/istatistik, karar ve birim değişikliği iş kuralları, denetim izi, iyimser kilit,
-kimlik doğrulama (disabled + Keycloak çevrimdışı JWT), yönetim uç noktaları."""
+kullanıcı kimliği (X-Demo-User başlığı), yönetim uç noktaları."""
 from __future__ import annotations
 
-import time
 from datetime import timedelta
 from urllib.parse import quote
 
-import jwt
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -220,59 +216,20 @@ def test_effective_soon_and_upcoming(settings, env, client):  # noqa: F811
     assert c.get("/api/v1/regulations/stats").json()["upcoming"] == 1
 
 
-# ------------------------------------------------------------------------------------------------ Keycloak
+# ------------------------------------------------------------------------------------------------ kullanıcı kimliği
 
 
-@pytest.fixture
-def keycloak(settings, env, tmp_path):  # noqa: F811
-    sf, _ = env
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    keys = tmp_path / "keys"
-    keys.mkdir()
-    (keys / "k1.pem").write_bytes(key.public_key().public_bytes(
-        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
-    s = settings.model_copy(update={"auth_mode": "keycloak", "keycloak_issuer": "https://sso.kurum/realms/banka",
-                                    "keycloak_client_id": "mevzuat-portal", "keycloak_public_keys_dir": keys,
-                                    "cors_origins": ""})
-
-    def token(roles=("mevzuat_expert",), **over):
-        now = int(time.time())
-        claims = {"iss": s.keycloak_issuer, "azp": "mevzuat-portal", "aud": "account", "sub": "u-1",
-                  "preferred_username": "akaya", "name": "Ayşe Kaya", "title": "Uyum Uzmanı", "iat": now,
-                  "exp": now + 300, "realm_access": {"roles": list(roles)}} | over
-        return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "k1"})
-
-    return TestClient(create_app(s, sf)), token
-
-
-def test_keycloak_auth_and_roles(settings, env, keycloak):  # noqa: F811
+def test_identity_from_header_all_roles(settings, env, client):  # noqa: F811
+    """Kimlik doğrulama yok: ad X-Demo-User başlığından gelir, herkes tüm rollere sahiptir; Authorization yok sayılır."""
     reg_id = _ready(settings, env)
-    c, token = keycloak
-    assert c.get("/api/v1/regulations").json()["error"]["code"] == "missing_token"
-    h = {"Authorization": f"Bearer {token()}"}
+    c, _ = client
+    h = {"X-Demo-User": quote("Ayşe Kaya"), "Authorization": "Bearer gecersiz"}
     me = c.get("/api/v1/me", headers=h).json()
-    assert me["name"] == "Ayşe Kaya" and me["canDecide"] and not me["isAdmin"]
-    assert c.get("/api/v1/regulations", headers=h).json()["total"] == 1
-    viewer = {"Authorization": f"Bearer {token(roles=('mevzuat_viewer',))}"}
-    assert c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "approve"},
-                  headers=viewer).status_code == 403
-    assert c.get("/api/v1/admin/settings", headers=h).status_code == 403
+    assert me["name"] == "Ayşe Kaya" and me["canDecide"] and me["isAdmin"] and "authMode" not in me
+    assert c.get("/api/v1/me").json()["name"] == settings.demo_user_name
+    assert c.get("/api/v1/admin/settings", headers=h).status_code == 200
     r = c.post(f"/api/v1/regulations/{reg_id}/decision", json={"decision": "approve"}, headers=h)
     assert r.json()["decidedBy"]["name"] == "Ayşe Kaya"
-    # geçersiz tokenlar
-    expired = token(exp=int(time.time()) - 3600)
-    assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {expired}"}).json()["error"]["code"] == \
-        "invalid_token"
-    wrong_iss = token(iss="https://baska")
-    assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {wrong_iss}"}).status_code == 401
-    wrong_client = token(azp="baska-istemci")
-    assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {wrong_client}"}).status_code == 401
-    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    forged = jwt.encode({"iss": "https://sso.kurum/realms/banka", "azp": "mevzuat-portal", "exp": int(time.time()) + 60,
-                         "realm_access": {"roles": ["mevzuat_admin"]}}, other_key, algorithm="RS256")
-    assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
-    norole = token(roles=("offline_access",))
-    assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {norole}"}).status_code == 403
 
 
 # ------------------------------------------------------------------------------------------------ yönetim ve genel

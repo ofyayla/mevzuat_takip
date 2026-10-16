@@ -1,6 +1,6 @@
 # mevzuat-core — Portal API Referansı
 
-Portal (`/`) ve Albatros bu uç noktaları kullanır. Kimlik doğrulama: Keycloak (`narui` realm) Bearer JWT; `AUTH_MODE=disabled` yalnızca demo içindir. Tüm yanıtlar JSON. Etkileşimli şema: `/docs`, `/openapi.json`.
+Portal (`/`) ve Albatros bu uç noktaları kullanır. Kimlik doğrulama yoktur: herkes tüm rollere sahiptir, kullanıcı adı `X-Demo-User` başlığından (URL kodlamalı) gelir. Tüm yanıtlar JSON. Etkileşimli şema: `/docs`, `/openapi.json`.
 
 Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; elle düzenlenmez.
 

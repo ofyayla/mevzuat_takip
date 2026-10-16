@@ -143,8 +143,7 @@
   </div>
 </main>
 <script>
-// Veri: GET /api/v1/pipeline (+ /pipeline/nodes/{id}). Portal ile aynı bağlantı kuralları: window.MTP_API_BASE,
-// Keycloak kullanılırken window.MTP_TOKEN_PROVIDER (async, token döndürür).
+// Veri: GET /api/v1/pipeline (+ /pipeline/nodes/{id}). Portal ile aynı bağlantı kuralı: window.MTP_API_BASE.
 const API_BASE = window.MTP_API_BASE || '/api/v1';
 const KIND_COLOR = { flow: 'var(--k-flow)', ok: 'var(--k-ok)', wait: 'var(--k-wait)', fail: 'var(--k-fail)', terminal: 'var(--k-terminal)' };
 const FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -165,8 +164,6 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 
 async function api(path, asText) {
   const headers = { Accept: asText ? 'text/plain' : 'application/json' };
-  const token = window.MTP_TOKEN_PROVIDER ? await window.MTP_TOKEN_PROVIDER() : null;
-  if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(API_BASE + path, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

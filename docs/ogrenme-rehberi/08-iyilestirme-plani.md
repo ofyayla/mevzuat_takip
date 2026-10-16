@@ -366,5 +366,12 @@ Kod taramasından çıkan ve doğrulanan portal/API işleri (dağıtım ve YZ ha
 | Yönetim sayfası (06 §10) | Yönetim işleri yalnız API/Swagger/CLI'daydı. Portala `/me.isAdmin` ise görünen "Yönetim" sayfası eklendi: ayar formu (tip/aralık `GET /admin/settings?detail=true`'dan; `PUT` 400 yanıtı `details.fields` ile alan bazlı), açık/kapalı alarmlar, kaynak başına "Şimdi tara" ve tarih aralıklı "Backfill", yeniden işleme formu, denetim zinciri doğrulama. Yeni okuma ucu `GET /admin/metrics`: kaynak başına son tarama (durum, süre, istek, yeni/liste), `next_due` (DMZ kurulumunda crawler sinyalinden, yerelde `sources.yaml` takviminden), bekleyen aktarım (yalnız `CRAWL_MODE=remote`; Mongo okunamazsa `null`) ve son 24 saat LLM gecikmesi (p50/p95, hata sayısı; `llm_call`). Prometheus ucu hâlâ yok |
 | Portal | `lang="tr"`; karar/birim düğmeleri yalnız yetkili rolde; detayda yürürlük tarihi ifadesi, ilgililik ve önem gerekçesi, doğrulanamayıp çıkarılan ifadeler |
 
-Yapılmayanlar: portal Keycloak girişi (`window.MTP_TOKEN_PROVIDER` hâlâ tanımsız; kapsam dışı bırakıldı), arama süresinin
-PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki bağlantıyla denenmesi.
+Yapılmayanlar: arama süresinin PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki
+bağlantıyla denenmesi.
+
+### 8.1 Keycloak kaldırıldı
+Kimlik doğrulama bilinçli olarak kaldırıldı: `AUTH_MODE`, `KEYCLOAK_*` ayarları, JWT doğrulaması (`pyjwt`), chart'taki
+anahtar ConfigMap'i ve portaldaki `window.MTP_TOKEN_PROVIDER` yok. Herkes tüm rollere sahiptir; kullanıcı adı
+`X-Demo-User` başlığından (yoksa `DEMO_USER_NAME`) gelir ve denetim izine yazılır. Roller kodda korunur, ileride bir
+kimlik sağlayıcı eklenirse yalnızca `api/auth.py` içindeki `current_actor` değişir. Erişim ağ düzeyinde sınırlanmalıdır.
+Portal şu an `X-Demo-User` göndermediği için kararlar varsayılan adla kaydedilir.
