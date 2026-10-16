@@ -196,13 +196,13 @@
         <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
           <div style="border:1px solid var(--border); border-radius:var(--radius-lg); overflow-x:auto; background:var(--card);">
             <div style="min-width:1060px; display:grid; grid-template-columns:minmax(280px,1fr) 110px 80px 108px 80px 150px 90px 20px; gap:12px; padding:10px 16px; background:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted-foreground);">
-              <span>Düzenleme</span>
+              <span onClick="{{ sortByTitle }}" style="cursor:pointer; user-select:none;" title="Sırala">Düzenleme{{ sortInd.title }}</span>
               <span>Kaynak</span>
-              <span>Yayım tarihi</span>
-              <span>Yürürlük tarihi</span>
-              <span>Önem</span>
+              <span onClick="{{ sortByPublish }}" style="cursor:pointer; user-select:none;" title="Sırala">Yayım tarihi{{ sortInd.publish_date }}</span>
+              <span onClick="{{ sortByEffective }}" style="cursor:pointer; user-select:none;" title="Sırala">Yürürlük tarihi{{ sortInd.effective_date }}</span>
+              <span onClick="{{ sortBySeverity }}" style="cursor:pointer; user-select:none;" title="Sırala">Önem{{ sortInd.severity }}</span>
               <span>Önerilen birim</span>
-              <span>Durum</span>
+              <span onClick="{{ sortByStatus }}" style="cursor:pointer; user-select:none;" title="Sırala">Durum{{ sortInd.status }}</span>
               <span></span>
             </div>
             <sc-for list="{{ visibleRecords }}" as="r" hint-placeholder-count="8">
@@ -643,6 +643,8 @@ class Component extends DCLogic {
     activeMetric: null,
     page: 1,
     pageSize: 10,
+    sort: null,       // null → varsayılan sıra (önem ↓, yayım tarihi ↓)
+    sortDir: 'desc',
     sourceHealthOpen: false,
     confirmType: null,
     confirmNote: '',
@@ -708,6 +710,7 @@ class Component extends DCLogic {
     if (f.search) p.set('q', f.search);
     if (st.activeMetric) p.set('metric', METRIC_PARAM[st.activeMetric]);
     p.set('page', st.page); p.set('page_size', st.pageSize);
+    if (st.sort) { p.set('sort', st.sort); p.set('direction', st.sortDir); }
     const seq = (this._listSeq = (this._listSeq || 0) + 1);   // sırasız gelen eski yanıtı yok say
     return api('/regulations?' + p.toString())
       .then(r => { if (seq === this._listSeq) this.setState({ records: r.data.items.map(toRecord), total: r.data.total }); })
@@ -741,6 +744,17 @@ class Component extends DCLogic {
   setFilterDate = (e) => this.setFilter('date', e.target.value);
   clearFilters = () => this.update({ filters: Object.assign({}, EMPTY_FILTERS), page: 1 });
   toggleMetric = (key) => this.update({ activeMetric: this.state.activeMetric === key ? null : key, page: 1 });
+  // Aynı sütuna tekrar basınca yön değişir; tarihlerde ilk tıklama yeniden eskiye (↓), metinde A→Z (↑).
+  setSort = (key) => {
+    const { sort, sortDir } = this.state;
+    const dir = sort === key ? (sortDir === 'desc' ? 'asc' : 'desc') : (key === 'title' ? 'asc' : 'desc');
+    this.update({ sort: key, sortDir: dir, page: 1 });
+  };
+  sortByTitle = () => this.setSort('title');
+  sortByPublish = () => this.setSort('publish_date');
+  sortByEffective = () => this.setSort('effective_date');
+  sortBySeverity = () => this.setSort('severity');
+  sortByStatus = () => this.setSort('status');
   setPage = (p) => this.update({ page: p });
   setPageSize = (e) => this.update({ pageSize: parseInt(e.target.value, 10), page: 1 });
   toggleSourceHealth = () => this.setState({ sourceHealthOpen: !this.state.sourceHealthOpen });
@@ -980,6 +994,12 @@ class Component extends DCLogic {
       goPrev: safePage <= 1 ? (() => {}) : (() => this.setPage(safePage - 1)),
       goNext: safePage >= totalPages ? (() => {}) : (() => this.setPage(safePage + 1)),
       showPagination: total > pageSize,
+      sortInd: ['title', 'publish_date', 'effective_date', 'severity', 'status'].reduce((o, k) => {
+        o[k] = this.state.sort === k ? (this.state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        return o;
+      }, {}),
+      sortByTitle: this.sortByTitle, sortByPublish: this.sortByPublish, sortByEffective: this.sortByEffective,
+      sortBySeverity: this.sortBySeverity, sortByStatus: this.sortByStatus,
       stats, goToList: this.goToList,
       pendingCount, pendingIsZero: pendingCount === 0, pendingNotZero: pendingCount > 0, criticalHighCount, todayCount, upcomingCount,
       cardPending, cardCritical, cardToday, cardUpcoming,

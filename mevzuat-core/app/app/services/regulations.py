@@ -81,6 +81,8 @@ class ListQuery:
     metric: str | None = None
     page: int = 1
     page_size: int = 10
+    sort: str | None = None
+    direction: str = "desc"
 
 
 def _filters(query: ListQuery, settings: Settings) -> list:
@@ -126,8 +128,18 @@ def list_regulations(session: Session, query: ListQuery, settings: Settings) -> 
     conds = _filters(query, settings)
     total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
     sev_rank = case(SEVERITY_ORDER, value=Regulation.severity, else_=0)
+    default_order = (sev_rank.desc(), Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
+    sort_cols = {"title": Regulation.title, "publish_date": Regulation.publish_date,
+                 "effective_date": Regulation.effective_date, "severity": sev_rank,
+                 "status": Regulation.review_status}
+    if query.sort in sort_cols:
+        col = sort_cols[query.sort]
+        primary = col.asc().nulls_last() if query.direction == "asc" else col.desc().nulls_last()
+        order = (primary, Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
+    else:
+        order = default_order
     rows = session.scalars(select(Regulation).where(*conds)
-                           .order_by(sev_rank.desc(), Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
+                           .order_by(*order)
                            .offset((query.page - 1) * query.page_size).limit(query.page_size)).all()
     return {"items": [serialize(session, r, settings) for r in rows], "total": total, "page": query.page,
             "pageSize": query.page_size}
