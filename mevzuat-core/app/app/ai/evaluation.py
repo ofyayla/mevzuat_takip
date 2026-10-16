@@ -129,7 +129,8 @@ def run_eval(path: str | Path, llm: LLM, settings: Settings) -> EvalReport:
             row.components = rel.components
             if rel.is_relevant and item.get("expected_severity"):
                 row.severity = severity.assess(llm, ctx, kn, reg_type=rel.reg_type, topics=rel.topics,
-                                               relevance_rationale=rel.rationale, force=True).severity
+                                               relevance_rationale=rel.rationale, force=True,
+                                               rules_text=text).severity
         except LLMError as e:
             row.error = str(e)
         report.rows.append(row)

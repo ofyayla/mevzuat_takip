@@ -8,7 +8,7 @@ import pytest
 import yaml
 from sqlalchemy import select
 
-from app.ai.llm_client import FakeLLM
+from app.ai.llm_client import FakeLLM, LLMUnavailable
 from app.ai.summary import summarize_pending
 from app.ai.unit_matching import (
     _stem_match,
@@ -21,8 +21,16 @@ from app.ai.unit_matching import (
 )
 from app.db import FewshotExample, Regulation, Unit, UnitSuggestion
 from app.settings import BACKEND_DIR
+from tests.test_ai import LockSpy
 from tests.test_processing import env  # noqa: F401
-from tests.test_summary import GOOD, _relevant_bank_mellat, _summary_llm, _two_relevant, summary_out
+from tests.test_summary import (
+    GOOD,
+    _relevant_bank_mellat,
+    _set_extra,
+    _summary_llm,
+    _two_relevant,
+    summary_out,
+)
 
 UNITS = yaml.safe_load((BACKEND_DIR / "config" / "units.yaml").read_text("utf-8"))
 
@@ -231,6 +239,83 @@ def test_awaiting_text_regulation_gets_units_but_stays_relevant(settings, env): 
     assert "özet yok" in llm.calls[0][1][-1]["content"]
     with sf() as s:
         assert s.scalars(select(Regulation)).one().processing_status == "RELEVANT"
+
+
+def test_second_decision_deactivates_previous_fewshot_row(settings, env):  # noqa: F811
+    """Önce onay, sonra düzeltme: aynı düzenlemenin eski satırı havuzda etkin kalıp örnekleri kirletmemeli."""
+    sf, _ = env
+    reg_id = _summarized(settings, env)
+    with sf() as s:
+        other = FewshotExample(task="unit_match", regulation_id=None, input_text="Başka kayıt | konular: -",
+                               expected_output={"units": ["HAZINE"]}, origin="workshop")
+        s.add(other)
+        reg = s.get(Regulation, reg_id)
+        record_unit_decision(s, reg, ["HAZINE"], corrected=False)
+        s.commit()
+        record_unit_decision(s, reg, ["RISK_YONETIMI"], corrected=True)
+        s.commit()
+        rows = s.scalars(select(FewshotExample).where(FewshotExample.regulation_id == reg_id)
+                         .order_by(FewshotExample.id)).all()
+        assert [(r.origin, r.active) for r in rows] == [("user_decision", False), ("user_correction", True)]
+        assert s.get(FewshotExample, other.id).active is True               # başka kaydın örneğine dokunulmaz
+        ex = select_examples(s, "Bank Mellat şubesinin faaliyet izni kaldırıldı", 5)
+    assert [e["units"] for e in ex if e["origin"] != "workshop"] == [["RISK_YONETIMI"]]
+
+
+def _two_summarized(settings, env):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_relevant(settings, env)
+    summarize_pending(sf, _summary_llm(settings), settings)
+    return bank, tokat
+
+
+def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_summarized(settings, env)
+    _set_extra(sf, bank, "AI_FAILED", ai_stage="unit_match", ai_attempts=1)
+
+    def down(task, messages, n):
+        raise LLMUnavailable("5xx")
+
+    llm = FakeLLM(settings, down)
+    rep = match_pending(sf, llm, settings)
+    assert rep.unavailable and (rep.processed, rep.failed, rep.matched) == (0, 0, 0)
+    assert len(llm.calls) == 1                                           # ilk kayıtta kesildi
+    with sf() as s:
+        failed, fresh = s.get(Regulation, bank), s.get(Regulation, tokat)
+        assert failed.processing_status == "AI_FAILED" and failed.extra["ai_attempts"] == 1  # deneme artmadı
+        assert fresh.processing_status == "SUMMARIZED" and "ai_attempts" not in (fresh.extra or {})
+    rep = match_pending(sf, FakeLLM(settings, lambda t, m, n: [{"suggestions": []}]), settings)
+    assert (rep.processed, rep.no_suggestion, rep.unavailable) == (2, 2, False)
+
+
+def test_locked_or_changed_regulation_is_skipped(settings, env, monkeypatch):  # noqa: F811
+    sf, _ = env
+    bank, tokat = _two_summarized(settings, env)
+    empty = FakeLLM(settings, lambda t, m, n: [{"suggestions": []}])
+    spy = LockSpy(monkeypatch, locked={bank})                            # başka işçi banka kaydını eşleştiriyor
+    rep = match_pending(sf, empty, settings)
+    assert (rep.processed, rep.skipped, rep.no_suggestion) == (1, 1, 1)
+    spy.assert_skip_locked(bank, tokat)
+    with sf() as s:
+        assert s.get(Regulation, bank).processing_status == "SUMMARIZED"
+    # seçimden sonra durumu değişen kayıt: başka işçi Tokat'ı çoktan eşleştirmiş
+    monkeypatch.undo()
+    _set_extra(sf, tokat, "SUMMARIZED")
+    with sf() as s:
+        s.get(Regulation, tokat).extra = {}
+        s.commit()
+    done = []
+
+    def handler(task, messages, n):
+        if not done:                                                     # banka eşleşirken Tokat başkasınca bitirilir
+            done.append(1)
+            _set_extra(sf, tokat, "READY", unit_match={"status": "önerilemedi"})
+        return [{"suggestions": []}]
+
+    llm = FakeLLM(settings, handler)
+    rep = match_pending(sf, llm, settings)
+    assert (rep.processed, rep.skipped) == (1, 1) and len(llm.calls) == 1
 
 
 @pytest.mark.parametrize("code", ["MEVZUAT_UYUM", "KATILIM_ILKELERI", "RISK_YONETIMI"])

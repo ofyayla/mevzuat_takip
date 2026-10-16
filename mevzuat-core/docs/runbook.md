@@ -147,8 +147,10 @@ uzmanın seçtiği birimler değişmez (yalnızca YZ önerileri yenilenir); yeni
 
 ### 4.6 LLM / OCR servisi erişilemiyor
 
-- Kayıtlar kaybolmaz: çağrı başarısız olan kayıt `AI_FAILED` (aşama `extra.ai_stage`) veya `EXTRACT_FAILED` olarak
-  bekler, YZ hattı alarmı açılır.
+- Kayıtlar kaybolmaz. OCR hatasında belge metin katmanıyla bağlanır, taranmış sayfalar `extra.ocr_pending_pages`'te
+  bekler ve `catch_up_ocr` yeniden dener (en çok `PROCESS_MAX_ATTEMPTS` kez). LLM sunucusuna ulaşılamıyorsa (bağlantı,
+  zaman aşımı, 5xx, 429) toplu iş durur, kayıtlar olduğu gibi kalır ve deneme sayılmaz; kayda ait LLM hatası
+  `AI_FAILED` (aşama `extra.ai_stage`) olur ve YZ hattı alarmı açılır.
 - Servis düzeldikten sonra `mevzuat-monitor reprocess classify|summarize|match --from … --to …` veya OCR için
   `reprocess extract`.
 - Sağlayıcı değişikliği (ör. OpenAI → kurum içi vLLM) yalnızca `.env` (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`)

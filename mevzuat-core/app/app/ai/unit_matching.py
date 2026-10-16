@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai.common import effective_settings, knowledge, messages, regulation_context
-from app.ai.llm_client import LLM, LLMError
+from app.ai.llm_client import LLM, LLMError, LLMUnavailable
 from app.collectors.dates import tr_lower
 from app.db import FewshotExample, Regulation, RegulationSummary, Unit, UnitSuggestion
 from app.settings import Settings
@@ -88,6 +88,11 @@ def select_examples(session: Session, text: str, k: int) -> list[dict]:
 def record_unit_decision(session: Session, reg: Regulation, final_units: list[str], *, corrected: bool) -> None:
     """İK-6 çağırır: Başkanlığın birim kararı örnek havuzuna girer (düzeltme ağırlığı 2)."""
     summary = current_summary(session, reg.id)
+    # Aynı düzenlemenin önceki kararı (ör. önce onay, sonra düzeltme) örnek havuzunu kirletmesin: yalnız sonuncusu etkin
+    for old in session.scalars(select(FewshotExample).where(FewshotExample.regulation_id == reg.id,
+                                                            FewshotExample.task == "unit_match",
+                                                            FewshotExample.active.is_(True))):
+        old.active = False
     session.add(FewshotExample(task="unit_match", regulation_id=reg.id, input_text=example_text(reg, summary),
                                expected_output={"units": final_units},
                                origin="user_correction" if corrected else "user_decision",
@@ -229,6 +234,22 @@ class MatchReport:
     failed: int = 0
     suggestions: int = 0
     errors: list[str] = field(default_factory=list)
+    skipped: int = 0           # kilitli ya da seçimden sonra durumu değişmiş kayıtlar
+    unavailable: bool = False  # LLM sunucusuna ulaşılamadı; toplu iş kesildi, kalanlar sonraki koşuya kaldı
+
+
+def _still_eligible(reg: Regulation, *, force: bool) -> bool:
+    """``match_pending``'in uygunluk koşulu; seçimde ve kilitli yeniden yüklemeden sonra aynı şekilde uygulanır."""
+    if not reg.is_relevant:
+        return False
+    extra = reg.extra or {}
+    if force:
+        return True
+    if reg.processing_status == "AI_FAILED":
+        return extra.get("ai_stage") == "unit_match" and extra.get("ai_attempts", 0) < AI_MAX_ATTEMPTS
+    return "unit_match" not in extra and (
+        reg.processing_status == "SUMMARIZED"
+        or (reg.processing_status == "RELEVANT" and bool(extra.get("summary_blocked"))))
 
 
 def match_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,
@@ -240,28 +261,29 @@ def match_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Se
         q = select(Regulation).where(Regulation.is_relevant.is_(True)).order_by(Regulation.id)
         if ids:
             q = q.where(Regulation.id.in_(ids))
-        todo = []
-        for reg in session.scalars(q):
-            extra = reg.extra or {}
-            if force:
-                todo.append(reg.id)
-            elif reg.processing_status == "AI_FAILED":
-                if extra.get("ai_stage") == "unit_match" and extra.get("ai_attempts", 0) < AI_MAX_ATTEMPTS:
-                    todo.append(reg.id)
-            elif "unit_match" not in extra and (
-                    reg.processing_status == "SUMMARIZED"
-                    or (reg.processing_status == "RELEVANT" and extra.get("summary_blocked"))):
-                todo.append(reg.id)
-        todo = todo[:limit]
+        todo = [reg.id for reg in session.scalars(q) if _still_eligible(reg, force=force)][:limit]
     for reg_id in todo:
         with session_factory() as session:
-            reg = session.get(Regulation, reg_id)
+            # Satır kilidi: zincir görevi ile Beat güvenlik ağı aynı kaydı eşzamanlı işlemesin (SQLite'ta etkisiz).
+            # Kilitliyse (None) başka işçi işliyordur; kayıt seçim ile kilit arasında durum değiştirmiş olabilir
+            reg = session.get(Regulation, reg_id, with_for_update={"skip_locked": True})
+            if reg is None or not _still_eligible(reg, force=force):
+                rep.skipped += 1
+                continue
             rep.processed += 1
             retry = reg.processing_status == "AI_FAILED"
             if retry:   # hatadan önceki duruma dön: özeti varsa SUMMARIZED (→ READY), yoksa RELEVANT
                 reg.processing_status = "SUMMARIZED" if current_summary(session, reg.id) else "RELEVANT"
             try:
                 res = match_regulation(session, llm, reg, settings, force=force or retry)
+            except LLMUnavailable as e:
+                # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
+                session.rollback()      # AI_FAILED → önceki durum geçişi de geri alınır
+                rep.processed -= 1
+                rep.unavailable = True
+                rep.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
+                log.warning("LLM kullanılamıyor; birim eşleştirme durduruldu (düzenleme %s): %s", reg_id, e)
+                break
             except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
                 if isinstance(e, LLMError):
                     msg = str(e)

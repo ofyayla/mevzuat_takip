@@ -12,12 +12,43 @@ from app.ai.classify import classify_pending
 from app.ai.common import effective_settings, set_runtime_setting
 from app.ai.dedupe_confirm import make_confirmer
 from app.ai.evaluation import run_eval
-from app.ai.llm_client import FakeLLM, LLMError, OpenAICompatibleLLM, split_reasoning, strict_schema
+from app.ai.llm_client import (
+    FakeLLM,
+    LLMError,
+    LLMUnavailable,
+    OpenAICompatibleLLM,
+    split_reasoning,
+    strict_schema,
+)
 from app.ai.relevance import RelevanceOut
 from app.ai.severity import apply_rules
 from app.db import LlmCall, Regulation
 from app.processing.pipeline import DocumentProcessor
 from tests.test_processing import add_bank_mellat, add_raw, env  # noqa: F401 — env fixture'ı paylaşılır
+
+
+class LockSpy:
+    """``Session.get(..., with_for_update=…)`` çağrılarını kaydeder; ``locked`` içindeki id'ler için başka bir işçi
+    kilidi tutuyormuş gibi ``None`` (SKIP LOCKED) döndürür. SQLite satır kilidi bilmediği için kilidi böyle taklit ederiz."""
+
+    def __init__(self, monkeypatch, locked=()):
+        from sqlalchemy.orm import Session
+
+        self.locked, self.requests = set(locked), []
+        original, spy = Session.get, self
+
+        def get(session, entity, ident, **kw):
+            if kw.get("with_for_update"):
+                spy.requests.append((ident, kw["with_for_update"]))
+                if ident in spy.locked:
+                    return None
+            return original(session, entity, ident, **kw)
+
+        monkeypatch.setattr(Session, "get", get)
+
+    def assert_skip_locked(self, *ids):
+        assert {i for i, _ in self.requests} == set(ids)
+        assert all(opts == {"skip_locked": True} for _, opts in self.requests)
 
 
 def rel(is_rel=True, score=0.9, uncertain=False, reg_type="Kurul Kararı", topics=("KURUMSAL",)):
@@ -369,3 +400,126 @@ def test_thinking_is_disabled_by_default_for_every_task(settings):
     for task in ("relevance", "severity", "summary", "unit_match"):
         llm.complete_json(task, "p", [{"role": "user", "content": "x"}], RelevanceOut)
         assert captured["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}, task
+
+
+# ------------------------------------------------------------------------------------------------ ikinci tur (PR-B)
+
+
+def test_severity_rules_see_effective_sentence_at_end_of_long_text(settings, env):  # noqa: F811
+    """LLM'e giden bağlam 18k karakterle kırpılır; yürürlük cümlesi sonda kalınca kural yine de tetiklenmeli."""
+    sf, storage = env
+    body = "".join(f"<p>MADDE {i}- Bankalar ilgili işlemleri bu esaslara göre yürütür.</p>" for i in range(1, 40))
+    add_raw(sf, storage, source="RESMI_GAZETE", channel="fihrist", external_id="20260926-1",
+            url="https://www.resmigazete.gov.tr/eskiler/2026/09/20260926-1.htm", published=date(2026, 9, 26),
+            title="Finansal Raporlama Esaslarına İlişkin Yönetmelik",
+            content=("<html><body><p>Bankacılık Düzenleme ve Denetleme Kurumundan:</p>" + body +
+                     "<p>MADDE 40- Bu Yönetmelik yayımı tarihinde yürürlüğe girer.</p></body></html>").encode())
+    DocumentProcessor(settings, storage, use_default_ocr=False).process_pending(sf)
+    short = settings.model_copy(update={"relevance_max_input_chars": 600})
+    llm = FakeLLM(short, handler_from([rel(reg_type="Yönetmelik")], "Orta"))
+    assert classify_pending(sf, llm, short).relevant == 1
+    sev_call = next(c for c in llm.calls if c[0] == "severity")
+    assert "metin kısaltıldı" in sev_call[1][-1]["content"]
+    assert "yayımı tarihinde yürürlüğe girer" not in sev_call[1][-1]["content"]     # LLM kırpılmış bağlamı görür
+    with sf() as s:
+        reg = s.scalars(select(Regulation)).one()
+    assert reg.severity == "Yüksek"                                                  # kural tam metne uygulandı
+    assert reg.classification["severity"] == {"llm": "Orta", "rules": ["taban:hemen_yururluk+banka_muhatap"]}
+
+
+def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env):  # noqa: F811
+    sf, _ = env
+    _processed(settings, env)
+    bank, tokat = _bank_and_tokat(sf)
+
+    def down(task, messages, n):
+        raise LLMUnavailable("bağlantı yok")
+
+    llm = FakeLLM(settings, down)
+    rep = classify_pending(sf, llm, settings)
+    assert rep.unavailable and (rep.processed, rep.failed) == (0, 0)
+    assert len(llm.calls) == 1                                            # ilk kayıtta kesildi, ikincisine geçilmedi
+    assert "LLM kullanılamıyor" in rep.errors[0]
+    with sf() as s:
+        for rid in (bank, tokat):
+            reg = s.get(Regulation, rid)
+            assert reg.processing_status == "NEW" and "ai_attempts" not in (reg.extra or {})
+    # AI_FAILED kaydın deneme sayısı da korunur
+    with sf() as s:
+        reg = s.get(Regulation, bank)
+        reg.processing_status, reg.extra = "AI_FAILED", {"ai_attempts": 1, "ai_stage": "relevance"}
+        s.commit()
+    assert classify_pending(sf, FakeLLM(settings, down), settings).unavailable
+    with sf() as s:
+        assert s.get(Regulation, bank).extra["ai_attempts"] == 1
+    # sunucu geri gelince hepsi işlenir
+    assert classify_pending(sf, FakeLLM(settings, handler_from([rel()])), settings).relevant == 2
+
+
+def test_openai_server_errors_become_llm_unavailable(settings, monkeypatch):
+    import httpx
+    import openai
+
+    monkeypatch.setattr("time.sleep", lambda s: None)                    # tenacity'nin üstel beklemesi
+    req = httpx.Request("POST", "http://llm/v1/chat/completions")
+
+    def make(exc):
+        calls = []
+
+        def create(**kw):
+            calls.append(kw)
+            raise exc
+
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return OpenAICompatibleLLM(settings.model_copy(update={"llm_provider": "vllm"}), client=client), calls
+
+    msgs = [{"role": "user", "content": "x"}]
+    for exc in (openai.APIConnectionError(request=req), openai.APITimeoutError(request=req),
+                openai.InternalServerError("x", response=httpx.Response(503, request=req), body=None),
+                openai.RateLimitError("x", response=httpx.Response(429, request=req), body=None)):
+        llm, calls = make(exc)
+        with pytest.raises(LLMUnavailable):
+            llm.complete_json("relevance", "p", msgs, RelevanceOut)
+        assert len(calls) == 3                                           # tenacity tükendikten sonra
+    # istek hatası kayda ait: yeniden denenmez, LLMUnavailable değildir
+    llm, calls = make(openai.BadRequestError("x", response=httpx.Response(400, request=req), body=None))
+    with pytest.raises(LLMError) as ei:
+        llm.complete_json("relevance", "p", msgs, RelevanceOut)
+    assert not isinstance(ei.value, LLMUnavailable) and len(calls) == 1
+
+
+def test_locked_regulation_is_skipped(settings, env, monkeypatch):  # noqa: F811
+    sf, _ = env
+    _processed(settings, env)
+    bank, tokat = _bank_and_tokat(sf)
+    spy = LockSpy(monkeypatch, locked={bank})                            # başka işçi banka kaydını işliyor
+    llm = FakeLLM(settings, handler_from([rel()]))
+    rep = classify_pending(sf, llm, settings)
+    assert (rep.processed, rep.skipped, rep.relevant) == (1, 1, 1)
+    spy.assert_skip_locked(bank, tokat)
+    with sf() as s:
+        assert s.get(Regulation, bank).processing_status == "NEW"
+        assert s.get(Regulation, tokat).processing_status == "RELEVANT"
+
+
+def test_regulation_finished_meanwhile_is_skipped(settings, env):  # noqa: F811
+    """Seçimden sonra başka işçi kaydı bitirmiş: SQL koşulu Python'da yeniden denetlenir, LLM çağrılmaz."""
+    sf, _ = env
+    _processed(settings, env)
+    bank, tokat = _bank_and_tokat(sf)
+    inner, done = handler_from([rel()]), []
+
+    def handler(task, messages, n):
+        if task == "relevance" and "Mellat" in messages[-1]["content"] and not done:   # banka işlenirken Tokat'ı
+            done.append(1)                                                              # başkası bitirir (ilk çağrı)
+            with sf() as s:
+                s.get(Regulation, tokat).processing_status = "IRRELEVANT"
+                s.commit()
+        return inner(task, messages, n)
+
+    llm = FakeLLM(settings, handler)
+    rep = classify_pending(sf, llm, settings)
+    assert (rep.processed, rep.skipped, rep.relevant) == (1, 1, 1)
+    assert not any("Tokat" in c[1][-1]["content"] for c in llm.calls)
+    with sf() as s:
+        assert s.get(Regulation, tokat).processing_status == "IRRELEVANT"
