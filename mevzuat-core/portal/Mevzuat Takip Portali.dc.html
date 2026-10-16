@@ -611,7 +611,7 @@ window.__resources = {
 </x-dc>
 <script type="text/x-dc" data-dc-script>
 // Mevzuat Takip Portalı — Portal API (İK-6) bağlantısı. Veri /api/v1 uç noktalarından gelir; filtreleme ve sayfalama
-// sunucu tarafındadır. Keycloak kullanılırken sayfa, token döndüren window.MTP_TOKEN_PROVIDER (async) işlevini tanımlar.
+// sunucu tarafındadır. Kimlik doğrulama yok; kullanıcı adı sunucuda X-Demo-User başlığından (yoksa varsayılan) alınır.
 const API_BASE = window.MTP_API_BASE || '/api/v1';
 const METRIC_PARAM = { pending: 'pending', criticalHigh: 'critical_high', today: 'today', upcoming: 'upcoming' };
 const FMT_DATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -625,8 +625,6 @@ function fmtDateTime(iso) { return iso ? FMT_DATETIME.format(new Date(iso)) : ''
 
 async function api(path, opts = {}) {
   const headers = Object.assign({ Accept: 'application/json' }, opts.body ? { 'Content-Type': 'application/json' } : {}, opts.headers || {});
-  const token = window.MTP_TOKEN_PROVIDER ? await window.MTP_TOKEN_PROVIDER() : null;
-  if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

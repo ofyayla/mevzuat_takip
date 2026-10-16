@@ -80,7 +80,7 @@ Canlı sistemde bu `structure_change` alarmına dönüşür (04 §6). Sonra değ
 
 ```bash
 cp mevzuat-core/app/.env.example mevzuat-core/app/.env
-#   LLM'siz deneme için .env'de LLM_PROVIDER=none yapın (YZ adımları "skipped" döner); AUTH_MODE=disabled kalsın
+#   LLM'siz deneme için .env'de LLM_PROVIDER=none yapın (YZ adımları "skipped" döner)
 docker compose up -d --build             # crawler + mongo + migrate + api + worker + beat + redis + postgres
 docker compose exec crawler mevzuat-collect check-access      # kaynaklara erişim (BDDK yurt dışından erişilemez)
 docker compose exec crawler mevzuat-crawler run TCMB KVKK     # elle tarama (ilk tarama → BASELINE)

@@ -35,8 +35,7 @@ kaldırır. Crawler, internete çıkış yalnızca DMZ sunucusunda olduğu için
 | 9 | Firewall: DMZ → MongoDB 27017 | 192.168.18.35 → 10.155.7.195:27017 | Ağ |
 | 10 | DMZ'ye imaj taşıma yolu | DMZ → Nexus 9099 izni **veya** LAN'dan DMZ'ye dosya kopyalama | Ağ / Bilgi Güvenliği |
 | 11 | DNS | `mevzuat-takip.artinttest.albarakaturk.local` → ingress | Ağ |
-| 12 | Keycloak client | `narui` realm'inde `mevzuat-portal` client'ı ve roller; realm açık anahtarı (PEM) | IAM |
-| 13 | OCR uç noktası | Azure Document Intelligence adresi ve anahtarı | OCR servis sahibi |
+| 12 | OCR uç noktası | Azure Document Intelligence adresi ve anahtarı | OCR servis sahibi |
 
 ## 1. Repoların açılması
 
@@ -109,7 +108,8 @@ git push https://gitlab.albarakaturk.local/<grup>/mevzuat-core.git kurum/mevzuat
    ```
 
 2. **Values:** chart reposundaki `mevzuat-core/values-albaraka-uat.yaml` içinde TEYİT satırları doldurulur (Redis DB numarası,
-   `OCR_ENDPOINT`, `KEYCLOAK_CLIENT_ID`) ve push edilir.
+   `OCR_ENDPOINT`) ve push edilir. Kimlik doğrulama olmadığı için portal erişimi ağ düzeyinde (ingress, kurum ağı)
+   sınırlanmalıdır.
 3. **ArgoCD senkronu** (DevOps'un tanımladığı Application): sıra
    `mevzuat-core-migrate` (PreSync, şema) → Service, Deployment'lar, Ingress. Migrate başarısız olursa
    senkron durur; ArgoCD'de Job'ın logu açılır (Job silinmez, bir sonraki senkronda yenilenir).

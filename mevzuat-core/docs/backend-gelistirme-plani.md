@@ -652,6 +652,10 @@ LLM_MODEL=gpt-4.1-mini         # vllm: Qwen/Qwen3.6-35B-A3B-FP8
 
 ## 8. Kimlik Doğrulama (Keycloak, backend'in Keycloak erişimi olmadan)
 
+> **Güncel durum (Ekim 2026):** Keycloak entegrasyonu kaldırıldı; kimlik doğrulama yoktur, herkes tüm rollere sahiptir ve
+> kullanıcı adı `X-Demo-User` başlığından gelir (bkz. `docs/ogrenme-rehberi/08-iyilestirme-plani.md` §8.1). Bu bölüm
+> ve plandaki diğer Keycloak anmaları ilk tasarımı belgeler.
+
 **Akış:**
 1. Portal `keycloak-js` ile kurum Keycloak'ına yönlenir (Authorization Code + PKCE, public client), `access_token` alır ve token'ı yeniler.
 2. Her API isteğine `Authorization: Bearer <JWT>` başlığı eklenir.

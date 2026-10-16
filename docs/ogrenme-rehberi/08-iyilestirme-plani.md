@@ -365,5 +365,12 @@ Kod taramasından çıkan ve doğrulanan portal/API işleri (dağıtım ve YZ ha
 | Portal dış bağımlılık | React, react-dom ve lucide `portal/vendor/` altına alındı (sabit sürüm, özetler `vendor/README.md`); `lucide@latest` ve Google Fonts kaldırıldı |
 | Portal | `lang="tr"`; karar/birim düğmeleri yalnız yetkili rolde; detayda yürürlük tarihi ifadesi, ilgililik ve önem gerekçesi, doğrulanamayıp çıkarılan ifadeler |
 
-Yapılmayanlar: portal Keycloak girişi (`window.MTP_TOKEN_PROVIDER` hâlâ tanımsız; kapsam dışı bırakıldı), arama süresinin
-PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki bağlantıyla denenmesi.
+Yapılmayanlar: arama süresinin PostgreSQL'de ölçümü, `lock_timeout`/`record_busy` yolunun gerçek PostgreSQL'de iki
+bağlantıyla denenmesi.
+
+### 8.1 Keycloak kaldırıldı
+Kimlik doğrulama bilinçli olarak kaldırıldı: `AUTH_MODE`, `KEYCLOAK_*` ayarları, JWT doğrulaması (`pyjwt`), chart'taki
+anahtar ConfigMap'i ve portaldaki `window.MTP_TOKEN_PROVIDER` yok. Herkes tüm rollere sahiptir; kullanıcı adı
+`X-Demo-User` başlığından (yoksa `DEMO_USER_NAME`) gelir ve denetim izine yazılır. Roller kodda korunur, ileride bir
+kimlik sağlayıcı eklenirse yalnızca `api/auth.py` içindeki `current_actor` değişir. Erişim ağ düzeyinde sınırlanmalıdır.
+Portal şu an `X-Demo-User` göndermediği için kararlar varsayılan adla kaydedilir.

@@ -8,7 +8,7 @@ FROM ${BASE_IMAGE}
 ARG CA_CERT_URLS="https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-root-ca-2042.crt https://nexus.alb.albarakatech.com/repository/atg-raw-file/alb_ca/albaraka-sub-ca-2041.crt"
 ARG PIP_INDEX_URL
 
-# Kurum kök/ara CA sertifikaları (iç HTTPS servisleri: Keycloak, OCR). Python ile indirilir (taban imajda curl yok).
+# Kurum kök/ara CA sertifikaları (iç HTTPS servisleri: OCR, LLM). Python ile indirilir (taban imajda curl yok).
 RUN if [ -n "$CA_CERT_URLS" ]; then \
       for u in $CA_CERT_URLS; do \
         python -c "import ssl,sys,urllib.request as r; n=sys.argv[1].rsplit('/',1)[-1].rsplit('.',1)[0]+'.crt'; open('/usr/local/share/ca-certificates/'+n,'wb').write(r.urlopen(sys.argv[1],context=ssl._create_unverified_context()).read())" "$u"; \
