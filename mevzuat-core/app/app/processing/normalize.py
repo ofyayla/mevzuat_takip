@@ -70,6 +70,19 @@ def title_key(title: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+# Arama katlaması: I, İ, ı ve i aynı harf sayılır ("IBAN" ↔ "iban", "ışık" ↔ "Işık"); ç/ğ/ö/ş/ü ASCII karşılıklarına
+# çevrilmez. SQL tarafı (``services.regulations._fold_sql``) aynı eşlemeyi kullanır; ikisi birlikte değişmeli.
+SEARCH_FOLD_PAIRS = (("İ", "i"), ("I", "i"), ("ı", "i"), ("Ç", "ç"), ("Ğ", "ğ"), ("Ö", "ö"), ("Ş", "ş"), ("Ü", "ü"))
+
+
+def search_fold(text: str) -> str:
+    """Arama için katlanmış metin. Python'un ``lower()``'ı ``İ``'yi ``i̇`` (birleşik nokta) yapar, bu yüzden
+    önce açık eşleme uygulanır."""
+    for src, dst in SEARCH_FOLD_PAIRS:
+        text = text.replace(src, dst)
+    return text.lower()
+
+
 # ------------------------------------------------------------------------------------------------ başlık
 
 # Sıra önemli: daha özel kalıplar önce. Eşleşme başlığın sonuna yakın ana isimden yapılır ("…Yönetmelik").

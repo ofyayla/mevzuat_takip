@@ -328,6 +328,13 @@ sayfalama sunucu tarafında; arama 300 ms gecikmeyle, eski yanıtlar yok sayıl�
 detay açılınca `views` çağrılır; tarihler `tr-TR` biçiminde. Demo sürümündeki "karar verildi" bilgisinin hiç
 görünmemesi hatası düzeltildi. Keycloak için sayfa, token döndüren `window.MTP_TOKEN_PROVIDER` (async) tanımlar
 (`keycloak-js` entegrasyonu kurum realm bilgisi gelince eklenecek); `window.MTP_API_BASE` API adresini değiştirir.
+Portal dış CDN'e çıkmaz: React ve lucide `portal/vendor/` altında sabit sürümle durur ve `/vendor/<ad>` adresinden
+sunulur (sürümler ve özetler `portal/vendor/README.md`); Google Fonts yok, yazı tipi sistem yazı tipine düşer.
+Karar ve birim düğmeleri yalnız `mevzuat_expert`/`mevzuat_admin` rolünde görünür; detayda YZ'nin yürürlük tarihi
+ifadesi, ilgililik ve önem gerekçesi ile kaynakta doğrulanamadığı için özetten çıkarılan ifadeler gösterilir. API
+yanıtlarına `X-Content-Type-Options`, `X-Frame-Options: DENY`, `frame-ancestors 'none'` ve `Referrer-Policy` eklenir
+(tam CSP yok: portal satır içi betik kullanır). Karar, birim ve içerik uçları kaydı satır kilidiyle okur (PostgreSQL:
+`FOR UPDATE`, 5 sn `lock_timeout` aşılırsa 409 `record_busy`).
 
 ## Sürdürülebilirlik ve izleme (İK-7)
 
@@ -465,8 +472,9 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
 - Portal–Keycloak girişi (`keycloak-js`) henüz eklenmedi; backend doğrulaması hazır, realm/istemci bilgisi bekleniyor.
 - İzleme sonucu önbelleğe alınmıyor (plan Redis önbelleği öngörüyordu); 9 kaynak için canlı hesap yeterince hızlı.
   Dini bayram tarihleri her yıl `config/holidays.yaml`'a girilmeli (2027 tarihleri teyit edilmedi).
-- Arama SQLite/PostgreSQL `ILIKE` ile yapılıyor; Türkçe büyük/küçük harf duyarsız tam metin arama (tsvector) üretim
-  PostgreSQL'inde eklenecek.
+- Arama `lower(replace(…))` + `LIKE` ile yapılıyor (I/İ/ı/i aynı harf sayılır; `%` ve `_` joker değil). Dizin
+  kullanmaz, başlık ve özet metnini tarar; yıllık ≈4 bin portal kaydında yeterli, ama PostgreSQL'de süresi ölçülmedi
+  (`make load-test` ile ölçülmeli). Kök bulma (yönetmeliği → yönetmelik) yok; gerekirse tsvector eklenir.
 - Birim görev tanımları taslaktır (organizasyon şemasından türetildi). KVKK uyum programının Mevzuat ve Uyum
   Başkanlığında olduğu bir varsayımdır; şemada KVKK'ya açıkça sahip birim yok.
 - Taksonomi, etiketleme kılavuzu ve değerlendirme etiketleri çalıştay öncesi taslaktır. Kurum içi vLLM/Qwen ile henüz

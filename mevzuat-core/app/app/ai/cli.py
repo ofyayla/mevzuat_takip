@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.ai.classify import classify_pending
-from app.ai.common import RUNTIME_KEYS, effective_settings, set_runtime_setting
+from app.ai.common import RUNTIME_KEYS, check_runtime_settings, effective_settings, set_runtime_setting
 from app.ai.llm_client import LLMError, get_llm
 from app.db import LlmCall, Regulation, RegulationSummary, UnitSuggestion, make_sessionmaker
 from app.settings import get_settings
@@ -172,7 +172,13 @@ def cmd_setting(args) -> int:
     s = get_settings()
     with make_sessionmaker(s.database_url)() as ses:
         if args.key:
-            set_runtime_setting(ses, args.key, args.value, by="cli")
+            try:
+                set_runtime_setting(ses, args.key, args.value, by="cli")
+                check_runtime_settings(ses, s)
+            except (KeyError, ValueError) as e:
+                ses.rollback()
+                print(f"geçersiz ayar: {e}", file=sys.stderr)
+                return 1
             ses.commit()
         eff = effective_settings(ses, s)
         for k in sorted(RUNTIME_KEYS):
