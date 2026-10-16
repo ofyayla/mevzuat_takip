@@ -115,7 +115,7 @@ deployment:
     # Keycloak realm RS256 açık anahtarları (çevrimdışı JWT doğrulama; app/api/auth.py). ConfigMap bir kez oluşturulur:
     #   kubectl -n artint create configmap mevzuat-core-keycloak-keys --from-file=<kid>.pem=realm-public-key.pem
     # Dosya adı token başlığındaki kid ile eşleşirse o anahtar denenir; birden fazla .pem rotasyon içindir.
-    # optional: worker/beat aynı volumes listesini kullanır ve anahtara ihtiyaç duymaz. subPath kullanılmaz:
+    # optional: worker aynı volumes listesini kullanır (beat kendi listesini) ve anahtara ihtiyaç duymaz. subPath kullanılmaz:
     # ConfigMap güncellemesi pod'a kendiliğinden yansır ve auth.py dosya mtime'ına bakarak anahtarı yeniden yükler.
     - name: keycloak-keys
       configMap:
