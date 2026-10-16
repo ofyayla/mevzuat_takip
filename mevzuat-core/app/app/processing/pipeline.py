@@ -179,15 +179,18 @@ class DocumentProcessor:
         Dönüş: rapor + özetlenmesi gereken düzenleme no'ları. Başarısız belge ``process_max_attempts`` kez denenir.
         """
         if self.ocr is None:
+            log.info("OCR telafisi atlandı: OCR yapılandırılmamış (OCR_PROVIDER=%s)", self.settings.ocr_provider)
             return ProcessReport(), []
         with session_factory() as session:
             q = select(RawDocument).where(RawDocument.text.is_not(None), RawDocument.is_latest.is_(True),
                                           RawDocument.extra["ocr_pending_pages"].is_not(None)).order_by(RawDocument.id)
-            if not self.settings.ocr_baseline:
-                q = q.where(RawDocument.is_baseline.is_(False))
-            ids = [d.id for d in session.scalars(q)
-                   if (d.extra or {}).get("ocr_pending_pages")
-                   and (d.extra or {}).get("extract_attempts", 0) < self.settings.process_max_attempts][:limit]
+            pending = [d for d in session.scalars(q) if (d.extra or {}).get("ocr_pending_pages")]
+            baseline = [d for d in pending if d.is_baseline and not self.settings.ocr_baseline]
+            exhausted = [d for d in pending if d not in baseline
+                         and (d.extra or {}).get("extract_attempts", 0) >= self.settings.process_max_attempts]
+            ids = [d.id for d in pending if d not in baseline and d not in exhausted][:limit]
+        log.info("OCR telafisi: %d belge OCR bekliyor (ilk tarama %d, deneme hakkı bitmiş %d hariç); bu koşuda %d",
+                 len(pending), len(baseline), len(exhausted), len(ids))
         if not ids:
             return ProcessReport(), []
         report = self.reextract(session_factory, raw_ids=ids, limit=limit)
@@ -203,6 +206,6 @@ class DocumentProcessor:
                     reg.extra = {k: v for k, v in reg.extra.items() if k != "unit_match"}
                     refreshed.append(reg_id)
             session.commit()
-        log.info("OCR telafisi: %d belge yeniden çıkarıldı, %d düzenleme yeniden özetlenecek",
-                 len(done), len(refreshed))
+        log.info("OCR telafisi: %d/%d belgenin metni çıkarıldı, %d düzenleme yeniden özetlenecek %s",
+                 len(done), len(ids), len(refreshed), refreshed)
         return report, refreshed

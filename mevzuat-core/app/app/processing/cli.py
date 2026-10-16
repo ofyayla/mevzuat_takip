@@ -2,6 +2,7 @@
 
   mevzuat-process run [--limit N] [--source KOD]      # bekleyen ham belgeleri işle (çıkar + tekilleştir)
   mevzuat-process reextract [--all] [--id N ...]      # metni yeniden çıkar (varsayılan: OCR bekleyenler)
+  mevzuat-process ocr-catch-up [--limit N]            # OCR telafisi şimdi: bağlı belgeleri OCR'la, özetle, eşleştir
   mevzuat-process show REG_ID                         # düzenleme ve bağlı belgeler
   mevzuat-process text RAW_ID [--chars N]             # bir belgenin çıkarılmış metni (hata ayıklama)
   mevzuat-process review                              # tekilleştirme onayı bekleyen düzenlemeler
@@ -55,6 +56,26 @@ def cmd_reextract(args) -> int:
     r = DocumentProcessor(s, st).reextract(sf, ocr_pending_only=not args.all and not args.id,
                                            raw_ids=args.id, limit=args.limit)
     _print_report(r)
+    return 1 if r.failed else 0
+
+
+def cmd_ocr_catch_up(args) -> int:
+    """Beat'teki OCR telafisini hemen çalıştırır; metni gelen düzenlemeleri özetler ve birim eşleştirir."""
+    from app.ai.llm_client import get_llm
+    from app.ai.summary import summarize_pending
+    from app.ai.unit_matching import match_pending
+
+    s, sf, st = _ctx()
+    logging.getLogger("app.processing.pipeline").setLevel(logging.INFO)
+    r, refreshed = DocumentProcessor(s, st).catch_up_ocr(sf, limit=args.limit)
+    _print_report(r)
+    print(f"yeniden özetlenecek düzenlemeler: {refreshed or '-'}")
+    llm = get_llm(s)
+    if refreshed and llm is not None:
+        sr = summarize_pending(sf, llm, s, ids=refreshed)
+        mr = match_pending(sf, llm, s, ids=refreshed)
+        print(f"özetlenen={sr.summarized} metin bekleyen={sr.awaiting_text} özet hatası={sr.failed} "
+              f"birim önerilen={mr.matched} önerilemeyen={mr.no_suggestion} eşleştirme hatası={mr.failed}")
     return 1 if r.failed else 0
 
 
@@ -164,6 +185,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--id", type=int, action="append")
     p.add_argument("--limit", type=int, default=200)
     p.set_defaults(fn=cmd_reextract)
+    p = sub.add_parser("ocr-catch-up")
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(fn=cmd_ocr_catch_up)
     p = sub.add_parser("show")
     p.add_argument("reg_id", type=int)
     p.set_defaults(fn=cmd_show)
