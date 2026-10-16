@@ -85,6 +85,13 @@ LLM_ENABLE_THINKING='false'
 # 'false': LLM sunucusunun TLS sertifikası doğrulanmaz (kurum CA'sı pakete eklenene kadar; YALNIZCA geliştirme)
 LLM_VERIFY_TLS='false'
 
+# OCR: kurum içi Azure Document Intelligence v4 "Read" konteyneri. Boş ('') = OCR kapalı; taranmış PDF'ler
+# "metin bekleniyor (OCR)" olarak kalır. Anahtar istemeyen kurulumda OCR_API_KEY boş bırakılır.
+OCR_ENDPOINT='https://ms-ocr-di.artinttest.albarakaturk.local'
+OCR_API_KEY=''
+# 'false': OCR uç noktasının TLS sertifikası doğrulanmaz (kurum içi self-signed; YALNIZCA geliştirme)
+OCR_VERIFY_TLS='false'
+
 # Crawler internete proxy ile çıkıyorsa (ör. http://proxy.kurum.local:8080)
 HTTPS_PROXY=''
 
@@ -197,6 +204,8 @@ write_envs() {    # ~/.mevzuat/mevzuat.env → iki app/.env (her setup'ta yenide
   db_url="postgresql+psycopg://$(urlq "$MEVZUAT_PG_USER"):$(urlq "$MEVZUAT_PG_PASSWORD")@${PG_HOST}:${PG_PORT}/${MEVZUAT_PG_DB}"
   [[ -n ${REDIS_PASSWORD:-} ]] && redis_auth=":$(urlq "$REDIS_PASSWORD")@"
   redis_url="redis://${redis_auth}${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}"
+  # mevzuat.env'de OCR_ENDPOINT hiç yoksa (eski ayar dosyası) kurum içi DI kullanılır; '' verilmişse OCR kapalı
+  local ocr_endpoint=${OCR_ENDPOINT-https://ms-ocr-di.artinttest.albarakaturk.local}
 
   umask 077
   cat >"$CORE_APP/.env" <<EOF
@@ -221,7 +230,12 @@ LLM_TIMEOUT_S=120
 LLM_MAX_CONCURRENCY=${LLM_MAX_CONCURRENCY:-2}
 LLM_ENABLE_THINKING=${LLM_ENABLE_THINKING:-false}
 LLM_JSON_MODE=json_schema
-OCR_PROVIDER=none
+OCR_PROVIDER=$([[ -n $ocr_endpoint ]] && echo azure_di || echo none)
+OCR_ENDPOINT=$ocr_endpoint
+OCR_API_KEY=${OCR_API_KEY:-}
+OCR_API_VERSION=${OCR_API_VERSION:-2024-11-30}
+OCR_PATH_PREFIX=${OCR_PATH_PREFIX:-documentintelligence}
+OCR_VERIFY_TLS=${OCR_VERIFY_TLS:-false}
 AUTH_MODE=disabled
 CORS_ORIGINS=
 EOF
@@ -493,6 +507,8 @@ check() {
   ensure_database && echo "  PostgreSQL: ok"
   echo "LLM (mevzuat-ai llm-check):"
   (cd "$CORE_APP" && "$CORE_VENV/bin/mevzuat-ai" llm-check) || echo "  LLM testi başarısız" >&2
+  echo "OCR (mevzuat-process ocr-check):"
+  (cd "$CORE_APP" && "$CORE_VENV/bin/mevzuat-process" ocr-check) || echo "  OCR testi başarısız" >&2
   echo "Crawler (mevzuat-crawler check):"
   (cd "$CRAWLER_APP" && "$CRAWLER_VENV/bin/mevzuat-crawler" check) || true
   echo "Kaynak erişimi: (cd $CRAWLER_APP && $CRAWLER_VENV/bin/mevzuat-collect check-access)"
