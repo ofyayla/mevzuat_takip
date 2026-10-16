@@ -195,18 +195,18 @@
 
         <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
           <div style="border:1px solid var(--border); border-radius:var(--radius-lg); overflow-x:auto; background:var(--card);">
-            <div style="min-width:1060px; display:grid; grid-template-columns:minmax(280px,1fr) 110px 80px 108px 80px 150px 90px 20px; gap:12px; padding:10px 16px; background:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted-foreground);">
-              <span onClick="{{ sortByTitle }}" style="cursor:pointer; user-select:none;" title="Sırala">Düzenleme{{ sortInd.title }}</span>
-              <span>Kaynak</span>
-              <span onClick="{{ sortByPublish }}" style="cursor:pointer; user-select:none;" title="Sırala">Yayım tarihi{{ sortInd.publish_date }}</span>
-              <span onClick="{{ sortByEffective }}" style="cursor:pointer; user-select:none;" title="Sırala">Yürürlük tarihi{{ sortInd.effective_date }}</span>
-              <span onClick="{{ sortBySeverity }}" style="cursor:pointer; user-select:none;" title="Sırala">Önem{{ sortInd.severity }}</span>
-              <span>Önerilen birim</span>
-              <span onClick="{{ sortByStatus }}" style="cursor:pointer; user-select:none;" title="Sırala">Durum{{ sortInd.status }}</span>
+            <div style="min-width:1140px; display:grid; grid-template-columns:minmax(280px,1fr) 120px 118px 132px 82px 160px 100px 20px; gap:12px; padding:10px 16px; background:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted-foreground);">
+              <span onClick="{{ sortByTitle }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Düzenleme{{ sortInd.title }}</span>
+              <span onClick="{{ sortByIssuer }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Kaynak{{ sortInd.issuer }}</span>
+              <span onClick="{{ sortByPublish }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Yayım tarihi{{ sortInd.publish_date }}</span>
+              <span onClick="{{ sortByEffective }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Yürürlük tarihi{{ sortInd.effective_date }}</span>
+              <span onClick="{{ sortBySeverity }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Önem{{ sortInd.severity }}</span>
+              <span onClick="{{ sortByUnit }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Önerilen birim{{ sortInd.unit }}</span>
+              <span onClick="{{ sortByStatus }}" style="cursor:pointer; user-select:none; white-space:nowrap;" title="Sırala">Durum{{ sortInd.status }}</span>
               <span></span>
             </div>
             <sc-for list="{{ visibleRecords }}" as="r" hint-placeholder-count="8">
-              <div onClick="{{ r.openFn }}" style="min-width:1060px; display:grid; grid-template-columns:minmax(280px,1fr) 110px 80px 108px 80px 150px 90px 20px; gap:12px; padding:13px 16px; border-top:1px solid var(--border); cursor:pointer; align-items:center; transition:background var(--duration-base,200ms) ease;" style-hover="background:var(--muted);">
+              <div onClick="{{ r.openFn }}" style="min-width:1140px; display:grid; grid-template-columns:minmax(280px,1fr) 120px 118px 132px 82px 160px 100px 20px; gap:12px; padding:13px 16px; border-top:1px solid var(--border); cursor:pointer; align-items:center; transition:background var(--duration-base,200ms) ease;" style-hover="background:var(--muted);">
                 <span style="font-size:13.5px; font-weight:500; color:var(--foreground); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ r.title }}</span>
                 <span style="font-size:13px; color:var(--muted-foreground);">{{ r.issuer }}</span>
                 <span style="font-size:13px; color:var(--muted-foreground);">{{ r.publishDate }}</span>
@@ -631,6 +631,7 @@ const REJECTION_REASON_LABELS = {
 
 const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
 const RUN_COOLDOWN_MS = 60000;
+const TEXT_SORT_KEYS = ['title', 'issuer', 'unit'];   // ilk tıklama A→Z; diğerlerinde (tarih, önem, durum) ↓
 
 class Component extends DCLogic {
   state = {
@@ -745,11 +746,16 @@ class Component extends DCLogic {
   clearFilters = () => this.update({ filters: Object.assign({}, EMPTY_FILTERS), page: 1 });
   toggleMetric = (key) => this.update({ activeMetric: this.state.activeMetric === key ? null : key, page: 1 });
   // Aynı sütuna tekrar basınca yön değişir; tarihlerde ilk tıklama yeniden eskiye (↓), metinde A→Z (↑).
+  // Üçüncü tıklama sıralamayı kaldırıp varsayılan sıraya döner.
   setSort = (key) => {
     const { sort, sortDir } = this.state;
-    const dir = sort === key ? (sortDir === 'desc' ? 'asc' : 'desc') : (key === 'title' ? 'asc' : 'desc');
+    const first = TEXT_SORT_KEYS.includes(key) ? 'asc' : 'desc';
+    if (sort === key && sortDir !== first) return this.update({ sort: null, sortDir: 'desc', page: 1 });
+    const dir = sort === key ? (first === 'asc' ? 'desc' : 'asc') : first;
     this.update({ sort: key, sortDir: dir, page: 1 });
   };
+  sortByIssuer = () => this.setSort('issuer');
+  sortByUnit = () => this.setSort('unit');
   sortByTitle = () => this.setSort('title');
   sortByPublish = () => this.setSort('publish_date');
   sortByEffective = () => this.setSort('effective_date');
@@ -994,7 +1000,8 @@ class Component extends DCLogic {
       goPrev: safePage <= 1 ? (() => {}) : (() => this.setPage(safePage - 1)),
       goNext: safePage >= totalPages ? (() => {}) : (() => this.setPage(safePage + 1)),
       showPagination: total > pageSize,
-      sortInd: ['title', 'publish_date', 'effective_date', 'severity', 'status'].reduce((o, k) => {
+      sortByIssuer: this.sortByIssuer, sortByUnit: this.sortByUnit,
+      sortInd: ['title', 'issuer', 'unit', 'publish_date', 'effective_date', 'severity', 'status'].reduce((o, k) => {
         o[k] = this.state.sort === k ? (this.state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
         return o;
       }, {}),

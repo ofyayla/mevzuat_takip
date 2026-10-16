@@ -113,7 +113,7 @@ def regulations(session: SessionDep, settings: SettingsDep, actor: ActorDep,
                 unit: str | None = None, date_range: Literal["7", "30"] | None = None, q: str | None = None,
                 metric: Literal["pending", "critical_high", "criticalHigh", "today", "upcoming"] | None = None,
                 page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 10,
-                sort: Literal["title", "publish_date", "effective_date", "severity", "status"] | None = None,
+                sort: Literal["issuer", "unit", "title","publish_date", "effective_date", "severity", "status"] | None = None,
                 direction: Literal["asc", "desc"] = "desc"):
     require(actor, ROLE_VIEWER)
     if status and status not in REVIEW_STATUSES:

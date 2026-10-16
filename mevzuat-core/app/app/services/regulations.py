@@ -129,7 +129,11 @@ def list_regulations(session: Session, query: ListQuery, settings: Settings) -> 
     total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
     sev_rank = case(SEVERITY_ORDER, value=Regulation.severity, else_=0)
     default_order = (sev_rank.desc(), Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
-    sort_cols = {"title": Regulation.title, "publish_date": Regulation.publish_date,
+    top_unit = (select(Unit.name).join(UnitSuggestion, UnitSuggestion.unit_code == Unit.code)
+                .where(UnitSuggestion.regulation_id == Regulation.id, UnitSuggestion.is_active.is_(True))
+                .order_by(UnitSuggestion.rank).limit(1).correlate(Regulation).scalar_subquery())
+    sort_cols = {"issuer": func.coalesce(Regulation.issuer_name, Regulation.issuer), "unit": top_unit,
+                 "title": Regulation.title, "publish_date": Regulation.publish_date,
                  "effective_date": Regulation.effective_date, "severity": sev_rank,
                  "status": Regulation.review_status}
     if query.sort in sort_cols:
