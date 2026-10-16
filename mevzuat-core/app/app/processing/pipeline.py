@@ -171,8 +171,9 @@ class DocumentProcessor:
         return report
 
     def catch_up_ocr(self, session_factory: sessionmaker[Session], *,
-                     limit: int = 10) -> tuple[ProcessReport, list[int]]:
-        """OCR kapalıyken bağlanmış taranmış belgeler: OCR açılınca metin küçük gruplar halinde yeniden çıkarılır.
+                     limit: int = 30) -> tuple[ProcessReport, list[int]]:
+        """OCR kapalıyken bağlanmış taranmış belgeler: OCR açılınca metin gruplar halinde, en yeniden başlayarak
+        (portalda bekleyen güncel kayıtlar önce) yeniden çıkarılır.
 
         Metni gelen ve bu yüzden özetlenemeyen (``summary_blocked``) düzenlemelerin metinsiz yapılmış YZ birim
         önerisi işareti silinir; özet ve birim eşleştirme yeni metinle yeniden çalışır (uzman kararlarına dokunulmaz).
@@ -183,8 +184,9 @@ class DocumentProcessor:
             return ProcessReport(), []
         with session_factory() as session:
             q = select(RawDocument).where(RawDocument.text.is_not(None), RawDocument.is_latest.is_(True),
-                                          RawDocument.extra["ocr_pending_pages"].is_not(None)).order_by(RawDocument.id)
-            pending = [d for d in session.scalars(q) if (d.extra or {}).get("ocr_pending_pages")]
+                                          RawDocument.extra["ocr_pending_pages"].is_not(None)
+                                          ).order_by(RawDocument.id.desc())
+            pending =[d for d in session.scalars(q) if (d.extra or {}).get("ocr_pending_pages")]
             baseline = [d for d in pending if d.is_baseline and not self.settings.ocr_baseline]
             exhausted = [d for d in pending if d not in baseline
                          and (d.extra or {}).get("extract_attempts", 0) >= self.settings.process_max_attempts]
