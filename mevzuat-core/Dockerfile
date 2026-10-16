@@ -42,4 +42,5 @@ ENV PYTHONPATH=/app TZ=Europe/Istanbul PORTAL_DIR=/app/portal DB_AUTO_CREATE=fal
 
 USER mevzuat
 EXPOSE 5000
-CMD gunicorn app.api.main:app -c gunicorn_config.py
+# exec biçimi: gunicorn PID 1 olur ve SIGTERM'i doğrudan alır (kabuk biçiminde sinyal sh'de kalabilir)
+CMD ["gunicorn", "app.api.main:app", "-c", "gunicorn_config.py"]

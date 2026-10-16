@@ -81,9 +81,12 @@ git push https://gitlab.albarakaturk.local/<grup>/mevzuat-core.git kurum/mevzuat
   Nexus raw deposundan. Repolardaki `Jenkinsfile` kurum örneğiyle aynı akıştır (derle → Nexus → SonarQube).
 - **Test (isteğe bağlı):** `docker run --rm -e DB_AUTO_CREATE=true -v $(pwd)/app/tests:/app/tests <imaj> sh -c "pip install pytest respx && cd /app && python -m pytest -q"`
   (Mongo testleri Mongo erişimi yoksa atlanır). Testler imaja girmez (`.dockerignore`).
-- **Etiket stratejisi:** `latest` + `pullPolicy: Always` ile yeni imaj ArgoCD'de Deployment → Restart ile alınır.
-  Pipeline chart reposundaki `deployment.image.tag` değerini sürüm etiketine güncellerse ArgoCD pod'ları kendiliğinden
-  yeniler (önerilen).
+- **Etiket stratejisi:** Jenkinsfile her derlemede commit etiketini (`GIT_COMMIT` ilk 12 karakter) ve ayrıca main/tek
+  dal işinde `latest`, diğer dallarda `dev` etiketini gönderir. **Yeni imaj ArgoCD Sync ile alınır:** Deployment →
+  Restart senkron değildir, PreSync migrasyon Job'ı çalışmaz; migrasyon içeren bir imaj eski şemayla açılır.
+  Pipeline chart reposundaki `deployment.image.tag` değerini commit etiketine güncellerse ArgoCD pod'ları
+  kendiliğinden yeniler ve geri alma gerçekten önceki imaja döner (önerilen). Sync'siz Restart yalnızca
+  migrasyon içermeyen imajlarda güvenlidir.
 
 ## 3. Veri katmanı hazırlığı
 
@@ -172,14 +175,15 @@ Bu aşamada portal açılır ama crawler çalışmadığı için izleme `crawler
 
 ```
  geliştirme deposu (tools/shared.py check) → mevzuat-core / mevzuat-crawler / ai-uat-charts dizinlerini ilgili repolara aktar
-   mevzuat-core    → pipeline → Nexus (latest) → ArgoCD Restart (veya image.tag güncellenirse otomatik; migrasyon PreSync)
-   mevzuat-crawler → pipeline → Nexus (latest) → DMZ: podman pull (veya save/load) → systemctl restart mevzuat-crawler
+   mevzuat-core    → pipeline → Nexus (commit etiketi + latest) → ArgoCD Sync (migrasyon PreSync); image.tag commit etiketine güncellenirse otomatik
+   mevzuat-crawler → pipeline → Nexus (commit etiketi + latest) → DMZ: podman pull (veya save/load) → systemctl restart mevzuat-crawler
    ai-uat-charts   → push → ArgoCD senkronlar
 ```
 
 Yeni kaynak sitesi: `config/sources.yaml` (iki repoda da; core izleme için okur) + crawler imajı + firewall allowlist.
-Geri alma: ArgoCD'de önceki revizyona dönülür (History and Rollback). Şema geri alma gerekiyorsa önce yedek alınır
-(runbook §7).
+Geri alma: ArgoCD'de önceki revizyona dönülür (History and Rollback). `image.tag` `latest` ise bu yalnızca chart
+revizyonunu döndürür, imajı geri getirmez; gerçek geri alma için `image.tag` commit etiketine sabitlenmelidir.
+Şema geri alma gerekiyorsa önce yedek alınır (runbook §7).
 
 ## Dev ortamı notu
 

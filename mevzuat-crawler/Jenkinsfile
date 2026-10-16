@@ -24,7 +24,15 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry( REGISTRYPUSH, NEXUSCRED) {
-                        IMAGE.push()
+                        // Değişmez etiket (geri alma ve "hangi sürüm çalışıyor" için); Quadlet Image= bu etikete sabitlenebilir
+                        def sha = env.GIT_COMMIT ? env.GIT_COMMIT.substring(0, 12) : env.BUILD_NUMBER
+                        IMAGE.push(sha)
+                        // main (veya çok dallı olmayan iş) → latest; diğer dallar → dev
+                        if (!env.BRANCH_NAME || env.BRANCH_NAME == 'main') {
+                            IMAGE.push('latest')
+                        } else {
+                            IMAGE.push('dev')
+                        }
                     }
                 }
             }
@@ -33,21 +41,23 @@ pipeline {
         stage ('Quality Analysis') {
             steps {
                 withSonarQubeEnv(installationName: 'sonarqube', credentialsId: 'sonarqube8-token') {
-                    sh """
-                    docker run \
+                    // Token Groovy'de değil kabukta çözülür ve docker'a değeriyle değil adıyla geçirilir (-e SONAR_TOKEN);
+                    // böylece Jenkins günlüğüne ve süreç listesine sızmaz.
+                    sh '''
+                    SONAR_TOKEN="$SONAR_AUTH_TOKEN" docker run \
                         --rm \
                         -v /home/jenkins/.atg-ca-certs.crt:/tmp/cacerts/atg-certs.crt \
-                        -e SONAR_HOST_URL=${env.SONAR_HOST_URL} \
+                        -e SONAR_HOST_URL="$SONAR_HOST_URL" \
                         -e SONAR_SCANNER_OPTS='-Dsonar.projectKey=mevzuat-crawler \
                                                 -Dsonar.projectName=mevzuat-crawler \
                                                 -Dsonar.sources=app/app \
                                                 -Dsonar.tests=app/tests \
                                                 -Dsonar.exclusions=app/tests/fixtures/** \
                                                 -Dsonar.python.version=3.12' \
-                        -e SONAR_TOKEN=${env.SONAR_AUTH_TOKEN} \
+                        -e SONAR_TOKEN \
                         -v .:/usr/src \
                         sonarsource/sonar-scanner-cli
-                    """
+                    '''
                 }
             }
         }
