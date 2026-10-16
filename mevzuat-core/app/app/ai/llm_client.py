@@ -37,6 +37,12 @@ class LLMError(Exception):
     """LLM çağrısı başarısız (bağlantı, geçersiz çıktı). Düzenleme AI_FAILED olur ve yeniden denenir."""
 
 
+class LLMUnavailable(LLMError):
+    """LLM sunucusuna ulaşılamıyor (bağlantı, zaman aşımı, 5xx, 429; tenacity tükendi). Kayıtla ilgili bir hata
+    değildir: toplu işler denemeyi saymaz, kaydı olduğu gibi bırakır ve işi keser (30–60 dk'lık kesinti deneme
+    hakkını tüketmesin)."""
+
+
 @dataclass
 class LLMResult(Generic[T]):
     outputs: list[T]
@@ -149,7 +155,7 @@ class _Base:
             raise
         except Exception as e:  # noqa: BLE001 — SDK hata tipleri çeşitli; hepsi LLMError'a çevrilir
             error = f"{type(e).__name__}: {e}"
-            raise LLMError(error) from e
+            raise (LLMUnavailable if _is_unavailable(e) else LLMError)(error) from e
         finally:
             if session is not None:
                 row = LlmCall(task=task, provider=self.provider, model=self.model, prompt_version=prompt_version,
@@ -174,6 +180,16 @@ class _Base:
             return [schema.model_validate_json(clean)]
         except (ValidationError, IndexError):
             return []
+
+
+def _is_unavailable(e: Exception) -> bool:
+    """Sunucu tarafı/ağ hatası mı (bağlantı, zaman aşımı, 5xx, 429)? Çağrıdaki tenacity bunları zaten yeniden
+    denemiş ve tükenmiştir; kayda ait bir sorun değildir."""
+    try:
+        from openai import APIConnectionError, InternalServerError, RateLimitError
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(e, (APIConnectionError, InternalServerError, RateLimitError))   # APITimeoutError ⊂ APIConnectionError
 
 
 def _truncate(messages: list[dict], limit: int = 4000) -> list[dict]:

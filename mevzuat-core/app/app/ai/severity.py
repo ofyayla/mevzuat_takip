@@ -69,7 +69,9 @@ def apply_rules(llm_severity: str, reg_type: str | None, text: str, rules: dict,
 
 
 def assess(llm: LLM, ctx: RegulationContext, kn: Knowledge, *, reg_type: str | None, topics: list[str],
-           relevance_rationale: str, session=None, force: bool = False) -> SeverityDecision:
+           relevance_rationale: str, session=None, force: bool = False,
+           rules_text: str | None = None) -> SeverityDecision:
+    """``rules_text``: kuralların uygulanacağı tam metin; verilmezse LLM'e giden (kırpılmış olabilen) ``ctx.text``."""
     tx = kn.taxonomy
     msgs = messages("severity", PROMPT, {"institution": tx["institution"], "severity": tx.get("severity", {})},
                     {"title": ctx.title, "alt_titles": ctx.alt_titles or [], "issuer": ctx.issuer, "reg_type": reg_type, "topics": topics,
@@ -77,6 +79,6 @@ def assess(llm: LLM, ctx: RegulationContext, kn: Knowledge, *, reg_type: str | N
     res = llm.complete_json("severity", f"severity.{PROMPT}+{kn.version}", msgs, SeverityOut, temperature=0.1,
                             session=session, regulation_id=ctx.regulation.id, force=force)
     out = res.outputs[0]
-    sev, applied = apply_rules(out.severity, reg_type, ctx.all_titles + "\n" + ctx.text, tx.get("severity_rules", {}),
-                               titles=ctx.all_titles)
+    sev, applied = apply_rules(out.severity, reg_type, ctx.all_titles + "\n" + (rules_text or ctx.text),
+                               tx.get("severity_rules", {}), titles=ctx.all_titles)
     return SeverityDecision(sev, out.rationale, out.severity, applied, res.call_id)

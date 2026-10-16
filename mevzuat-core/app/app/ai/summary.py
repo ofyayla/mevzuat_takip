@@ -21,11 +21,12 @@ from datetime import date
 
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai.common import RegulationContext, effective_settings, knowledge, messages, regulation_context
 from app.ai.grounding import SourceText, find_effective_sentence, find_quote, resolve_effective_date
-from app.ai.llm_client import LLM, LLMError
+from app.ai.llm_client import LLM, LLMError, LLMUnavailable
 from app.collectors.dates import tr_lower
 from app.db import RawDocument, Regulation, RegulationSourceLink, RegulationSummary
 from app.processing.normalize import ISSUERS
@@ -315,6 +316,23 @@ class SummarizeReport:
     avg_grounding: float | None = None
     ids: list[int] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    skipped: int = 0           # kilitli, durumu değişmiş ya da başka işçinin zaten özetlediği kayıtlar
+    unavailable: bool = False  # LLM sunucusuna ulaşılamadı; toplu iş kesildi, kalanlar sonraki koşuya kaldı
+
+
+def _still_eligible(reg: Regulation, *, force: bool) -> bool:
+    """``summarize_pending``'in SQL uygunluk koşulunun Python karşılığı (seçimden sonra başka işçi işlemiş olabilir)."""
+    status, extra = reg.processing_status, reg.extra or {}
+    if force:
+        return status in ("RELEVANT", "SUMMARIZED") or (status == "AI_FAILED" and reg.is_relevant is True)
+    return status == "RELEVANT" or (status == "AI_FAILED" and reg.is_relevant is True
+                                    and extra.get("ai_stage") == "summary"
+                                    and extra.get("ai_attempts", 0) < AI_MAX_ATTEMPTS)
+
+
+def _is_duplicate_version(e: IntegrityError) -> bool:
+    msg = str(e)   # PostgreSQL kısıt adını, SQLite tablo/sütun adlarını verir
+    return "uq_summary_version" in msg or "regulation_summary.regulation_id" in msg
 
 
 def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,
@@ -343,7 +361,12 @@ def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings
                 break
     for reg_id in todo:
         with session_factory() as session:
-            reg = session.get(Regulation, reg_id)
+            # Satır kilidi: zincir görevi ile Beat güvenlik ağı aynı kaydı eşzamanlı özetlemesin (SQLite'ta etkisiz).
+            # Kilitliyse (None) başka işçi işliyordur; kayıt seçim ile kilit arasında durum değiştirmiş olabilir
+            reg = session.get(Regulation, reg_id, with_for_update={"skip_locked": True})
+            if reg is None or not _still_eligible(reg, force=force):
+                rep.skipped += 1
+                continue
             if sum(len(src.text) for src in sources_for(session, reg)) < MIN_SOURCE_CHARS:
                 # LLM çağrılmaz, deneme hakkı tüketilmez; reextract/OCR sonrası metin gelince özetlenir
                 reg.extra = {**{k: v for k, v in (reg.extra or {}).items() if k not in ("ai_error", "ai_stage")},
@@ -358,7 +381,22 @@ def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings
             retry = reg.processing_status == "AI_FAILED"
             try:
                 row = summarize_regulation(session, llm, reg, settings, force=force or retry)
+            except LLMUnavailable as e:
+                # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
+                session.rollback()
+                rep.processed -= 1
+                rep.unavailable = True
+                rep.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
+                log.warning("LLM kullanılamıyor; özetleme durduruldu (düzenleme %s): %s", reg_id, e)
+                break
             except Exception as e:  # noqa: BLE001 — bir kayıttaki hata toplu işi durdurmamalı
+                if isinstance(e, IntegrityError) and _is_duplicate_version(e):
+                    # aynı sürümü başka işçi yazmış (uq_summary_version): iş zaten yapıldı, hata değil
+                    session.rollback()
+                    log.info("düzenleme %s zaten özetlenmiş (eşzamanlı işçi); atlandı", reg_id)
+                    rep.processed -= 1
+                    rep.skipped += 1
+                    continue
                 if isinstance(e, (LLMError, SummaryError)):
                     msg = str(e)
                 else:

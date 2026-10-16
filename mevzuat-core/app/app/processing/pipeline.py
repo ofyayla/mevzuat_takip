@@ -1,7 +1,10 @@
 """İK-2 işleme hattı: ham belge → metin çıkarma → tekilleştirme/bağlama (plan §2.2).
 
   raw_document:  FETCHED ─▶ EXTRACTED ─▶ LINKED
-                      └───▶ EXTRACT_FAILED  (OCR servisi vb. geçici hata; ``process_max_attempts`` kez denenir)
+                      └───▶ EXTRACT_FAILED  (depolama okuma vb. geçici hata; ``process_max_attempts`` kez denenir)
+
+OCR servisi hatası belgeyi düşürmez: taranmış sayfalar ``extra.ocr_pending_pages``ta kalır, belge metin katmanıyla
+bağlanır ve ``catch_up_ocr`` yeniden dener (her hata ``extract_attempts``'ı artırır).
 
 Adımlar idempotenttir: LINKED belge yeniden işlenmez; ``reextract`` yalnızca metni yeniler, bağlantıya dokunmaz.
 Desteklenmeyen içerik (ör. .doc, .xlsx) hata sayılmaz: metin boş kalır, belge başlığıyla bağlanır.
@@ -63,7 +66,8 @@ class DocumentProcessor:
     # ------------------------------------------------------------------ tek belge
 
     def extract_document(self, raw: RawDocument) -> bool:
-        """Metni çıkarır; başarılıysa True. OCR hatasında EXTRACT_FAILED + deneme sayısı."""
+        """Metni çıkarır; başarılıysa True. OCR hatası belgeyi düşürmez (sayfalar ``ocr_pending_pages``ta kalır,
+        deneme sayılır); depolama okuma hatasında EXTRACT_FAILED + deneme sayısı."""
         ch = self._channel(raw)
         allow_ocr = not raw.is_baseline or self.settings.ocr_baseline
         extra = dict(raw.extra or {})
@@ -80,7 +84,13 @@ class DocumentProcessor:
             return False
         else:
             raw.text, raw.extraction_method = res.text, res.method
-            raw.page_count, raw.ocr_confidence, raw.extract_error = res.page_count, res.ocr_confidence, None
+            raw.page_count, raw.ocr_confidence, raw.extract_error = res.page_count, res.ocr_confidence, res.ocr_error
+            if res.ocr_error:
+                # OCR servisi hata verdi: belge metin katmanıyla ilerler, taranmış sayfalar catch_up_ocr'a kalır.
+                # Deneme sayılır; ``process_max_attempts`` dolunca telafi turları bu belgeyi bırakır (sonsuz döngü yok)
+                extra["extract_attempts"] = extra.get("extract_attempts", 0) + 1
+                log.warning("raw %s: OCR hatası, sayfalar bekletiliyor (deneme %d): %s", raw.id,
+                            extra["extract_attempts"], res.ocr_error)
             extra.pop("ocr_pending_pages", None)
             if res.ocr_pending_pages:
                 extra["ocr_pending_pages"] = res.ocr_pending_pages

@@ -25,8 +25,21 @@ from app.settings import Settings
 log = logging.getLogger(__name__)
 
 
+POST_MAX_ATTEMPTS = 3          # analyze POST'u 429 alırsa en çok bu kadar kez denenir
+POST_MAX_WAIT_S = 30.0         # tek bir Retry-After beklemesinin üst sınırı
+
+
 class OcrError(Exception):
-    """OCR servisi hatası (geçici olabilir; belge EXTRACT_FAILED olur ve yeniden denenir)."""
+    """OCR servisi hatası (geçici olabilir). ``extract_pdf``/``extract_image`` bunu yakalayıp sayfaları OCR bekliyor
+    olarak işaretler (belge kaybolmaz); ``catch_up_ocr`` sonraki koşuda yeniden dener."""
+
+
+def _retry_after(r: httpx.Response, *, default: float) -> float:
+    try:
+        delay = float(r.headers.get("retry-after", default) or default)
+    except ValueError:             # HTTP-date biçimi: varsayılan
+        delay = default
+    return min(max(delay, 0.5), POST_MAX_WAIT_S)
 
 
 @dataclass
@@ -106,10 +119,15 @@ class AzureDocumentIntelligenceOcr:
         if self.s.ocr_locale:
             params["locale"] = self.s.ocr_locale
         body = {"base64Source": base64.b64encode(content).decode("ascii")}
-        try:
-            r = self.client.post(self.analyze_url, params=params, json=body)
-        except httpx.HTTPError as e:
-            raise OcrError(f"OCR servisine bağlanılamadı: {type(e).__name__}: {e}") from e
+        for attempt in range(1, POST_MAX_ATTEMPTS + 1):
+            try:
+                r = self.client.post(self.analyze_url, params=params, json=body)
+            except httpx.HTTPError as e:
+                raise OcrError(f"OCR servisine bağlanılamadı: {type(e).__name__}: {e}") from e
+            if r.status_code != 429 or attempt == POST_MAX_ATTEMPTS:
+                break
+            # hız sınırı: yoklamadaki gibi Retry-After beklenir (üst sınırla), sonra aynı istek yinelenir
+            self._sleep(_retry_after(r, default=2.0))
         if r.status_code != 202:
             raise OcrError(f"OCR analyze HTTP {r.status_code}: {r.text[:300]}")
         op_url = r.headers.get("operation-location")

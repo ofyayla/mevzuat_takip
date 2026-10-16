@@ -344,6 +344,13 @@ Geçici çözüm: `jupyterhub/start.sh` crawler `.env`'ine `COLLECT_MAX_BYTES=10
 `CRAWLER_MAX_PARALLEL=3`) ve ana servisteki metin çıkarma/OCR bu boyutta yavaş olabilir. Dosya yine sınırı aşarsa kalıcı çözüm
 (oversize için `listing` anlık görüntüsü) yazılmalı.
 
+### 7.8 YZ hattı ikinci tur (PR-B)
+OCR kesintisi (06 §21), LLM kesintisi (§22), eşzamanlı işleme (§23), tam metinde önem kuralları (§24) ve few-shot
+kirlenmesi (§25) **uygulandı**. Davranış değişiklikleri: OCR hatası artık `EXTRACT_FAILED` değil `ocr_pending_pages`
+üretir (belge bağlanır, `catch_up_ocr` dener); LLM sunucusu kapalıyken toplu işler `rapor.unavailable=True` ile erken
+biter ve deneme sayısını artırmaz; raporlara `skipped` (kilitli/durumu değişmiş kayıt) eklendi. Dağıtımda PostgreSQL'de
+`SKIP LOCKED` iki bağlantıyla elle denenmeli.
+
 ## 8. 16 Ekim 2026 taraması: portal ve API sağlamlaştırma
 
 Kod taramasından çıkan ve doğrulanan portal/API işleri (dağıtım ve YZ hattı işleri ayrı paketlerde). Yapılanlar:
