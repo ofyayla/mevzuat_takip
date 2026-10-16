@@ -173,7 +173,6 @@ müdahale anlamına gelir.
 |---|---|---|
 | LLM API anahtarı | `LLM_API_KEY` (kasa) | Yeni anahtarı kasaya/Secret'a yaz → `kubectl -n artint rollout restart deploy/mevzuat-core-worker deploy/mevzuat-core` → `mevzuat-ai llm-check` → eski anahtarı sağlayıcıda iptal et |
 | OCR anahtarı | `OCR_API_KEY` | Aynı sıra; kontrol `mevzuat-process ocr-check` |
-| Keycloak imza anahtarı | `KEYCLOAK_PUBLIC_KEYS_DIR` | Keycloak'ta yeni anahtar oluşturulunca açık anahtarı (PEM, dosya adı = `kid`) dizine **eski anahtarı silmeden** ekle (api dosya değişikliğini kendisi algılar); eski anahtarla imzalı tokenlar bittikten sonra (token ömrü) eski PEM'i kaldır. Doğrulama çevrimdışıdır; Keycloak'a çalışma anında bağlanılmaz |
 | Kaynak TLS ara sertifikası | `config/certs/` | §4.2 |
 | Kurum proxy kök sertifikası | `CA_BUNDLE` | Yeni paketi DMZ'ye dağıt, `systemctl restart mevzuat-crawler`, `check-access` |
 | Veritabanı parolası | `DATABASE_URL` | PostgreSQL'de parolayı değiştir → kasayı güncelle → tüm servisleri sırayla yeniden başlat |

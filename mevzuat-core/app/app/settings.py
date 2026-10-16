@@ -137,14 +137,9 @@ class Settings(BaseSettings):
     unit_responsibility_threshold: int = 80   # matched_responsibility ↔ görev tanımı maddesi (rapidfuzz)
     unit_fewshot_count: int = 4
 
-    # İK-6: Portal API ve kimlik doğrulama (plan §8)
-    auth_mode: str = "disabled"               # disabled (demo) | keycloak
+    # İK-6: Portal API (plan §8). Kimlik doğrulama yok; kullanıcı adı X-Demo-User başlığından, yoksa buradan
     demo_user_name: str = "Demo Kullanıcı"
     demo_user_title: str = "Uyum Uzmanı"
-    keycloak_issuer: str | None = None
-    keycloak_client_id: str = "mevzuat-portal"
-    keycloak_public_keys_dir: Path = BACKEND_DIR / "config" / "keycloak_keys"
-    keycloak_leeway_s: int = 60
     cors_origins: str = "http://localhost:8080"
     # Mevzuat Takip Portali.dc.html + support.js: BACKEND_DIR.parent/portal'da (mevzuat-core/portal)
     # (imajda PORTAL_DIR=/app/portal ile ezilir)

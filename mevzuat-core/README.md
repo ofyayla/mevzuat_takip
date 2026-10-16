@@ -6,7 +6,7 @@ Mevzuat ve Uyum Başkanlığı portalını (portal + API) sağlar.
 
 ```
  mevzuat-crawler (DMZ) ──▶ MongoDB 10.155.7.195 ──▶ mevzuat-core (K8s): api · worker · beat ──▶ PostgreSQL
-                                                          │ vLLM · Azure DI (OCR) · Keycloak
+                                                          │ vLLM · Azure DI (OCR)
                                                           ▲ 443: kullanıcılar, Albatros
 ```
 

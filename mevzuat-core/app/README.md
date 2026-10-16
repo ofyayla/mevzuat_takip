@@ -6,7 +6,7 @@ aynı düzenlemenin farklı kaynaklardaki yayınlarının tek kayda bağlanması
 LLM ile ilgililik, göreli güven skoru ve önem derecesi; **içerik analizi ve özet (İK-4)**: her ifadesi kaynak
 metinden alıntıyla doğrulanan yapılandırılmış özet ve yürürlük tarihi; **birim eşleştirme önerisi (İK-5)**: görev
 tanımlarına dayalı, gerekçeli birim önerileri; **Portal API (İK-6)**: liste/detay, onay/red, birim değiştirme,
-denetim izi, Keycloak ile çevrimdışı JWT doğrulaması ve API'ye bağlı portal; **sürdürülebilirlik ve izleme (İK-7)**:
+denetim izi ve API'ye bağlı portal; **sürdürülebilirlik ve izleme (İK-7)**:
 kaynak sağlığı, sessizlik/hacim/yapı alarmları, kaynaklar arası çapraz kontrol, geriye dönük toplama ve yeniden işleme;
 **test, paralel çalışma ve devreye alma (İK-8)**: manuel tespitlerle karşılaştırma raporu ve eşik taraması, Alembic
 migrasyonları, değiştirilemez denetim izi (hash zinciri), Docker imajı/Compose, uçtan uca ve yük testleri.
@@ -316,18 +316,16 @@ YZ hatası) da `analysisStatus` ile gösterilir — takılan bir kayıt Başkanl
 düzeltme ağırlığı 2 ile zaten yazılmıştır), `outbox`'a `record.approved`/`record.rejected` olayı düşer. Denetim izi
 (`audit_event`) yalnızca eklemeye açıktır (ORM güncelleme/silmeyi reddeder; üretimde DB yetkisiyle de korunmalı).
 
-**Kimlik doğrulama** (plan §8): `AUTH_MODE=disabled` (demo) — kullanıcı `X-Demo-User` başlığından (URL kodlamalı;
-HTTP başlıkları Türkçe karakter taşıyamaz) veya `DEMO_USER_NAME`'den, tüm roller açık. `AUTH_MODE=keycloak` —
-`Authorization: Bearer <JWT>`; imza `KEYCLOAK_PUBLIC_KEYS_DIR/*.pem` realm açık anahtar(lar)ıyla çevrimdışı doğrulanır
-(JWKS çağrısı yok; anahtar rotasyonu için birden fazla `.pem`, token başlığındaki `kid` dosya adıyla eşleşir), `iss`,
-`aud`/`azp`, `exp` (±60 sn). Roller: `mevzuat_viewer` (okuma), `mevzuat_expert` (karar, birim), `mevzuat_admin`.
+**Kullanıcı kimliği** (plan §8): kimlik doğrulama yoktur (Keycloak kaldırıldı). Kullanıcı adı `X-Demo-User`
+başlığından (URL kodlamalı; HTTP başlıkları Türkçe karakter taşıyamaz), yoksa `DEMO_USER_NAME`'den alınır ve denetim
+izine yazılır. Herkes tüm rollere sahiptir; roller (`mevzuat_viewer` okuma, `mevzuat_expert` karar ve birim,
+`mevzuat_admin`) kodda korunur. Erişim yalnızca ağ düzeyinde sınırlanır.
 
 **Portal** (`../Mevzuat Takip Portali.dc.html`): demo verisi (`RAW_RECORDS`, `SOURCE_SCENARIOS`) kaldırıldı; liste,
 metrikler, filtre seçenekleri, kaynak sağlığı, detay, onay/red ve birim değiştirme API'ye bağlı. Filtreleme ve
 sayfalama sunucu tarafında; arama 300 ms gecikmeyle, eski yanıtlar yok sayılır. Onay/red diyaloğuna not alanı eklendi;
 detay açılınca `views` çağrılır; tarihler `tr-TR` biçiminde. Demo sürümündeki "karar verildi" bilgisinin hiç
-görünmemesi hatası düzeltildi. Keycloak için sayfa, token döndüren `window.MTP_TOKEN_PROVIDER` (async) tanımlar
-(`keycloak-js` entegrasyonu kurum realm bilgisi gelince eklenecek); `window.MTP_API_BASE` API adresini değiştirir.
+görünmemesi hatası düzeltildi. `window.MTP_API_BASE` API adresini değiştirir.
 Portal dış CDN'e çıkmaz: React ve lucide `portal/vendor/` altında sabit sürümle durur ve `/vendor/<ad>` adresinden
 sunulur (sürümler ve özetler `portal/vendor/README.md`); Google Fonts yok, yazı tipi sistem yazı tipine düşer.
 Karar ve birim düğmeleri yalnız `mevzuat_expert`/`mevzuat_admin` rolünde görünür; detayda YZ'nin yürürlük tarihi
@@ -469,7 +467,8 @@ doğrular ve ancak ondan sonra yazar. Doğrulama hiçbir durumda kapatılmaz.
   `alembic upgrade head` ile yeniden oluşturulmalı.
 - LLM ayarlı değilse tekilleştirmenin belirsiz bandı (0.70–0.90) ayrı düzenleme olarak açılır ve
   `mevzuat-process review` ile listelenir.
-- Portal–Keycloak girişi (`keycloak-js`) henüz eklenmedi; backend doğrulaması hazır, realm/istemci bilgisi bekleniyor.
+- Kimlik doğrulama yok (Keycloak bilinçli olarak kaldırıldı); herkes tüm rollere sahip, kullanıcı adı `X-Demo-User`
+  başlığından gelir. Portal bu başlığı şu an göndermediği için kararlar `DEMO_USER_NAME` adıyla kaydedilir.
 - İzleme sonucu önbelleğe alınmıyor (plan Redis önbelleği öngörüyordu); 9 kaynak için canlı hesap yeterince hızlı.
   Dini bayram tarihleri her yıl `config/holidays.yaml`'a girilmeli (2027 tarihleri teyit edilmedi).
 - Arama `lower(replace(…))` + `LIKE` ile yapılıyor (I/İ/ı/i aynı harf sayılır; `%` ve `_` joker değil). Dizin

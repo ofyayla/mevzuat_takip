@@ -140,7 +140,7 @@ kopya odur. İçerik core'dakiyle aynıdır.
 | HTTP | `httpx`, `curl_cffi` (tarayıcı TLS parmak izi). Playwright desteği kodda var ama imajda kurulu değil ve hiçbir kaynak kullanmıyor | `httpx` (OCR/webhook) |
 | Ayrıştırma | `selectolax` (HTML), `feedparser` (RSS/Atom) | `trafilatura` veya kanal seçicisi (HTML), `pymupdf` (PDF), `python-docx`, `rapidfuzz` (benzerlik) |
 | YZ | — | `openai` istemcisi (OpenAI veya OpenAI uyumlu vLLM), `jinja2` sürümlü prompt şablonları |
-| API | — | FastAPI + gunicorn/UvicornWorker, `pyjwt` (Keycloak RS256) |
+| API | — | FastAPI + gunicorn/UvicornWorker (kimlik doğrulama yok, kullanıcı adı `X-Demo-User` başlığından) |
 | Zamanlama | `croniter` (kendi döngüsü) | Celery Beat |
 | Veri | `pymongo` + GridFS | SQLAlchemy + Alembic (PostgreSQL), `pymongo` (ingest) |
 | Konfigürasyon | `pydantic-settings` (ortam değişkeni / `.env`), `sources.yaml` (pydantic şeması) | aynı + `taxonomy.yaml`, `units.yaml` |

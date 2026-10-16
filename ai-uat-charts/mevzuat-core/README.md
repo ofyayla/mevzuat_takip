@@ -19,12 +19,10 @@ Mevzuat Takip ana servisi (LAN Kubernetes). ArgoCD bu klasörü ortam values dos
 `MONGO_URL` (`mevzuat_core` kullanıcısı), `LLM_API_KEY`, `OCR_API_KEY`. Örnek: mevzuat-core reposunda
 `deploy/secret.example.yaml`. Values dosyalarına parola yazılmaz.
 
-**Önkoşul (Keycloak):** `mevzuat-core-keycloak-keys` ConfigMap'i, realm'in RS256 açık anahtarını `<kid>.pem` adıyla
-içermeli (`kubectl -n artint create configmap mevzuat-core-keycloak-keys --from-file=<kid>.pem=realm-public-key.pem`).
-`/app/config/keycloak_keys` dizinine bağlanır; yoksa `AUTH_MODE=keycloak` iken her kimlikli istek 500
-`auth_misconfigured` döner. Anahtar rotasyonunda yeni `.pem` eklenir.
+**Kimlik doğrulama yok:** portal ve API'ye erişen herkes tüm rollere sahiptir; kullanıcı adı `X-Demo-User`
+başlığından gelir. Erişim yalnızca ağ düzeyinde (ingress, kurum ağı) sınırlanır.
 
-**TEYİT bekleyen değerler:** Redis DB numarası (UAT 5, dev 6), `OCR_ENDPOINT`, `KEYCLOAK_CLIENT_ID`.
+**TEYİT bekleyen değerler:** Redis DB numarası (UAT 5, dev 6), `OCR_ENDPOINT`.
 
 **Yeni imaj:** ArgoCD'de **Sync** yapılır (Deployment → Restart yetmez: Restart senkron değildir, PreSync migrasyon
 Job'ı çalışmaz ve yeni imaj eski şemayla açılır). Pipeline her derlemede `latest` (veya dev dalında `dev`) etiketine
