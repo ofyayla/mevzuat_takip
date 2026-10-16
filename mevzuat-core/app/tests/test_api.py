@@ -291,6 +291,127 @@ def test_admin_settings_and_health_endpoints(settings, env, client):  # noqa: F8
     assert c.get("/").status_code == 200 and "Mevzuat" in c.get("/").text
 
 
+def test_runtime_settings_validate_type_range_and_consistency(settings, env, client):  # noqa: F811
+    from app.ai.common import effective_settings
+    from app.db import AppSetting
+
+    c, sf = client
+
+    def put(**values):
+        return c.put("/api/v1/admin/settings", json={"values": values})
+
+    # "3.0" eskiden kaydediliyor ve sonraki her okumada int("3.0") ile YZ hattını düşürüyordu
+    bad = put(relevance_samples="3.0")
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalid_setting"
+    assert "tam sayı" in bad.json()["error"]["message"]
+    assert put(relevance_samples="10").status_code == 400 and put(relevance_samples="0").status_code == 400
+    assert put(relevance_threshold="1.5").status_code == 400 and put(relevance_threshold="nan").status_code == 400
+    assert put(relevance_threshold="abc").status_code == 400
+    ok = put(relevance_samples="5", relevance_threshold="0.40")
+    assert ok.status_code == 200 and ok.json()["relevance_samples"] == 5 and ok.json()["relevance_threshold"] == 0.4
+    with sf() as s:   # kanonik biçimde saklanır
+        assert s.get(AppSetting, "relevance_threshold").value == "0.4"
+    # birbirine bağlı eşikler: yalnızca ikisi de tutarlıysa kabul edilir; ihlalde hiçbiri yazılmaz
+    inverted = put(dedupe_review_threshold="0.95")   # varsayılan otomatik eşik 0.90
+    assert inverted.status_code == 400 and "dedupe_review_threshold" in inverted.json()["error"]["message"]
+    assert c.get("/api/v1/admin/settings").json()["dedupe_review_threshold"] == settings.dedupe_review_threshold
+    assert put(confidence_medium="0.9").status_code == 400   # varsayılan 'Yüksek' eşiği 0.75
+    assert put(dedupe_review_threshold="0.95", dedupe_auto_threshold="0.99").status_code == 200
+    assert put(confidence_medium="0.9", confidence_high="0.95").status_code == 200
+    with sf() as s:   # elle yazılmış bozuk satır YZ hattını düşürmez; geçerli değer (varsayılan) kullanılır
+        s.add(AppSetting(key="relevance_weight_model", value="çok"))
+        s.commit()
+        assert effective_settings(s, settings).relevance_weight_model == settings.relevance_weight_model
+
+
+def test_search_folds_turkish_dotted_dotless_i_and_escapes_wildcards(settings, env, client):  # noqa: F811
+    reg_id = _ready(settings, env)
+    c, sf = client
+    with sf() as s:
+        s.get(Regulation, reg_id).title = "İŞLEMLERİ ışık IBAN %50 Kredi_Kartı Yönetmeliği"
+        s.commit()
+
+    def total(q):
+        return c.get("/api/v1/regulations", params={"q": q}).json()["total"]
+
+    assert total("işlemleri") == 1 and total("İŞLEMLERİ") == 1          # İ ↔ i
+    assert total("Işık") == 1 and total("ışık") == 1 and total("ISIK") == 0   # I ↔ ı; s ≠ ş korunur
+    assert total("iban") == 1 and total("IBAN") == 1 and total("İBAN") == 1
+    assert total("%50") == 1 and total("kredi_kartı") == 1
+    assert total("%") == 1 and total("_") == 1       # yalnız başlıktaki gerçek karakterle eşleşir
+    assert total("%zzz%") == 0 and total("kredi%kartı") == 0 and total("kredi_ kartı") == 0   # joker değil
+    assert total("ISTANBUL") == 1 and total("istanbul") == 1       # özet metni: "İstanbul"
+    assert total("   ") == 1                                         # boş arama filtre sayılmaz
+
+
+def test_security_headers_and_readyz_does_not_leak_db_error(settings, env, client):  # noqa: F811
+    c, _ = client
+    for path in ("/", "/api/v1/me", "/readyz", "/api/v1/yok"):
+        r = c.get(path)
+        assert r.headers["x-content-type-options"] == "nosniff", path
+        assert r.headers["x-frame-options"] == "DENY" and r.headers["content-security-policy"] == "frame-ancestors 'none'"
+        assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert c.get("/api/v1/yok").status_code == 404
+
+    def broken():
+        raise RuntimeError("postgresql://mevzuat_app:s3cret@10.0.0.7/mevzuat bağlantı reddedildi")
+
+    bad = TestClient(create_app(settings.model_copy(update={"cors_origins": ""}), broken))
+    r = bad.get("/readyz")
+    assert r.status_code == 503 and r.json()["checks"]["db"] == "hata" and r.json()["status"] == "hata"
+    assert "s3cret" not in r.text and "10.0.0.7" not in r.text
+    assert r.headers["x-frame-options"] == "DENY"
+
+
+def test_portal_pages_do_not_load_external_cdn_assets(settings, env, client):  # noqa: F811
+    c, _ = client
+    for page in ("/", "/surec"):
+        html = c.get(page).text
+        assert "fonts.googleapis.com" not in html and "fonts.gstatic.com" not in html, page
+        assert "unpkg.com/lucide" not in html and "cdn.jsdelivr" not in html, page
+    portal = c.get("/").text
+    assert '<html lang="tr">' in portal and 'src="/vendor/lucide.min.js"' in portal
+    # support.js'in React için kullandığı unpkg adresleri sunucudan sunulan kopyalara yönlendirilir
+    for name in ("react", "react-dom"):
+        assert f'"https://unpkg.com/{name}@18.3.1/umd/{name}.production.min.js": "/vendor/{name}.production.min.js"' \
+            in portal
+
+
+def test_get_visible_for_update_refreshes_stale_row(settings, env, client):  # noqa: F811
+    from app.services.regulations import ApiError, get_visible
+
+    reg_id = _ready(settings, env)
+    _, sf = client
+    with sf() as first, sf() as second:
+        stale = get_visible(first, reg_id)
+        assert stale.row_version == 1
+        second.get(Regulation, reg_id).row_version = 7
+        second.commit()
+        assert first.get(Regulation, reg_id).row_version == 1          # kimlik haritasındaki bayat nesne
+        fresh = get_visible(first, reg_id, for_update=True)
+        assert fresh.row_version == 7                                   # kilitli okuma güncel satırı getirir
+    with sf() as s, pytest.raises(ApiError) as e:
+        get_visible(s, 9999, for_update=True)
+    assert e.value.code == "not_found"
+
+
+def test_vendor_files_are_served_from_a_plain_file_name_only(settings, env, tmp_path):  # noqa: F811
+    sf, _ = env
+    portal = tmp_path / "portal"
+    (portal / "vendor").mkdir(parents=True)
+    (portal / "vendor" / "react.production.min.js").write_text("window.React={};")
+    (portal / "secret.txt").write_text("gizli")
+    (portal / "vendor" / "tool.exe").write_text("MZ")
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "portal_dir": portal}), sf))
+    ok = c.get("/vendor/react.production.min.js")
+    assert ok.status_code == 200 and ok.text == "window.React={};"
+    assert ok.headers["content-type"].startswith("application/javascript") and "max-age" in ok.headers["cache-control"]
+    assert ok.headers["x-content-type-options"] == "nosniff"
+    for name in ("yok.js", "tool.exe", "..%2Fsecret.txt", "..%5Csecret.txt", "%2e%2e%2fsecret.txt"):
+        assert c.get(f"/vendor/{name}").status_code == 404, name
+    assert c.get("/vendor/").status_code == 404
+
+
 def test_audit_hash_chain_detects_tampering(settings, env, client):  # noqa: F811
     from sqlalchemy import text
 
