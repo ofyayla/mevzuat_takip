@@ -247,28 +247,57 @@ admin = APIRouter(prefix="/api/v1/admin")
 
 
 @admin.get("/settings")
-def admin_settings(session: SessionDep, settings: SettingsDep, actor: ActorDep):
-    from app.ai.common import RUNTIME_KEYS, effective_settings
+def admin_settings(session: SessionDep, settings: SettingsDep, actor: ActorDep, detail: bool = False):
+    """Düz ``{anahtar: değer}``; ``?detail=true`` ile ``{values, specs}`` (specs: tip, aralık, açıklama — form için)."""
+    from app.ai.common import RUNTIME_KEYS, RUNTIME_SPECS, effective_settings
 
     require(actor, ROLE_ADMIN)
     eff = effective_settings(session, settings)
-    return {k: getattr(eff, k) for k in sorted(RUNTIME_KEYS)}
+    values = {k: getattr(eff, k) for k in sorted(RUNTIME_KEYS)}
+    if not detail:
+        return values
+    return {"values": values, "specs": {k: {"type": "int" if s.type is int else "float", "min": s.min, "max": s.max,
+                                            "description": s.description} for k, s in sorted(RUNTIME_SPECS.items())}}
 
 
 @admin.put("/settings")
-def admin_settings_put(body: SettingsIn, session: SessionDep, settings: SettingsDep, actor: ActorDep):
-    from app.ai.common import check_runtime_settings, set_runtime_setting
+def admin_settings_put(body: SettingsIn, session: SessionDep, settings: SettingsDep, actor: ActorDep,
+                       detail: bool = False):
+    """Hata gövdesi ``details.fields``: alan bazlı iletiler ({anahtar: ileti}); tutarlılık hatası ilgili alana bağlanır."""
+    import re
+
+    from app.ai.common import RUNTIME_KEYS, check_runtime_settings, set_runtime_setting
 
     require(actor, ROLE_ADMIN)
-    try:
-        for key, value in body.values.items():
+    fields: dict[str, str] = {}
+    for key, value in body.values.items():
+        try:
             set_runtime_setting(session, key, value, by=actor.name)
-        check_runtime_settings(session, settings)   # birbirine bağlı eşikler; tümü yazıldıktan sonra denetlenir
-    except (KeyError, ValueError) as e:
+        except (KeyError, ValueError) as e:
+            fields[key] = str(e.args[0]) if e.args else str(e)   # KeyError str()'i iletiyi tırnaklar
+    general = ""
+    if not fields:
+        try:
+            check_runtime_settings(session, settings)   # birbirine bağlı eşikler; tümü yazıldıktan sonra denetlenir
+        except ValueError as e:
+            m = re.match(r"(\w+)", str(e))
+            if m and m.group(1) in RUNTIME_KEYS and m.group(1) in body.values:
+                fields[m.group(1)] = str(e)
+            else:
+                general = str(e)
+    if fields or general:
         session.rollback()
-        raise ApiError(400, "invalid_setting", str(e)) from e
+        raise ApiError(400, "invalid_setting", "; ".join(fields.values()) or general, {"fields": fields})
     session.commit()
-    return admin_settings(session, settings, actor)
+    return admin_settings(session, settings, actor, detail)
+
+
+@admin.get("/metrics")
+def admin_metrics(session: SessionDep, settings: SettingsDep, actor: ActorDep):
+    from app.services.admin_metrics import collect
+
+    require(actor, ROLE_ADMIN)
+    return collect(session, settings)
 
 
 @admin.post("/regulations/{reg_id}/split")

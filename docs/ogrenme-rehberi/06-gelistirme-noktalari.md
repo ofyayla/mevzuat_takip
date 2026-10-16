@@ -156,8 +156,9 @@ Quadlet'e `HostName=mevzuat-crawler` ekleyin, uzun işlerde kilidi periyodik yen
   Webhook tanımlanmazsa alarmlar yalnızca portalda/logda kalır.
 - **Öneri:** `ALERT_WEBHOOK_URL`'i kurum izleme sistemine bağlayın (öncelikli). Ardından 05 §4'teki sorgulardan
   bir yönetim paneli üretin (portalda admin sayfası). Kaynak başına son tarama süresi, istek sayısı, `next_due`,
-  bekleyen aktarım ve LLM p95 gösterilsin. "Şimdi tara" ve backfill şu an yalnızca admin API'sinde var
-  (portal arayüzü bu uçları çağırmıyor), aynı panele düğme olarak eklenebilir.
+  bekleyen aktarım ve LLM p95 gösterilsin. "Şimdi tara" ve backfill aynı panele düğme olarak eklensin.
+- **Durum:** Portaldaki "Yönetim" sayfası ve `GET /api/v1/admin/metrics` bunu karşılıyor (08 §8); istek sayısı dâhil.
+  Prometheus ucu ve webhook bağlantısı hâlâ açık.
 
 ## 11. Ara sertifika son kullanma tarihleri — Orta (takvimli)
 
