@@ -124,7 +124,7 @@ window.__resources = {
           <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
             <div>
               <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Yönetim</h1>
-              <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Çalışma zamanı ayarları, alarmlar, kaynak taramaları, yeniden işleme ve denetim izi doğrulama.</p>
+              <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Eşik ayarları, alarmlar, kaynak taramaları, geçmişi tarama, yeniden işleme ve denetim izi doğrulama.</p>
             </div>
             <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
               <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
@@ -147,9 +147,9 @@ window.__resources = {
 
           <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
             <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Kaynaklar</h2>
-            <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 14px;">Son tarama, süre, istek sayısı ve sonraki planlı tarama. Backfill, aşağıdaki tarih aralığını (en fazla 62 gün) kaynağa uygular.</p>
+            <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 14px;">Her kaynağın son taraması, süresi, istek sayısı ve sonraki planlı tarama zamanı. <b>Şimdi tara</b>: kaynağı planı beklemeden hemen tarar. <b>Geçmişi tara</b>: sistem kapalıyken veya kaynak erişilemezken kaçan günleri, aşağıda seçtiğiniz tarih aralığı (en fazla 62 gün) için geriye dönük toplar.</p>
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
-              <label style="display:flex; align-items:center; gap:6px; font-size:13px;">Backfill başlangıç
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px;">Geçmiş tarama: başlangıç
                 <input type="date" onChange="{{ setBackfillFrom }}" style="height:34px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
               </label>
               <label style="display:flex; align-items:center; gap:6px; font-size:13px;">bitiş
@@ -170,7 +170,7 @@ window.__resources = {
                   <span>{{ m.nextDueText }}</span>
                   <span style="display:flex; gap:6px; justify-content:flex-end;">
                     <button onClick="{{ m.runFn }}" disabled="{{ m.runDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.runOpacity }}; font-family:var(--font-sans); white-space:nowrap;">{{ m.runLabel }}</button>
-                    <button onClick="{{ m.backfillFn }}" disabled="{{ m.backfillDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.backfillOpacity }}; font-family:var(--font-sans);">Backfill</button>
+                    <button onClick="{{ m.backfillFn }}" disabled="{{ m.backfillDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.backfillOpacity }}; font-family:var(--font-sans);">Geçmişi tara</button>
                   </span>
                 </div>
               </sc-for>
@@ -203,7 +203,7 @@ window.__resources = {
 
             <div style="display:flex; flex-direction:column; gap:20px;">
               <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-                <h2 style="font-size:16px; font-weight:600; margin:0 0 12px;">Yeniden işleme</h2>
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Yeniden işleme</h2><p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Zaten toplanmış kayıtları, seçtiğiniz tarih aralığında ve aşamadan başlayarak işleme hattından yeniden geçirir (ör. kural veya ayar değiştikten sonra). Yeni belge indirmez.</p>
                 <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
                   <label style="display:flex; flex-direction:column; gap:4px;">Kaynak
                     <select class="mtp-select" value="{{ rpSource }}" onChange="{{ setRpSource }}" style="height:36px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; background:var(--background); color:var(--foreground); font-family:var(--font-sans);">
@@ -229,7 +229,7 @@ window.__resources = {
                     </select>
                   </label>
                   <div style="display:flex; justify-content:flex-end;">
-                    <button onClick="{{ runReprocess }}" disabled="{{ reprocessDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13px; font-weight:600; cursor:pointer; opacity:{{ reprocessOpacity }}; font-family:var(--font-sans);">Yeniden işle</button>
+                    <button onClick="{{ runReprocess }}" disabled="{{ reprocessDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13px; font-weight:600; cursor:pointer; opacity:{{ reprocessOpacity }}; font-family:var(--font-sans);">Yeniden işlemeyi başlat</button>
                   </div>
                 </div>
               </section>
@@ -851,7 +851,7 @@ const REJECTION_REASON_LABELS = {
 
 const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
 const RUN_COOLDOWN_MS = 60000;
-const REPROCESS_STAGES = { extract: 'Metin çıkarma', classify: 'Sınıflandırma', summarize: 'Özetleme', match: 'Birim eşleme' };
+const REPROCESS_STAGES = { extract: 'Metin çıkarma (belgeden metin okuma)', classify: 'Sınıflandırma (ilgili mi, önem düzeyi)', summarize: 'Özetleme', match: 'Birim eşleme (hangi birime ait)' };
 const RUN_STATUS_LABELS = { success: 'Başarılı', partial: 'Kısmi', failed: 'Başarısız', running: 'Sürüyor' };
 const ALERT_SEVERITY_LABELS = { down: 'Kesinti', delayed: 'Gecikme', warning: 'Uyarı' };
 function fmtDuration(sec) { return sec == null ? '—' : sec >= 60 ? Math.floor(sec / 60) + ' dk ' + Math.round(sec % 60) + ' sn' : sec + ' sn'; }
@@ -1066,10 +1066,10 @@ class Component extends DCLogic {
   setAdminField = (key, value) => this.setState({ adminForm: Object.assign({}, this.state.adminForm, { [key]: value }) });
   backfillSource = (src) => {
     const { from, to } = this.state.adminForm;
-    if (!from || !to) { this.showToast('Backfill için başlangıç ve bitiş tarihini seçin.'); return; }
+    if (!from || !to) { this.showToast('Geçmişi taramak için yukarıdan başlangıç ve bitiş tarihini seçin.'); return; }
     this.setAdminBusy('backfill:' + src.code, true);
     api('/admin/sources/' + encodeURIComponent(src.code) + '/backfill', { method: 'POST', body: { from, to } })
-      .then(r => this.showToast(`${src.name}: ${r.data.days} günlük backfill ${r.data.via === 'crawler' ? "crawler'a iletildi" : 'başlatıldı'}.`))
+      .then(r => this.showToast(`${src.name}: ${r.data.days} günlük geçmiş taraması ${r.data.via === 'crawler' ? "crawler'a iletildi" : 'başlatıldı'}.`))
       .catch(this.fail)
       .then(() => this.setAdminBusy('backfill:' + src.code, false));
   };
