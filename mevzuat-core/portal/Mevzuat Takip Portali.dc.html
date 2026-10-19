@@ -127,10 +127,16 @@ window.__resources = {
               <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Yönetim</h1>
               <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Eşik ayarları, alarmlar, kaynak taramaları, tarama ve iş durumu, geçmişi tarama, yeniden işleme ve denetim izi doğrulama.</p>
             </div>
-            <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
-              <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
-              Yenile
-            </button>
+            <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+              <a href="./arsiv" title="İlgisiz ve ilk tarama kayıtlarını sorgula" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; text-decoration:none; font-family:var(--font-sans); white-space:nowrap;">
+                <i data-lucide="archive" style="width:14px; height:14px; color:var(--primary);"></i>
+                Arşiv
+              </a>
+              <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
+                <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
+                Yenile
+              </button>
+            </div>
           </div>
 
           <div style="display:flex; gap:12px;">
