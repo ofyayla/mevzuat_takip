@@ -239,6 +239,12 @@ window.__resources = {
                 <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Denetim izi</h2>
                 <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Hash zincirini baştan sona doğrular; kopuk veya değiştirilmiş olay varsa listeler.</p>
                 <button onClick="{{ verifyAudit }}" disabled="{{ auditDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ auditOpacity }}; font-family:var(--font-sans);">Zinciri doğrula</button>
+              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Başarısız YZ kayıtları</h2>
+                <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">YZ adımında hata verip yeniden deneme hakkı biten kayıtları, hata verdikleri aşamadan başlayarak tekrar çalıştırır. Başarılı kayıtlara dokunmaz; tarih aralığı gerekmez.</p>
+                <button onClick="{{ runRetryFailed }}" disabled="{{ retryFailedDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ retryFailedOpacity }}; font-family:var(--font-sans);">Başarısızları yeniden dene</button>
+              </section>
+
                 <sc-if value="{{ hasAuditResult }}" hint-placeholder-val="{{ false }}">
                   <div style="margin-top:12px; font-size:13.5px; font-weight:500; color:{{ auditColor }};">{{ auditText }}</div>
                   <sc-for list="{{ auditProblems }}" as="ap" hint-placeholder-count="0">
@@ -1219,6 +1225,13 @@ class Component extends DCLogic {
         effColor: r.effectiveSoon ? 'var(--primary)' : 'var(--muted-foreground)',
         effWeight: r.effectiveSoon ? 600 : 400,
         openFn: () => this.openDetail(r.id) };
+  runRetryFailed = () => {
+    this.setAdminBusy('retryFailed', true);
+    api('/admin/retry-failed', { method: 'POST', body: {} })
+      .then(r => this.showToast(r.data.count ? `${r.data.count} başarısız kayıt yeniden denenmek üzere kuyruğa alındı.` : 'Yeniden denenecek başarısız kayıt yok.'))
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('retryFailed', false));
+  };
     });
 
     const stats = { pending: apiStats.pending, criticalPending: apiStats.criticalHighPending };
@@ -1418,3 +1431,4 @@ class Component extends DCLogic {
 </script>
 </body>
 </html>
+      runRetryFailed: this.runRetryFailed, retryFailedDisabled: !!adminBusy.retryFailed, retryFailedOpacity: adminBusy.retryFailed ? 0.5 : 1,

@@ -13,7 +13,7 @@ from app.db import Alert, AuditEvent, FetchRun, RawDocument, Regulation, Regulat
 from app.monitoring import alerts as alerts_mod
 from app.monitoring.calendar import business_hours_between, is_business_day
 from app.monitoring.checks import check_source
-from app.monitoring.reprocess import backfill, local_store, reprocess
+from app.monitoring.reprocess import backfill, failed_regulations, local_store, reprocess, retry_failed
 from app.monitoring.service import health_summary, run_monitor
 from tests.conftest import DictFetcher
 from tests.test_ai import rel, sev
@@ -241,6 +241,76 @@ def test_reprocess_classify_with_audit(settings, env):  # noqa: F811
             "Geriye dönük yeniden işleme: classify")
     with pytest.raises(ValueError):
         reprocess(sf, settings, "summarize", date(2026, 9, 1), date(2026, 9, 30), llm=None)
+
+
+def _fail(sf, reg_id, stage, attempts=3, relevant=None):
+    with sf() as s:
+        reg = s.get(Regulation, reg_id)
+        reg.processing_status, reg.is_relevant = "AI_FAILED", relevant
+        reg.extra = {"ai_stage": stage, "ai_attempts": attempts, "ai_error": "zaman aşımı"}
+        s.commit()
+
+
+def test_retry_failed_reruns_exhausted_regulation_from_failed_stage(settings, env):  # noqa: F811
+    sf, _ = env
+    exhausted = _reg(sf, title="Bankaların Kredi İşlemlerine İlişkin Yönetmelik", issuer="BDDK", sources=["BDDK"],
+                     publish=date(2026, 9, 10))
+    other = _reg(sf, title="Kredi Kartı Tebliği", issuer="BDDK", sources=["BDDK"], publish=date(2026, 9, 11))
+    _fail(sf, exhausted, "relevance")
+    _fail(sf, other, "summary", relevant=True)
+    llm = FakeLLM(settings, lambda t, m, n: [rel()] * n if t == "relevance" else [sev("Yüksek")])
+    out = retry_failed(sf, settings, llm=llm, stages=["classify"])
+    assert out["retried"] == 1 and out["by_stage"] == {"classify": 1} and out["still_failed"] == 0
+    with sf() as s:
+        reg = s.get(Regulation, exhausted)
+        assert reg.is_relevant and reg.processing_status != "AI_FAILED" and "ai_attempts" not in reg.extra
+        assert s.get(Regulation, other).processing_status == "AI_FAILED"      # aşama filtresi dışında kaldı
+        assert s.scalars(select(AuditEvent).where(AuditEvent.regulation_id == exhausted,
+                                                  AuditEvent.event_type == "reprocessed")).one().note.endswith("classify")
+    out = retry_failed(sf, settings, llm=llm)                                   # kalan: özet aşaması hatası
+    assert out["by_stage"] == {"summarize": 1} and out["recovered"] == 1 and not out["llm_unavailable"]
+
+
+def test_retry_failed_keeps_failures_retryable_when_llm_is_down(settings, env):  # noqa: F811
+    from app.ai.llm_client import LLMUnavailable
+
+    sf, _ = env
+    reg_id = _reg(sf, title="Bankaların Kredi İşlemlerine İlişkin Yönetmelik", issuer="BDDK", sources=["BDDK"],
+                  publish=date(2026, 9, 10))
+    _fail(sf, reg_id, "relevance")
+
+    def down(task, messages, n):
+        raise LLMUnavailable("zaman aşımı")
+
+    out = retry_failed(sf, settings, llm=FakeLLM(settings, down))
+    assert out["llm_unavailable"] and out["still_failed"] == 1
+    with sf() as s:
+        assert s.get(Regulation, reg_id).extra["ai_attempts"] == 0              # sayaç sıfırlandı, hata sayılmadı
+    with pytest.raises(ValueError):
+        retry_failed(sf, settings, llm=None)
+    with pytest.raises(ValueError):
+        retry_failed(sf, settings, llm=FakeLLM(settings, down), stages=["extract"])
+
+
+def test_failed_regulations_filters_by_source_and_ids(settings, env):  # noqa: F811
+    sf, _ = env
+    bddk = _reg(sf, title="BDDK Kararı", issuer="BDDK", sources=["BDDK"], publish=date(2026, 9, 10))
+    spk = _reg(sf, title="SPK Kararı", issuer="SPK", sources=["SPK"], publish=date(2026, 9, 10))
+    _fail(sf, bddk, "unit_match", relevant=True)
+    _fail(sf, spk, "summary", relevant=True)
+    with sf() as s:
+        assert failed_regulations(s) == {bddk: "match", spk: "summarize"}
+        assert failed_regulations(s, source="SPK") == {spk: "summarize"}
+        assert failed_regulations(s, ids=[bddk], stages=["match"]) == {bddk: "match"}
+        assert failed_regulations(s, stages=["classify"]) == {}
+
+
+def test_admin_retry_failed_endpoint(settings, env):  # noqa: F811
+    sf, _ = env
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "none"}), sf))
+    assert c.post("/api/v1/admin/retry-failed").status_code == 400                # LLM yapılandırılmamış
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "openai"}), sf))
+    assert c.post("/api/v1/admin/retry-failed").json() == {"status": "nothing_to_do", "count": 0}
 
 
 def test_admin_alert_endpoints(settings, env):  # noqa: F811

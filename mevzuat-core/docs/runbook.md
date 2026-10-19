@@ -145,6 +145,21 @@ API: `POST /api/v1/admin/reprocess {stage, from, to, source?}`. Karar verilmiş 
 uzmanın seçtiği birimler değişmez (yalnızca YZ önerileri yenilenir); yeniden işleme denetim izine "Yeniden işlendi" olarak yazılır. Birim tanımları değiştiyse önce
 `mevzuat-ai units-load`, sonra `reprocess match`.
 
+#### Başarısız (`AI_FAILED`) kayıtları yeniden deneme
+
+YZ adımı üç denemede de hata veren kayıt `AI_FAILED`'da kalır ve Beat artık denemez (YZ hattı alarmı açılır). Bunları tarih
+aralığı vermeden, başarılı kayıtlara dokunmadan yeniden çalıştırmak için:
+
+```bash
+mevzuat-monitor retry-failed --dry-run                 # hangi kayıtlar, hangi aşamada
+mevzuat-monitor retry-failed [--stage classify|summarize|match] [--source BDDK] [--id 123 ...]
+```
+
+API: `POST /api/v1/admin/retry-failed {stage?, source?}` (202; yanıttaki `count` kuyruğa alınan kayıt sayısı). Portalda
+Yönetim → "Başarısız YZ kayıtları". Deneme sayacı sıfırlanır, her kayıt hata verdiği aşamadan başlar ve zincirin sonuna kadar
+ilerler (sınıflandırma → özet → birim önerisi); kurtarılan kayıtlar denetim izine "Yeniden işlendi" olarak yazılır. LLM sunucusu
+kapalıysa iş durur ve kayıtlar yeniden denenebilir kalır.
+
 ### 4.6 LLM / OCR servisi erişilemiyor
 
 - Kayıtlar kaybolmaz. OCR hatasında belge metin katmanıyla bağlanır, taranmış sayfalar `extra.ocr_pending_pages`'te

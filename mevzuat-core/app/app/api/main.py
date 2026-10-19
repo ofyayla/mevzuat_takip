@@ -348,6 +348,36 @@ class ReprocessIn(BaseModel):
     source: str | None = None
 
 
+class RetryFailedIn(BaseModel):
+    stage: Literal["classify", "summarize", "match"] | None = None
+    source: str | None = None
+
+
+@admin.post("/retry-failed", status_code=202)
+def admin_retry_failed(session: SessionDep, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep,
+                       request: Request, body: RetryFailedIn | None = None):
+    """Deneme hakkı bitmiş olanlar dahil tüm ``AI_FAILED`` kayıtları, hata aşamasından başlayarak yeniden çalıştırır."""
+    from app.monitoring.reprocess import failed_regulations
+
+    require(actor, ROLE_ADMIN)
+    if settings.llm_provider in ("", "none", None):
+        raise ApiError(400, "llm_required", "bu işlem için LLM yapılandırılmalı")
+    body = body or RetryFailedIn()
+    count = len(failed_regulations(session, stages=[body.stage] if body.stage else None, source=body.source))
+    if count:
+        background.add_task(_retry_failed_bg, request.app.state.session_factory, settings, body, actor)
+    return {"status": "queued" if count else "nothing_to_do", "count": count}
+
+
+def _retry_failed_bg(sf, settings: Settings, body: "RetryFailedIn", actor: Actor) -> None:
+    from app.ai.llm_client import get_llm
+    from app.monitoring.reprocess import retry_failed
+
+    log.info("retry-failed: %s", retry_failed(sf, settings, llm=get_llm(settings),
+                                              stages=[body.stage] if body.stage else None, source=body.source,
+                                              actor=actor))
+
+
 class BackfillIn(BaseModel):
     date_from: date = Field(alias="from")
     date_to: date = Field(alias="to")
