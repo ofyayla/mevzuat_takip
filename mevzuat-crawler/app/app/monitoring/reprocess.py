@@ -139,3 +139,77 @@ def reprocess(session_factory: sessionmaker[Session], settings: Settings, stage:
                           note=f"Geriye dönük yeniden işleme: {stage} ({date_from} – {date_to})")
         s.commit()
     return result
+
+
+# ``extra.ai_stage`` değeri → kullanıcıya gösterilen aşama adı (``STAGES``'teki karşılığı)
+FAILED_STAGES = {"relevance": "classify", "summary": "summarize", "unit_match": "match"}
+
+
+def failed_regulations(session: Session, *, stages: list[str] | None = None, source: str | None = None,
+                       ids: list[int] | None = None) -> dict[int, str]:
+    """``AI_FAILED`` düzenlemeler → hatanın aşaması (``FAILED_STAGES`` değeri). Deneme hakkı bitenler de dahildir."""
+    q = select(Regulation).where(Regulation.processing_status == "AI_FAILED").order_by(Regulation.id)
+    if ids:
+        q = q.where(Regulation.id.in_(ids))
+    if source:
+        q = q.where(Regulation.id.in_(select(RegulationSourceLink.regulation_id).join(
+            RawDocument, RawDocument.id == RegulationSourceLink.raw_document_id).where(
+            RawDocument.source_code == source)))
+    out = {}
+    for reg in session.scalars(q):
+        stage = FAILED_STAGES.get((reg.extra or {}).get("ai_stage", "relevance"), "classify")
+        if not stages or stage in stages:
+            out[reg.id] = stage
+    return out
+
+
+def retry_failed(session_factory: sessionmaker[Session], settings: Settings, *, llm, stages: list[str] | None = None,
+                 source: str | None = None, ids: list[int] | None = None, limit: int = 1000, actor=None) -> dict:
+    """YZ hattında hata veren (``AI_FAILED``) kayıtları, deneme hakkı bitmiş olanlar dahil, yeniden çalıştırır.
+
+    Tarih aralığı gerekmez ve başarılı kayıtlara dokunulmaz (``reprocess`` ise aralıktaki her kaydı zorla yeniler).
+    Deneme sayacı sıfırlanır, her kayıt hatalandığı aşamadan başlar ve zincirin sonuna kadar ilerler
+    (classify → summarize → match). LLM sunucusu kapalıysa iş durur; kayıtlar yeniden denenebilir kalır."""
+    from app.services.audit import add_event
+
+    if llm is None:
+        raise ValueError("bu işlem için LLM gerekli (LLM_PROVIDER)")
+    unknown = set(stages or ()) - set(FAILED_STAGES.values())
+    if unknown:
+        raise ValueError(f"stage: {', '.join(FAILED_STAGES.values())}")
+    with session_factory() as s:
+        todo = dict(list(failed_regulations(s, stages=stages, source=source, ids=ids).items())[:limit])
+        for reg in s.scalars(select(Regulation).where(Regulation.id.in_(todo))):
+            reg.extra = {**(reg.extra or {}), "ai_attempts": 0}   # ai_error/ai_stage başarıda kendiliğinden temizlenir
+        s.commit()
+    by_stage = {st: [i for i, v in todo.items() if v == st] for st in FAILED_STAGES.values()}
+    result: dict = {"retried": len(todo), "by_stage": {k: len(v) for k, v in by_stage.items() if v}}
+    unavailable = False
+    summarize_ids, match_ids = list(by_stage["summarize"]), list(by_stage["match"])
+    if by_stage["classify"]:
+        from app.ai.classify import classify_pending
+
+        c = classify_pending(session_factory, llm, settings, ids=by_stage["classify"], limit=len(todo))
+        summarize_ids += c.relevant_ids
+        unavailable = c.unavailable
+    if summarize_ids and not unavailable:
+        from app.ai.summary import summarize_pending
+
+        sm = summarize_pending(session_factory, llm, settings, ids=summarize_ids, limit=len(summarize_ids))
+        match_ids += sm.ids
+        unavailable = sm.unavailable
+    if match_ids and not unavailable:
+        from app.ai.unit_matching import match_pending
+
+        unavailable = match_pending(session_factory, llm, settings, ids=match_ids, limit=len(match_ids)).unavailable
+    with session_factory() as s:
+        regs = list(s.scalars(select(Regulation).where(Regulation.id.in_(todo))))
+        for reg in regs:
+            if reg.processing_status != "AI_FAILED" and reg.is_relevant:
+                add_event(s, reg.id, "reprocessed", actor=actor,
+                          note=f"Başarısız YZ adımı yeniden denendi: {todo[reg.id]}")
+        s.commit()
+        result["still_failed"] = sum(1 for r in regs if r.processing_status == "AI_FAILED")
+    result["recovered"] = len(todo) - result["still_failed"]
+    result["llm_unavailable"] = unavailable
+    return result

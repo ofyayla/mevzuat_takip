@@ -330,6 +330,76 @@ def test_admin_metrics_last_run_next_due_and_llm_latency(settings, env, client):
     assert m["llm"]["calls"] == 6 and m["llm"]["failed"] == 1 and m["llm"]["p50Ms"] == 300 and m["llm"]["p95Ms"] == 4080
 
 
+def test_admin_scans_lists_active_recent_and_filters(settings, env, client):  # noqa: F811
+    from datetime import datetime, timezone
+
+    from app.db import FetchRun
+
+    c, sf = client
+    now = datetime.now(timezone.utc)
+    with sf() as s:
+        s.add(FetchRun(source_code="BDDK", started_at=now - timedelta(minutes=5), status="running", requests=3))
+        s.add(FetchRun(source_code="SPK", started_at=now - timedelta(hours=2), status="success",
+                       finished_at=now - timedelta(hours=2) + timedelta(seconds=42),
+                       channels={"liste": {"items": 5, "new": 2, "warnings": ["w"]}}))
+        s.add(FetchRun(source_code="BDDK", started_at=now - timedelta(hours=3), status="failed",
+                       finished_at=now - timedelta(hours=3) + timedelta(seconds=10),
+                       errors=[f"hata {i}" for i in range(7)], channels={"liste": {"items": 0, "error": "boom"}}))
+        # Resmî Gazete backfill'i started_at'a tarama gününü yazar: gerçek süre bilinmez
+        s.add(FetchRun(source_code="RESMI_GAZETE", started_at=now - timedelta(days=30), status="success",
+                       finished_at=now - timedelta(hours=1)))
+        s.commit()
+    body = c.get("/api/v1/admin/scans").json()
+    assert body["crawlMode"] == settings.crawl_mode and body["crawler"] is None and body["queued"] == []
+    assert len(body["active"]) == 1 and body["active"][0]["source"] == "BDDK" and not body["active"][0]["pendingIngest"]
+    assert 299 <= body["active"][0]["elapsedSec"] <= 330 and body["active"][0]["requests"] == 3
+    ids = [r["id"] for r in body["recent"]]
+    assert len(ids) == 3 and ids == sorted(ids, reverse=True)           # id'ye göre: started_at backfill'de yanıltıcı
+    bf, ok, failed = body["recent"]
+    assert bf["backfillDay"] is not None and bf["durationSec"] is None
+    assert ok["durationSec"] == 42 and ok["backfillDay"] is None
+    assert ok["channels"] == [{"name": "liste", "items": 5, "new": 2, "changed": 0, "error": None, "warnings": 1,
+                               "stopped": False, "incomplete": False}]
+    assert failed["errorCount"] == 7 and len(failed["errors"]) == 5 and failed["channels"][0]["error"] == "boom"
+    assert [r["source"] for r in c.get("/api/v1/admin/scans", params={"status": "failed"}).json()["recent"]] == ["BDDK"]
+    assert [r["source"] for r in c.get("/api/v1/admin/scans", params={"source": "SPK"}).json()["recent"]] == ["SPK"]
+    assert len(c.get("/api/v1/admin/scans", params={"limit": 2}).json()["recent"]) == 2
+    assert c.get("/api/v1/admin/scans", params={"status": "bogus"}).json()["error"]["code"] == "validation_error"
+
+
+def test_admin_jobs_recorded_for_background_tasks(settings, env, client, monkeypatch):  # noqa: F811
+    from datetime import date
+
+    from app.db import JobRun
+
+    c, sf = client
+    payload = {"stage": "extract", "from": "2026-09-01", "to": "2026-09-02"}
+    # TestClient arka plan görevini yanıt dönmeden çalıştırır: iş yanıttan sonra tamamlanmış olur
+    monkeypatch.setattr("app.api.main._reprocess_bg",
+                        lambda sf_, st, body, actor: {"stage": body.stage, "day": date(2026, 9, 1)})
+    r = c.post("/api/v1/admin/reprocess", json=payload)
+    assert r.status_code == 202 and r.json()["stage"] == "extract"
+    with sf() as s:
+        job = s.get(JobRun, r.json()["jobId"])
+        assert (job.kind, job.status, job.via) == ("reprocess", "success", "inline")
+        assert job.params == {"stage": "extract", "from": "2026-09-01", "to": "2026-09-02", "source": None}
+        assert job.result == {"stage": "extract", "day": "2026-09-01"}            # tarih dizeye çevrilir
+        assert job.started_at and job.finished_at and job.requested_by
+    jobs = c.get("/api/v1/admin/scans").json()["jobs"]
+    assert jobs["active"] == [] and jobs["recent"][0]["id"] == r.json()["jobId"]
+    assert jobs["recent"][0]["status"] == "success" and jobs["recent"][0]["durationSec"] is not None
+
+    def boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.api.main._reprocess_bg", boom)
+    r = c.post("/api/v1/admin/reprocess", json=payload)
+    assert r.status_code == 202                                                  # hata yanıtı bozmaz, kayda geçer
+    with sf() as s:
+        job = s.get(JobRun, r.json()["jobId"])
+        assert job.status == "failed" and job.error == "RuntimeError: boom" and job.result is None
+
+
 def test_search_folds_turkish_dotted_dotless_i_and_escapes_wildcards(settings, env, client):  # noqa: F811
     reg_id = _ready(settings, env)
     c, sf = client

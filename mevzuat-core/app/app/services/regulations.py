@@ -139,7 +139,17 @@ def _metric_cond(metric: str, settings: Settings):
     raise ApiError(400, "invalid_metric", f"bilinmeyen metrik: {metric}")
 
 
-def list_regulations(session: Session, query: ListQuery, settings: Settings) -> dict:
+def _viewed_ids(session: Session, reg_ids: list[int], actor_id: str | None) -> set[int]:
+    """Bu kullanıcının ayrıntısını açtığı kayıtlar (``viewed`` denetim olayı): listede okunmamışları ayırt etmek için."""
+    from app.db import AuditEvent
+
+    if not actor_id or not reg_ids:
+        return set()
+    return set(session.scalars(select(AuditEvent.regulation_id).where(
+        AuditEvent.regulation_id.in_(reg_ids), AuditEvent.event_type == "viewed", AuditEvent.actor_id == actor_id)))
+
+
+def list_regulations(session: Session, query: ListQuery, settings: Settings, actor_id: str | None = None) -> dict:
     conds = _filters(query, settings)
     total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
     sev_rank = case(SEVERITY_ORDER, value=Regulation.severity, else_=0)
@@ -160,8 +170,9 @@ def list_regulations(session: Session, query: ListQuery, settings: Settings) -> 
     rows = session.scalars(select(Regulation).where(*conds)
                            .order_by(*order)
                            .offset((query.page - 1) * query.page_size).limit(query.page_size)).all()
-    return {"items": [serialize(session, r, settings) for r in rows], "total": total, "page": query.page,
-            "pageSize": query.page_size}
+    viewed = _viewed_ids(session, [r.id for r in rows], actor_id)
+    items = [{**serialize(session, r, settings), "viewed": r.id in viewed} for r in rows]
+    return {"items": items, "total": total, "page": query.page, "pageSize": query.page_size}
 
 
 def stats(session: Session, settings: Settings) -> dict:

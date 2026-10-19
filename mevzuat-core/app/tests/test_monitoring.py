@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.ai.llm_client import FakeLLM
 from app.api.main import create_app
-from app.db import Alert, AuditEvent, FetchRun, RawDocument, Regulation, RegulationSourceLink, Source
+from app.db import Alert, AuditEvent, FetchRun, JobRun, RawDocument, Regulation, RegulationSourceLink, Source
 from app.monitoring import alerts as alerts_mod
 from app.monitoring.calendar import business_hours_between, is_business_day
 from app.monitoring.checks import check_source
@@ -311,6 +311,74 @@ def test_admin_retry_failed_endpoint(settings, env):  # noqa: F811
     assert c.post("/api/v1/admin/retry-failed").status_code == 400                # LLM yapılandırılmamış
     c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "openai"}), sf))
     assert c.post("/api/v1/admin/retry-failed").json() == {"status": "nothing_to_do", "count": 0}
+    with sf() as s:
+        assert s.scalars(select(JobRun)).first() is None                          # yapılacak iş yoksa kayıt açılmaz
+
+
+def test_track_job_success_skip_and_failure(settings, env, monkeypatch):  # noqa: F811
+    from app.services import jobs
+
+    monkeypatch.setattr(jobs, "HEARTBEAT_S", 3600)     # kalp atışı iş parçacığı testte hiçbir şey yazmasın
+    sf, _ = env
+
+    def make():
+        with sf() as s:
+            return jobs.create_job(s, "reprocess", params={"a": 1}, requested_by="t")
+
+    ok, skipped, bad = make(), make(), make()
+    with sf() as s:
+        assert s.get(JobRun, ok).status == "queued"
+    with jobs.track_job(sf, ok) as h:
+        h.result = {"n": 1}
+    with jobs.track_job(sf, skipped) as h:
+        h.skip("meşgul")
+    with pytest.raises(ValueError):
+        with jobs.track_job(sf, bad):
+            raise ValueError("x")
+    with sf() as s:
+        a, b, c = (s.get(JobRun, i) for i in (ok, skipped, bad))
+        assert (a.status, a.result) == ("success", {"n": 1}) and a.started_at and a.finished_at and a.worker
+        assert (b.status, b.error, b.result) == ("skipped", "meşgul", None)
+        assert (c.status, c.error) == ("failed", "ValueError: x")
+
+
+def test_sweep_stale_jobs_and_local_runs(settings, env):  # noqa: F811
+    from app.services.jobs import sweep_stale
+
+    sf, _ = env
+    now = datetime(2026, 10, 19, 12, tzinfo=UTC)
+    old = now - timedelta(hours=10)
+    with sf() as s:
+        def job(**kw):
+            j = JobRun(**{"kind": "reprocess", "created_at": now - timedelta(minutes=30), **kw})
+            s.add(j)
+            s.flush()
+            return j.id
+
+        dead = job(status="running", started_at=now - timedelta(minutes=30), heartbeat_at=now - timedelta(minutes=20))
+        alive = job(status="running", started_at=now - timedelta(minutes=30), heartbeat_at=now - timedelta(minutes=1))
+        stale_q = job(status="queued", kind="run", created_at=now - timedelta(hours=7))
+        fresh_q = job(status="queued", kind="run", created_at=now - timedelta(hours=1))
+        job(status="running", kind="backfill", source_code="BDDK", started_at=now - timedelta(minutes=30),
+            heartbeat_at=now - timedelta(minutes=1))                               # BDDK için canlı backfill
+        s.add_all([FetchRun(source_code="SPK", started_at=old, status="running"),   # sahipsiz
+                   FetchRun(source_code="BDDK", started_at=old, status="running"),  # backfill: started_at tarama günü
+                   FetchRun(source_code="KVKK", started_at=now - timedelta(minutes=5), status="running")])
+        s.commit()
+    remote = settings.model_copy(update={"crawl_mode": "remote"})
+    with sf() as s:   # uzak modda tarama kayıtlarına dokunulmaz (crawler kendi kalıntılarını temizler)
+        assert sweep_stale(s, remote, now) == {"jobs": 2, "runs": 0}
+        s.commit()
+    with sf() as s:
+        assert sweep_stale(s, settings.model_copy(update={"crawl_mode": "local"}), now) == {"jobs": 0, "runs": 1}
+        s.commit()
+    with sf() as s:
+        st = {i: s.get(JobRun, i).status for i in (dead, alive, stale_q, fresh_q)}
+        assert st == {dead: "interrupted", alive: "running", stale_q: "interrupted", fresh_q: "queued"}
+        assert "durdu" in s.get(JobRun, dead).error and s.get(JobRun, dead).finished_at
+        runs = {r.source_code: r for r in s.scalars(select(FetchRun))}
+        assert runs["SPK"].status == "failed" and "interrupted" in runs["SPK"].errors[-1] and runs["SPK"].finished_at
+        assert runs["BDDK"].status == "running" and runs["KVKK"].status == "running"
 
 
 def test_admin_alert_endpoints(settings, env):  # noqa: F811

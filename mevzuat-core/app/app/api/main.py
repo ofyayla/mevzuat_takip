@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.auth import ROLE_ADMIN, ROLE_EXPERT, ROLE_VIEWER, current_actor, require
 from app.db import Unit, make_sessionmaker
+from app.services.archive import ArchiveQuery, archive_detail, list_archive
 from app.services.audit import Actor
 from app.services.health import sources_health
 from app.services.regulations import (
@@ -41,6 +42,7 @@ from app.settings import Settings, get_settings
 log = logging.getLogger(__name__)
 PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
 PIPELINE_FILE = "surec-haritasi.html"
+ARCHIVE_FILE = "arsiv.html"
 VENDOR_TYPES = {".js": "application/javascript", ".css": "text/css", ".map": "application/json"}
 # Tam bir CSP (script-src vb.) bilinçli yok: portal satır içi betik ve stil kullanıyor. Yalnızca çerçeveye gömülmeyi
 # (clickjacking) ve içerik türü koklamayı kapatır.
@@ -126,13 +128,34 @@ def regulations(session: SessionDep, settings: SettingsDep, actor: ActorDep,
     if status and status not in REVIEW_STATUSES:
         raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
     return list_regulations(session, ListQuery(source, severity, status, unit, int(date_range) if date_range else None,
-                                               q, metric, page, page_size, sort, direction), settings)
+                                               q, metric, page, page_size, sort, direction), settings, actor.id)
 
 
 @api.get("/regulations/stats")
 def regulation_stats(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     require(actor, ROLE_VIEWER)
     return stats(session, settings)
+
+
+@api.get("/archive/regulations")
+def archive_regulations(session: SessionDep, actor: ActorDep,
+                        kind: Literal["irrelevant", "baseline", "all"] = "irrelevant",
+                        source: str | None = None, q: str | None = None,
+                        date_from: Annotated[date | None, Query(alias="from")] = None,
+                        date_to: Annotated[date | None, Query(alias="to")] = None,
+                        page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+                        sort: Literal["publish_date", "detected_at", "title", "issuer", "score"] | None = None,
+                        direction: Literal["asc", "desc"] = "desc"):
+    """Portalda görünmeyen kayıtlar: YZ'nin ilgisiz bulduğu (``irrelevant``) ve ilk taramada sitede duran
+    (``baseline``). Sayfalıdır; ``counts`` geçerli süzgeçlere göre her türün sayısını verir."""
+    require(actor, ROLE_VIEWER)
+    return list_archive(session, ArchiveQuery(kind, source, q, date_from, date_to, page, page_size, sort, direction))
+
+
+@api.get("/archive/regulations/{reg_id}")
+def archive_regulation_detail(reg_id: int, session: SessionDep, actor: ActorDep):
+    require(actor, ROLE_VIEWER)
+    return archive_detail(session, reg_id)
 
 
 @api.get("/regulations/{reg_id}")
@@ -300,6 +323,20 @@ def admin_metrics(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     return collect(session, settings)
 
 
+@admin.get("/scans")
+def admin_scans(session: SessionDep, settings: SettingsDep, actor: ActorDep, source: str | None = None,
+                status: Literal["success", "partial", "failed"] | None = None,
+                limit: Annotated[int, Query(ge=1, le=100)] = 30):
+    """Etkin taramalar, crawler kuyruğu, tarama geçmişi ve arka plan işleri (yönetim sayfası)."""
+    from app.services.jobs import sweep_stale
+    from app.services.scans import collect_scans
+
+    require(actor, ROLE_ADMIN)
+    sweep_stale(session, settings)   # takılı kalan kayıtlar sayfada hayalet olarak görünmesin
+    session.commit()
+    return collect_scans(session, settings, source=source, status=status, limit=limit)
+
+
 @admin.post("/regulations/{reg_id}/split")
 def admin_split(reg_id: int, body: SplitIn, session: SessionDep, actor: ActorDep):
     from app.db import RawDocument
@@ -317,13 +354,17 @@ def admin_split(reg_id: int, body: SplitIn, session: SessionDep, actor: ActorDep
 @admin.post("/regulations/{reg_id}/regenerate", status_code=202)
 def admin_regenerate(reg_id: int, background: BackgroundTasks, session: SessionDep, settings: SettingsDep,
                      actor: ActorDep, request: Request):
+    from app.services.jobs import create_job, run_job
+
     require(actor, ROLE_ADMIN)
     get_visible(session, reg_id)
-    background.add_task(_regenerate, request.app.state.session_factory, settings, reg_id, actor)
-    return {"status": "queued"}
+    sf = request.app.state.session_factory
+    jid = create_job(session, "regenerate", params={"regulationId": reg_id}, requested_by=actor.name)
+    background.add_task(run_job, sf, jid, _regenerate, sf, settings, reg_id, actor)
+    return {"status": "queued", "jobId": jid}
 
 
-def _regenerate(sf: sessionmaker[Session], settings: Settings, reg_id: int, actor: Actor) -> None:
+def _regenerate(sf: sessionmaker[Session], settings: Settings, reg_id: int, actor: Actor) -> dict:
     from app.ai.llm_client import get_llm
     from app.ai.summary import summarize_pending
     from app.ai.unit_matching import match_pending
@@ -332,13 +373,14 @@ def _regenerate(sf: sessionmaker[Session], settings: Settings, reg_id: int, acto
     llm = get_llm(settings)
     if llm is None:
         log.warning("regenerate: LLM yapılandırılmamış")
-        return
+        return {"skipped": "LLM yapılandırılmamış"}
     rep = summarize_pending(sf, llm, settings, ids=[reg_id], force=True)
     match_pending(sf, llm, settings, ids=[reg_id], force=True)
     with sf() as s:
         add_event(s, reg_id, "summary_regenerated", actor=actor,
                   note="Özet ve birim önerileri yeniden üretildi." if rep.summarized else "Yeniden üretim başarısız.")
         s.commit()
+    return {"summarized": rep.summarized}
 
 
 class ReprocessIn(BaseModel):
@@ -358,24 +400,30 @@ def admin_retry_failed(session: SessionDep, background: BackgroundTasks, setting
                        request: Request, body: RetryFailedIn | None = None):
     """Deneme hakkı bitmiş olanlar dahil tüm ``AI_FAILED`` kayıtları, hata aşamasından başlayarak yeniden çalıştırır."""
     from app.monitoring.reprocess import failed_regulations
+    from app.services.jobs import create_job, run_job
 
     require(actor, ROLE_ADMIN)
     if settings.llm_provider in ("", "none", None):
         raise ApiError(400, "llm_required", "bu işlem için LLM yapılandırılmalı")
     body = body or RetryFailedIn()
     count = len(failed_regulations(session, stages=[body.stage] if body.stage else None, source=body.source))
+    out: dict = {"status": "queued" if count else "nothing_to_do", "count": count}
     if count:
-        background.add_task(_retry_failed_bg, request.app.state.session_factory, settings, body, actor)
-    return {"status": "queued" if count else "nothing_to_do", "count": count}
+        sf = request.app.state.session_factory
+        out["jobId"] = create_job(session, "retry_failed", source=body.source, requested_by=actor.name,
+                                  params={"stage": body.stage, "source": body.source, "count": count})
+        background.add_task(run_job, sf, out["jobId"], _retry_failed_bg, sf, settings, body, actor)
+    return out
 
 
-def _retry_failed_bg(sf, settings: Settings, body: "RetryFailedIn", actor: Actor) -> None:
+def _retry_failed_bg(sf, settings: Settings, body: "RetryFailedIn", actor: Actor) -> dict:
     from app.ai.llm_client import get_llm
     from app.monitoring.reprocess import retry_failed
 
-    log.info("retry-failed: %s", retry_failed(sf, settings, llm=get_llm(settings),
-                                              stages=[body.stage] if body.stage else None, source=body.source,
-                                              actor=actor))
+    result = retry_failed(sf, settings, llm=get_llm(settings), stages=[body.stage] if body.stage else None,
+                          source=body.source, actor=actor)
+    log.info("retry-failed: %s", result)
+    return result
 
 
 class BackfillIn(BaseModel):
@@ -426,29 +474,38 @@ def admin_monitor_run(session: SessionDep, settings: SettingsDep, actor: ActorDe
 
 
 @admin.post("/reprocess", status_code=202)
-def admin_reprocess(body: ReprocessIn, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep,
-                    request: Request):
+def admin_reprocess(body: ReprocessIn, background: BackgroundTasks, session: SessionDep, settings: SettingsDep,
+                    actor: ActorDep, request: Request):
+    from app.services.jobs import create_job, run_job
+
     require(actor, ROLE_ADMIN)
     if body.date_to < body.date_from:
         raise ApiError(400, "invalid_range", "from ≤ to olmalı")
     if body.stage != "extract" and settings.llm_provider in ("", "none", None):
         raise ApiError(400, "llm_required", "bu aşama için LLM yapılandırılmalı")
-    background.add_task(_reprocess_bg, request.app.state.session_factory, settings, body, actor)
-    return {"status": "queued", "stage": body.stage}
+    sf = request.app.state.session_factory
+    jid = create_job(session, "reprocess", source=body.source, requested_by=actor.name,
+                     params={"stage": body.stage, "from": body.date_from.isoformat(), "to": body.date_to.isoformat(),
+                             "source": body.source})
+    background.add_task(run_job, sf, jid, _reprocess_bg, sf, settings, body, actor)
+    return {"status": "queued", "stage": body.stage, "jobId": jid}
 
 
-def _reprocess_bg(sf, settings: Settings, body: "ReprocessIn", actor: Actor) -> None:
+def _reprocess_bg(sf, settings: Settings, body: "ReprocessIn", actor: Actor) -> dict:
     from app.ai.llm_client import get_llm
     from app.monitoring.reprocess import reprocess
 
-    log.info("reprocess: %s", reprocess(sf, settings, body.stage, body.date_from, body.date_to, source=body.source,
-                                         llm=get_llm(settings), actor=actor))
+    result = reprocess(sf, settings, body.stage, body.date_from, body.date_to, source=body.source,
+                       llm=get_llm(settings), actor=actor)
+    log.info("reprocess: %s", result)
+    return result
 
 
 @admin.post("/sources/{code}/backfill", status_code=202)
-def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep,
-                   request: Request):
+def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, session: SessionDep, settings: SettingsDep,
+                   actor: ActorDep, request: Request):
     from app.collectors.config import load_sources
+    from app.services.jobs import create_job, run_job
 
     require(actor, ROLE_ADMIN)
     try:
@@ -462,8 +519,11 @@ def admin_backfill(code: str, body: BackfillIn, background: BackgroundTasks, set
         rid = _crawl_request(settings, "backfill", code, {"date_from": body.date_from.isoformat(),
                                                           "date_to": body.date_to.isoformat()}, actor)
         return {"status": "queued", "via": "crawler", "requestId": rid, "days": days}
-    background.add_task(_backfill_bg, request.app.state.session_factory, settings, code, body)
-    return {"status": "queued", "days": days}
+    sf = request.app.state.session_factory
+    jid = create_job(session, "backfill", source=code, requested_by=actor.name,
+                     params={"from": body.date_from.isoformat(), "to": body.date_to.isoformat()})
+    background.add_task(run_job, sf, jid, _backfill_bg, sf, settings, code, body)
+    return {"status": "queued", "days": days, "jobId": jid}
 
 
 def _crawl_request(settings: Settings, kind: str, code: str, params: dict, actor) -> str:
@@ -472,16 +532,27 @@ def _crawl_request(settings: Settings, kind: str, code: str, params: dict, actor
     return submit_crawl_request(crawl_db(settings), kind, code, params, requested_by=actor.id)
 
 
-def _backfill_bg(sf, settings: Settings, code: str, body: "BackfillIn") -> None:
+def _backfill_bg(sf, settings: Settings, code: str, body: "BackfillIn") -> dict:
+    from dataclasses import asdict
+
+    from app.collectors.locks import LockBusy, source_lock
     from app.monitoring.reprocess import backfill, local_store
 
-    log.info("backfill %s: %s", code, backfill(local_store(sf, settings), settings, code, body.date_from,
-                                                body.date_to).runs)
+    try:   # zamanlanmış taramayla yarışmasın
+        with source_lock(code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
+            rep = backfill(local_store(sf, settings), settings, code, body.date_from, body.date_to)
+    except LockBusy:
+        log.info("backfill %s: başka bir tarama sürüyor, atlandı", code)
+        return {"skipped": "başka bir tarama sürüyor"}
+    log.info("backfill %s: %s", code, rep.runs)
+    return asdict(rep)
 
 
 @admin.post("/sources/{code}/run", status_code=202)
-def admin_run_source(code: str, background: BackgroundTasks, settings: SettingsDep, actor: ActorDep):
+def admin_run_source(code: str, background: BackgroundTasks, session: SessionDep, settings: SettingsDep,
+                     actor: ActorDep, request: Request):
     from app.collectors.config import load_sources
+    from app.services.jobs import create_job, run_job
 
     require(actor, ROLE_ADMIN)
     try:
@@ -493,16 +564,35 @@ def admin_run_source(code: str, background: BackgroundTasks, settings: SettingsD
     if settings.redis_url:
         from app.tasks.collect import collect_source
 
-        collect_source.delay(code)
-        return {"status": "queued", "via": "celery"}
-    background.add_task(_run_source_inline, settings, code)
-    return {"status": "queued", "via": "inline"}
+        jid = create_job(session, "run", source=code, requested_by=actor.name, via="celery")
+        collect_source.delay(code, job_id=jid)
+        return {"status": "queued", "via": "celery", "jobId": jid}
+    sf = request.app.state.session_factory
+    jid = create_job(session, "run", source=code, requested_by=actor.name, via="inline")
+    background.add_task(run_job, sf, jid, _run_source_inline, sf, settings, code)
+    return {"status": "queued", "via": "inline", "jobId": jid}
 
 
-def _run_source_inline(settings: Settings, code: str) -> None:
-    from app.collectors.cli import main as collect_main
+def _run_source_inline(sf, settings: Settings, code: str) -> dict:
+    """``tasks.collect.collect_source`` ile aynı yol (kilit + toplayıcı), Celery olmadan."""
+    from app.collectors.config import load_sources
+    from app.collectors.locks import LockBusy, source_lock
+    from app.collectors.runner import SourceCollector
+    from app.collectors.store import SqlCrawlStore
+    from app.storage import get_storage
 
-    collect_main(["run", code])
+    source = load_sources(settings.sources_file).get(code)
+    try:
+        with source_lock(code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
+            collector = SourceCollector(source, settings, SqlCrawlStore(sf, get_storage(settings)))
+            try:
+                report = collector.run()
+            finally:
+                collector.fetcher.close()
+    except LockBusy:
+        log.info("%s: başka bir tarama sürüyor, atlandı", code)
+        return {"skipped": "başka bir tarama sürüyor"}
+    return {"runId": report.run_id, "status": report.status, "new": report.new, "changed": report.changed}
 
 
 # ------------------------------------------------------------------------------------------------ paralel çalışma (İK-8)
@@ -650,6 +740,10 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     @app.get("/surec", include_in_schema=False)
     def pipeline_page():
         return FileResponse(settings.portal_dir / PIPELINE_FILE, media_type="text/html; charset=utf-8")
+
+    @app.get("/arsiv", include_in_schema=False)
+    def archive_page():
+        return FileResponse(settings.portal_dir / ARCHIVE_FILE, media_type="text/html; charset=utf-8")
 
     @app.get("/support.js", include_in_schema=False)
     def support_js():

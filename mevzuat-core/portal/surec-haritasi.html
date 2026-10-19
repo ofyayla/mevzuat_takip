@@ -34,6 +34,8 @@
   .crumb { font-size: 13px; color: var(--muted-foreground); }
   .crumb a { color: var(--muted-foreground); text-decoration: none; } .crumb a:hover { color: var(--foreground); }
   .grow { flex: 1; }
+  .archive-link { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--primary); text-decoration: none; }
+  .archive-link:hover { text-decoration: underline; }
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   select, button { font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--card);
                    color: var(--foreground); border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; }
@@ -115,6 +117,7 @@
     </select>
     <label class="chk"><input type="checkbox" id="labels"> Geçiş etiketleri</label>
     <label class="chk"><input type="checkbox" id="auto" checked> 30 sn'de yenile</label>
+    <a class="archive-link" style="margin:0" href="./arsiv" title="İlgisiz ve ilk tarama kayıtlarını sorgula">Arşiv →</a>
     <button id="refresh">Yenile</button>
     <button id="mermaid" title="Grafiği Mermaid metni olarak panoya kopyala">Mermaid kopyala</button>
   </div>
@@ -156,6 +159,8 @@ const POS = {
   'reg:IRRELEVANT': [3, 0], 'reg:RELEVANT': [3, 1], 'reg:SUMMARIZED': [3, 2], 'reg:READY': [3, 3], 'reg:AI_FAILED': [3, 4],
   'review:Onaylandı': [4, 2], 'review:Bekliyor': [4, 3], 'review:Reddedildi': [4, 4],
 };
+// Binlerce kaydı olabilen, portalda görünmeyen durumlar: panel yalnız en yeni 20'yi gösterir, tamamı Arşiv'de sayfalanır
+const ARCHIVE_PARAM = { 'reg:IRRELEVANT': 'ilgisiz', 'reg:BASELINE': 'ilk-tarama' };
 const COL_W = 222, ROW_H = 92, NODE_W = 164, NODE_H = 60, PAD_X = 30, TOP = 46;
 
 let data = null, selected = null, timer = null;
@@ -315,7 +320,8 @@ async function showPanel(id, keepItems) {
     ${ins.length ? `<div class="sec">Gelen geçişler</div>${ins.map(e => tr(e, 'in')).join('')}` : ''}
     ${outs.length ? `<div class="sec">Giden geçişler</div>${outs.map(e => tr(e, 'out')).join('')}` : ''}
     <div class="sec">${id === 'sources' ? 'Kaynak durumu' : 'En yeni kayıtlar'}</div>
-    <div class="items" id="items">${prevItems || '<div class="empty">Yükleniyor…</div>'}</div>`;
+    <div class="items" id="items">${prevItems || '<div class="empty">Yükleniyor…</div>'}</div>
+    ${ARCHIVE_PARAM[id] ? `<a class="archive-link" href="./arsiv?tur=${ARCHIVE_PARAM[id]}">Arşivde tüm kayıtları sorgula (${NUM.format(n.count)}) →</a>` : ''}`;
   $('panel').querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', () => select(a.dataset.go)));
   try {
     if (id === 'sources') return renderSources(await api('/sources/health'));

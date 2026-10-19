@@ -117,6 +117,30 @@ def test_api_run_and_backfill_go_to_crawler_in_remote_mode(remote, mdb):
     assert {d["source_code"] for d in mdb[REQUESTS].find({"kind": "run"})} == {"BDDK"}
 
 
+def test_admin_scans_remote_shows_requests_and_heartbeat(remote, mdb):
+    from app.api.main import create_app
+    from app.db import JobRun
+    from app.mongo import finish_crawl_request
+
+    settings, sf = remote
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": ""}), sf))
+    write_heartbeat(mdb, "dmz-1", {"running": ["BDDK"]})
+    assert c.post("/api/v1/admin/sources/BDDK/run").status_code == 202
+    body = c.get("/api/v1/admin/scans").json()
+    assert body["crawlMode"] == "remote" and body["crawler"]["error"] is None and not body["crawler"]["stale"]
+    assert body["crawler"]["running"] == ["BDDK"] and body["crawler"]["hosts"][0]["host"] == "dmz-1"
+    assert [(q["kind"], q["source"], q["status"]) for q in body["queued"]] == [("run", "BDDK", "pending")]
+    # fetch_run henüz aktarılmadı (ingest ≤ 1 dk): sinyaldeki tarama "aktarım bekleniyor" satırı olur
+    assert [(a["source"], a["pendingIngest"]) for a in body["active"]] == [("BDDK", True)]
+    with sf() as s:
+        assert s.scalars(select(JobRun)).first() is None                         # uzak modda kayıt Mongo'dadır
+    req = mdb[REQUESTS].find_one()
+    finish_crawl_request(mdb, req["_id"], ok=False, error="x")
+    body = c.get("/api/v1/admin/scans").json()
+    assert body["queued"] == [] and body["recentRequests"][0]["status"] == "failed"
+    assert body["recentRequests"][0]["error"] == "x"
+
+
 def test_beat_schedule_remote_mode_has_ingest_not_collect(remote, monkeypatch):
     import app.worker as worker
 

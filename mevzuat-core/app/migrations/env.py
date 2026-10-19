@@ -13,6 +13,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
+# Yalnızca migrasyonda tanımlı, PostgreSQL'e özgü dizinler (modelde karşılığı yok): autogenerate "silinmeli" demesin
+MIGRATION_ONLY_INDEXES = {"ix_regulation_status_publish"}
+
+
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    return not (type_ == "index" and reflected and name in MIGRATION_ONLY_INDEXES)
 
 
 def _url() -> str:
@@ -21,7 +27,7 @@ def _url() -> str:
 
 def run_migrations_offline() -> None:
     context.configure(url=_url(), target_metadata=target_metadata, literal_binds=True, compare_type=True,
-                      render_as_batch=_url().startswith("sqlite"))
+                      include_object=include_object, render_as_batch=_url().startswith("sqlite"))
     with context.begin_transaction():
         context.run_migrations()
 
@@ -31,7 +37,7 @@ def run_migrations_online() -> None:
     with engine.connect() as conn:
         # SQLite ALTER TABLE kısıtlı: batch modu tablo yeniden oluşturarak değiştirir
         context.configure(connection=conn, target_metadata=target_metadata, compare_type=True,
-                          render_as_batch=conn.dialect.name == "sqlite")
+                          include_object=include_object, render_as_batch=conn.dialect.name == "sqlite")
         with context.begin_transaction():
             context.run_migrations()
 

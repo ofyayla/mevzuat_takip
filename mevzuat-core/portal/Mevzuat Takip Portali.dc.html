@@ -75,7 +75,7 @@ window.__resources = {
         <div style="flex:1 1 auto;"></div>
       </sc-if>
 
-      <div style="position:relative; flex:0 0 auto;">
+      <div data-health-root style="position:relative; flex:0 0 auto;">
         <div onClick="{{ toggleSourceHealth }}" style="display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:var(--radius-pill); background:{{ healthBg }}; border:{{ healthBorder }}; cursor:pointer; white-space:nowrap;">
           <span style="width:{{ healthDotSize }}; height:{{ healthDotSize }}; border-radius:50%; background:{{ healthDotColor }}; opacity:{{ healthDotOpacity }}; flex:0 0 auto;"></span>
           <span style="font-size:12.5px; color:{{ healthTextColor }};">{{ healthText }}</span>
@@ -112,6 +112,10 @@ window.__resources = {
           Yönetim
         </button>
       </sc-if>
+      <button onClick="{{ changeUser }}" title="Denetim izine yazılan adınız; değiştirmek için tıklayın" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12.5px; white-space:nowrap; flex:0 0 auto; cursor:pointer; font-family:var(--font-sans); max-width:200px;">
+        <i data-lucide="user-round" style="width:14px; height:14px; color:var(--primary); flex:0 0 auto;"></i>
+        <span style="overflow:hidden; text-overflow:ellipsis;">{{ userLabel }}</span>
+      </button>
       <a href="./surec" title="İşleme hattının durumları ve canlı sayıları" style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:var(--radius-pill); border:1px solid var(--border); color:var(--foreground); text-decoration:none; font-size:12.5px; white-space:nowrap; flex:0 0 auto;">
         <i data-lucide="workflow" style="width:14px; height:14px; color:var(--primary);"></i>
         Süreç haritası
@@ -125,7 +129,7 @@ window.__resources = {
           <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
             <div>
               <h1 style="font-size:26px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; color:var(--foreground);">Yönetim</h1>
-              <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Eşik ayarları, alarmlar, kaynak taramaları, geçmişi tarama, yeniden işleme ve denetim izi doğrulama.</p>
+              <p style="font-size:14px; color:var(--muted-foreground); margin:0;">Eşik ayarları, alarmlar, kaynak taramaları, tarama ve iş durumu, geçmişi tarama, yeniden işleme ve denetim izi doğrulama.</p>
             </div>
             <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
               <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
@@ -173,6 +177,119 @@ window.__resources = {
                     <button onClick="{{ m.runFn }}" disabled="{{ m.runDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.runOpacity }}; font-family:var(--font-sans); white-space:nowrap;">{{ m.runLabel }}</button>
                     <button onClick="{{ m.backfillFn }}" disabled="{{ m.backfillDisabled }}" style="height:28px; padding:0 10px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:12px; font-weight:500; cursor:pointer; opacity:{{ m.backfillOpacity }}; font-family:var(--font-sans);">Geçmişi tara</button>
                   </span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; display:flex; flex-direction:column; gap:18px;">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+              <div>
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Taramalar ve işler</h2>
+                <p style="font-size:13px; color:var(--muted-foreground); margin:0;">Şu anda süren taramalar, crawler kuyruğu, son taramalar ve yönetimden başlatılan arka plan işleri. Bir şey sürerken bu bölüm 10 saniyede bir kendiliğinden yenilenir.</p>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; font-size:12.5px;">
+                <span style="font-weight:500; color:{{ crawlerColor }};">{{ crawlerText }}</span>
+                <span style="color:var(--muted-foreground);">{{ scansUpdatedText }}</span>
+              </div>
+            </div>
+
+            <div>
+              <h3 style="font-size:13px; font-weight:600; margin:0 0 8px;">Aktif taramalar</h3>
+              <sc-if value="{{ noActiveScans }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:13px; color:var(--muted-foreground); padding:4px 0;">{{ activeEmptyText }}</div>
+              </sc-if>
+              <sc-for list="{{ activeScanRows }}" as="a" hint-placeholder-count="2">
+                <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(170px,1.4fr) minmax(150px,1fr) 80px; gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--border); font-size:13px;">
+                  <span style="font-weight:500;">{{ a.name }}</span>
+                  <span style="color:var(--muted-foreground);">{{ a.kind }}</span>
+                  <span style="color:color-mix(in oklch, var(--info) 55%, black);">{{ a.elapsed }}</span>
+                  <span>{{ a.requests }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ showQueue }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <h3 style="font-size:13px; font-weight:600; margin:0 0 8px;">Crawler kuyruğu</h3>
+                <sc-if value="{{ noQueued }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px; color:var(--muted-foreground); padding:4px 0;">Kuyrukta bekleyen talep yok.</div>
+                </sc-if>
+                <sc-for list="{{ queuedRows }}" as="q" hint-placeholder-count="1">
+                  <div style="display:grid; grid-template-columns:minmax(220px,1.6fr) minmax(130px,1fr) minmax(110px,1fr) 110px minmax(150px,1fr); gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--border); font-size:13px;">
+                    <span>{{ q.kind }}</span><span style="font-weight:500;">{{ q.name }}</span><span style="color:var(--muted-foreground);">{{ q.by }}</span><span>{{ q.wait }}</span><span>{{ q.status }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ hasRecentRequests }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; margin:12px 0 4px;">Son 24 saatte biten talepler</div>
+                  <sc-for list="{{ recentRequestRows }}" as="rq" hint-placeholder-count="2">
+                    <div style="display:grid; grid-template-columns:minmax(220px,1.6fr) minmax(130px,1fr) minmax(110px,1fr) 110px minmax(150px,1fr); gap:10px; align-items:start; padding:8px 0; border-top:1px solid var(--border); font-size:13px;">
+                      <span>{{ rq.kind }}</span><span style="font-weight:500;">{{ rq.name }}</span><span style="color:var(--muted-foreground);">{{ rq.by }}</span><span>{{ rq.wait }}</span>
+                      <span style="display:flex; flex-direction:column; gap:2px;"><span style="color:{{ rq.color }};">{{ rq.status }}</span><span style="font-size:12px; color:var(--muted-foreground);">{{ rq.note }}</span></span>
+                    </div>
+                  </sc-for>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+                <h3 style="font-size:13px; font-weight:600; margin:0;">Son taramalar</h3>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <select class="mtp-select" value="{{ scanSource }}" onChange="{{ setScanSource }}" style="height:30px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:12.5px; background:var(--background); color:var(--foreground); font-family:var(--font-sans);">
+                    <option value="">Tüm kaynaklar</option>
+                    <sc-for list="{{ sourceOptions }}" as="so" hint-placeholder-count="9">
+                      <option value="{{ so.code }}">{{ so.name }}</option>
+                    </sc-for>
+                  </select>
+                  <sc-for list="{{ scanStatusTabs }}" as="t" hint-placeholder-count="4">
+                    <button onClick="{{ t.fn }}" style="height:30px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:{{ t.bg }}; color:{{ t.color }}; font-size:12.5px; cursor:pointer; font-family:var(--font-sans);">{{ t.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <div style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(230px,1.8fr) 100px 70px 90px minmax(150px,1fr); gap:10px; padding:0 0 8px; font-size:11.5px; font-weight:500; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.03em; min-width:800px;">
+                  <span>Kaynak</span><span>Tarama</span><span>Süre</span><span>İstek</span><span>Yeni/Liste</span><span>Sorun</span>
+                </div>
+                <sc-if value="{{ noRecentScans }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px; color:var(--muted-foreground); padding:8px 0; border-top:1px solid var(--border);">{{ recentEmptyText }}</div>
+                </sc-if>
+                <sc-for list="{{ recentScanRows }}" as="r" hint-placeholder-count="5">
+                  <div style="border-top:1px solid var(--border); min-width:800px;">
+                    <div onClick="{{ r.toggleFn }}" title="Ayrıntı için tıklayın" style="display:grid; grid-template-columns:minmax(150px,1.4fr) minmax(230px,1.8fr) 100px 70px 90px minmax(150px,1fr); gap:10px; align-items:center; padding:9px 0; font-size:13px; cursor:pointer;">
+                      <span style="font-weight:500;">{{ r.name }}</span>
+                      <span style="color:{{ r.color }};">{{ r.statusText }}</span>
+                      <span>{{ r.durationText }}</span>
+                      <span>{{ r.requestsText }}</span>
+                      <span>{{ r.newText }}</span>
+                      <span style="color:{{ r.problemColor }};">{{ r.problemText }}</span>
+                    </div>
+                    <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin:0 0 10px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--background); border:1px solid var(--border); font-size:12.5px; font-family:var(--font-mono); white-space:pre-wrap; word-break:break-word; color:var(--foreground);">{{ r.detailText }}</div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
+              <h3 style="font-size:13px; font-weight:600; margin:0 0 8px;">Arka plan işleri</h3>
+              <sc-if value="{{ noJobs }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:13px; color:var(--muted-foreground); padding:4px 0;">Yönetimden başlatılmış arka plan işi yok.</div>
+              </sc-if>
+              <sc-for list="{{ jobRows }}" as="j" hint-placeholder-count="3">
+                <div style="border-top:1px solid var(--border); padding:8px 0; font-size:13px; display:flex; flex-direction:column; gap:3px;">
+                  <div style="display:grid; grid-template-columns:minmax(170px,1.2fr) minmax(200px,1.6fr) 120px minmax(110px,1fr) 110px 140px; gap:10px; align-items:center;">
+                    <span style="font-weight:500;">{{ j.kind }}</span>
+                    <span style="color:var(--muted-foreground);">{{ j.params }}</span>
+                    <span style="font-weight:500; color:{{ j.color }};">{{ j.status }}</span>
+                    <span style="color:var(--muted-foreground);">{{ j.by }}</span>
+                    <span>{{ j.time }}</span>
+                    <span style="color:var(--muted-foreground);">{{ j.when }}</span>
+                  </div>
+                  <sc-if value="{{ j.hasDetail }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12px; color:{{ j.detailColor }}; font-family:var(--font-mono); word-break:break-word;">{{ j.detail }}</div>
+                  </sc-if>
                 </div>
               </sc-for>
             </div>
@@ -236,15 +353,15 @@ window.__resources = {
               </section>
 
               <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Denetim izi</h2>
-                <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Hash zincirini baştan sona doğrular; kopuk veya değiştirilmiş olay varsa listeler.</p>
-                <button onClick="{{ verifyAudit }}" disabled="{{ auditDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ auditOpacity }}; font-family:var(--font-sans);">Zinciri doğrula</button>
-              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
                 <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Başarısız YZ kayıtları</h2>
                 <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">YZ adımında hata verip yeniden deneme hakkı biten kayıtları, hata verdikleri aşamadan başlayarak tekrar çalıştırır. Başarılı kayıtlara dokunmaz; tarih aralığı gerekmez.</p>
                 <button onClick="{{ runRetryFailed }}" disabled="{{ retryFailedDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ retryFailedOpacity }}; font-family:var(--font-sans);">Başarısızları yeniden dene</button>
               </section>
 
+              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Denetim izi</h2>
+                <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Hash zincirini baştan sona doğrular; kopuk veya değiştirilmiş olay varsa listeler.</p>
+                <button onClick="{{ verifyAudit }}" disabled="{{ auditDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ auditOpacity }}; font-family:var(--font-sans);">Zinciri doğrula</button>
                 <sc-if value="{{ hasAuditResult }}" hint-placeholder-val="{{ false }}">
                   <div style="margin-top:12px; font-size:13.5px; font-weight:500; color:{{ auditColor }};">{{ auditText }}</div>
                   <sc-for list="{{ auditProblems }}" as="ap" hint-placeholder-count="0">
@@ -326,7 +443,7 @@ window.__resources = {
           <div style="display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:var(--radius-md); background:{{ healthBg }}; margin-bottom:18px; font-size:13px; color:{{ healthTextColor }};">
             <i data-lucide="alert-triangle" style="width:14px; height:14px; flex:0 0 auto;"></i>
             <span style="flex:1; min-width:0;">{{ bannerText }}</span>
-            <span style="text-decoration:underline; cursor:pointer; flex:0 0 auto; font-weight:500;" onClick="{{ toggleSourceHealth }}">Detay</span>
+            <span data-health-root style="text-decoration:underline; cursor:pointer; flex:0 0 auto; font-weight:500;" onClick="{{ toggleSourceHealth }}">Detay</span>
           </div>
         </sc-if>
 
@@ -384,8 +501,11 @@ window.__resources = {
               <span></span>
             </div>
             <sc-for list="{{ visibleRecords }}" as="r" hint-placeholder-count="8">
-              <div onClick="{{ r.openFn }}" style="min-width:1140px; display:grid; grid-template-columns:minmax(280px,1fr) 120px 118px 132px 82px 160px 100px 20px; gap:12px; padding:13px 16px; border-top:1px solid var(--border); cursor:pointer; align-items:center; transition:background var(--duration-base,200ms) ease;" style-hover="background:var(--muted);">
-                <span style="font-size:13.5px; font-weight:500; color:var(--foreground); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ r.title }}</span>
+              <div onClick="{{ r.openFn }}" onKeyDown="{{ r.keyFn }}" role="button" tabindex="0" style="min-width:1140px; display:grid; grid-template-columns:minmax(280px,1fr) 120px 118px 132px 82px 160px 100px 20px; gap:12px; padding:13px 16px; border-top:1px solid var(--border); cursor:pointer; align-items:center; transition:background var(--duration-base,200ms) ease;" style-hover="background:var(--muted);">
+                <span style="display:flex; align-items:flex-start; gap:8px; min-width:0;">
+                  <span title="Henüz açmadınız" style="width:8px; height:8px; margin-top:6px; border-radius:50%; background:var(--primary); flex:0 0 8px; display:{{ r.unreadDisplay }};"></span>
+                  <span style="font-size:13.5px; font-weight:{{ r.titleWeight }}; color:var(--foreground); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ r.title }}</span>
+                </span>
                 <span style="font-size:13px; color:var(--muted-foreground);">{{ r.issuer }}</span>
                 <span style="font-size:13px; color:var(--muted-foreground);">{{ r.publishDate }}</span>
                 <span style="font-size:13px; padding:2px 7px; border-radius:var(--radius-sm); background:{{ r.effBg }}; color:{{ r.effColor }}; font-weight:{{ r.effWeight }}; width:fit-content; white-space:nowrap;">{{ r.effectiveDate }}</span>
@@ -429,6 +549,10 @@ window.__resources = {
           </div>
         </sc-if>
 
+        <sc-if value="{{ isLoadingList }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:60px 20px; text-align:center; font-size:13.5px; color:var(--muted-foreground); border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--card);">Kayıtlar yükleniyor…</div>
+        </sc-if>
+
         <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
           <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:80px 20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--card);">
             <div style="width:44px; height:44px; border-radius:50%; background:var(--muted); display:flex; align-items:center; justify-content:center;">
@@ -449,9 +573,18 @@ window.__resources = {
                 <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
                 Kayıtlara dön
               </button>
-              <button onClick="{{ goToList }}" aria-label="Detayı kapat" title="Detayı kapat" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:0 0 36px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer;">
-                <i data-lucide="x" style="width:16px; height:16px;"></i>
-              </button>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span title="Listedeki sayfanın sırası" style="font-size:12.5px; color:var(--muted-foreground); white-space:nowrap;">{{ navLabel }}</span>
+                <button onClick="{{ goPrevRecord }}" disabled="{{ prevRecordDisabled }}" aria-label="Önceki kayıt" title="Önceki kayıt (←)" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:0 0 36px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer; opacity:{{ prevRecordOpacity }};">
+                  <i data-lucide="chevron-left" style="width:16px; height:16px;"></i>
+                </button>
+                <button onClick="{{ goNextRecord }}" disabled="{{ nextRecordDisabled }}" aria-label="Sonraki kayıt" title="Sonraki kayıt (→)" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:0 0 36px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer; opacity:{{ nextRecordOpacity }};">
+                  <i data-lucide="chevron-right" style="width:16px; height:16px;"></i>
+                </button>
+                <button onClick="{{ goToList }}" aria-label="Detayı kapat" title="Detayı kapat (Esc)" style="display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:0 0 36px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--foreground); cursor:pointer;">
+                  <i data-lucide="x" style="width:16px; height:16px;"></i>
+                </button>
+              </div>
             </div>
             <div class="mtp-fade-in">
 
@@ -795,8 +928,15 @@ function fmtDate(iso) {
 }
 function fmtDateTime(iso) { return iso ? FMT_DATETIME.format(new Date(iso)) : ''; }
 
+// Kullanıcı adı bu tarayıcıda saklanır ve her istekte X-Demo-User olarak gider (denetim izine yazılır, "okunmamış"
+// işareti kullanıcıya özeldir). Başlıklar Türkçe karakter taşıyamadığı için URL kodlamalıdır.
+const USER_KEY = 'mtp_user';
+function storedUser() { try { return localStorage.getItem(USER_KEY) || ''; } catch (e) { return ''; } }
+function storeUser(name) { try { if (name) localStorage.setItem(USER_KEY, name); else localStorage.removeItem(USER_KEY); } catch (e) { /* özel pencere */ } }
+
 async function api(path, opts = {}) {
-  const headers = Object.assign({ Accept: 'application/json' }, opts.body ? { 'Content-Type': 'application/json' } : {}, opts.headers || {});
+  const user = storedUser();
+  const headers = Object.assign({ Accept: 'application/json' }, user ? { 'X-Demo-User': encodeURIComponent(user) } : {}, opts.body ? { 'Content-Type': 'application/json' } : {}, opts.headers || {});
   const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -857,10 +997,31 @@ const REJECTION_REASON_LABELS = {
 };
 
 const EMPTY_FILTERS = { source: 'all', severity: 'all', status: 'all', unit: 'all', date: 'all', search: '' };
+// Adres çubuğundaki sorgu: filtreler ve kart seçimi paylaşılabilir/yenilemeye dayanıklı olsun
+const URL_FILTER_KEYS = { source: 'source', severity: 'severity', status: 'status', unit: 'unit', date: 'date', search: 'q' };
+const SEVERITY_VALUES = ['Kritik', 'Yüksek', 'Orta', 'Düşük'], STATUS_VALUES = ['Bekliyor', 'Onaylandı', 'Reddedildi'], DATE_VALUES = ['7', '30'];
+function filtersFromUrl() {
+  const p = new URLSearchParams(location.search), filters = Object.assign({}, EMPTY_FILTERS);
+  if (p.get('source')) filters.source = p.get('source');
+  if (p.get('unit')) filters.unit = p.get('unit');
+  if (SEVERITY_VALUES.includes(p.get('severity'))) filters.severity = p.get('severity');
+  if (STATUS_VALUES.includes(p.get('status'))) filters.status = p.get('status');
+  if (DATE_VALUES.includes(p.get('date'))) filters.date = p.get('date');
+  filters.search = p.get('q') || '';
+  const activeMetric = Object.keys(METRIC_PARAM).find(k => METRIC_PARAM[k] === p.get('metric')) || null;
+  return { filters, activeMetric, page: 1 };
+}
+function recordIdFromHash() { const m = /^#kayit=(\d+)$/.exec(location.hash); return m ? Number(m[1]) : null; }
 const RUN_COOLDOWN_MS = 60000;
 const REPROCESS_STAGES = { extract: 'Metin çıkarma (belgeden metin okuma)', classify: 'Sınıflandırma (ilgili mi, önem düzeyi)', summarize: 'Özetleme', match: 'Birim eşleme (hangi birime ait)' };
 const RUN_STATUS_LABELS = { success: 'Başarılı', partial: 'Kısmi', failed: 'Başarısız', running: 'Sürüyor' };
 const ALERT_SEVERITY_LABELS = { down: 'Kesinti', delayed: 'Gecikme', warning: 'Uyarı' };
+const JOB_KIND_LABELS = { run: 'Şimdi tara', backfill: 'Geçmiş tarama', reprocess: 'Yeniden işleme', retry_failed: 'Başarısızları yeniden deneme', regenerate: 'Özeti yeniden üretme' };
+const JOB_STATUS_LABELS = { queued: 'Kuyrukta', running: 'Sürüyor', success: 'Tamamlandı', failed: 'Başarısız', skipped: 'Atlandı', interrupted: 'Yarıda kaldı' };
+const REQUEST_STATUS_LABELS = { pending: 'Bekliyor', running: "Crawler'da", done: 'Tamamlandı', failed: 'Başarısız' };
+const SCAN_REFRESH_BUSY_MS = 10000, SCAN_REFRESH_IDLE_MS = 60000;   // bir şey sürerken sık, değilse seyrek yenile
+const SCAN_STATUS_TABS = [['', 'Tümü'], ['success', 'Başarılı'], ['partial', 'Kısmi'], ['failed', 'Başarısız']];
+const EMPTY_SCANS = { active: [], queued: [], recentRequests: [], recent: [], crawler: null, jobs: { active: [], recent: [] } };
 function fmtDuration(sec) { return sec == null ? '—' : sec >= 60 ? Math.floor(sec / 60) + ' dk ' + Math.round(sec % 60) + ' sn' : sec + ' sn'; }
 function fmtMs(ms) { return ms == null ? '—' : ms >= 1000 ? (ms / 1000).toFixed(1) + ' sn' : ms + ' ms'; }
 const TEXT_SORT_KEYS = ['title', 'issuer', 'unit'];   // ilk tıklama A→Z; diğerlerinde (tarih, önem, durum) ↓
@@ -890,6 +1051,8 @@ class Component extends DCLogic {
     contentSummaryDraft: '',
     toast: null,
     records: [],
+    listLoaded: false,   // ilk liste yanıtı gelene dek "kayıt yok" yerine "yükleniyor" gösterilir
+    navIds: [],          // ayrıntıdaki önceki/sonraki gezinmesi: liste sayfasının kayıt sırası (karardan sonra satır düşse de sabit kalır)
     total: 0,
     stats: { pending: 0, criticalHighPending: 0, today: 0, upcoming: 0 },
     sources: [],
@@ -901,31 +1064,66 @@ class Component extends DCLogic {
     // yönetim sayfası
     adminSettings: null, settingsDraft: {}, settingsErrors: {}, settingsError: '',
     alerts: [], alertStatus: 'open', metrics: null, auditResult: null, adminBusy: {},
+    scans: null, scansAt: 0, scanFilter: { source: '', status: '' }, scanExpanded: {},
     adminForm: { from: '', to: '', rpSource: '', rpFrom: '', rpTo: '', rpStage: 'extract' }
   };
 
   handleKeyDown = (event) => {
-    if (event.key !== 'Escape') return;
-    if (this.state.unitModalOpen) this.closeUnitModal();
-    else if (this.state.confirmType) this.closeConfirm();
-    else if (this.state.contentModalOpen) this.closeContentEditor();
-    else if (this.state.view === 'detail') this.goToList();
+    const { unitModalOpen, confirmType, contentModalOpen, sourceHealthOpen, view, busy } = this.state;
+    if (event.key === 'Escape') {
+      if (unitModalOpen) this.closeUnitModal();
+      else if (confirmType) this.closeConfirm();
+      else if (contentModalOpen) this.closeContentEditor();
+      else if (sourceHealthOpen) this.setState({ sourceHealthOpen: false });
+      else if (view === 'detail') this.goToList();
+      return;
+    }
+    // Ayrıntıdayken ← / → önceki-sonraki kayıt; yazı yazarken veya pencere açıkken çalışmaz
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && view === 'detail' && !busy
+        && !unitModalOpen && !confirmType && !contentModalOpen && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      const t = event.target;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      this.stepRecord(event.key === 'ArrowRight' ? 1 : -1);
+    }
+  };
+  // Kaynak durumu paneli dışına tıklanınca kapanır
+  handleDocClick = (event) => {
+    if (this.state.sourceHealthOpen && !(event.target.closest && event.target.closest('[data-health-root]'))) this.setState({ sourceHealthOpen: false });
   };
 
   componentDidMount() {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('popstate', this.handlePopState);
+    document.addEventListener('click', this.handleDocClick);
     this.renderIcons();
     this.loadMeta();
-    this.loadList();
+    // Adres çubuğundaki filtreler ve /#kayit=<id> (Süreç haritası da bu bağlantıyı kullanır) doğrudan uygulanır
+    const over = filtersFromUrl();
+    this.setState(over);
+    this.loadList(over);
     if (location.pathname === '/admin') this.openAdmin();
-    // Süreç haritasından gelen bağlantı: /#kayit=<id> doğrudan ayrıntıyı açar
-    const m = /^#kayit=(\d+)$/.exec(location.hash);
-    if (m) { history.replaceState(null, '', location.pathname); this.openDetail(Number(m[1])); }
+    const id = recordIdFromHash();
+    if (id) this.openDetail(id, 'none');
+    // Açık bırakılan sekmede sayaçlar ve kaynak durumu bayatlamasın (liste kendiliğinden değişmez: satırlar kaymasın)
+    this._refreshTimer = setInterval(() => {
+      if (document.hidden || this.state.view === 'admin') return;
+      this.loadStats();
+      api('/sources/health').then(h => this.setState({ health: h.data })).catch(() => {});
+    }, 120000);
   }
-  componentWillUnmount() { window.removeEventListener('keydown', this.handleKeyDown); window.removeEventListener('popstate', this.handlePopState); }
-  // /admin adresi doğrudan Yönetim sayfasını açar; tarayıcı geri/ileri düğmeleri görünümü izler
-  handlePopState = () => { if (location.pathname === '/admin') this.openAdmin(); else if (this.state.view === 'admin') this.goToList(); };
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this.handleKeyDown); window.removeEventListener('popstate', this.handlePopState);
+    document.removeEventListener('click', this.handleDocClick); clearInterval(this._refreshTimer); clearTimeout(this._scansTimer);
+  }
+  // Tarayıcı geri/ileri düğmeleri görünümü izler: /admin → Yönetim, #kayit=<id> → ayrıntı, aksi halde liste
+  handlePopState = () => {
+    if (location.pathname === '/admin') { this.openAdmin(); return; }
+    const id = recordIdFromHash();
+    if (id) { this.openDetail(id, 'none'); return; }
+    const over = filtersFromUrl();
+    this.setState(over);
+    this.showList(false, over);
+  };
   componentDidUpdate() { this.renderIcons(); }
   renderIcons() { if (window.lucide) window.lucide.createIcons(); }
 
@@ -954,18 +1152,68 @@ class Component extends DCLogic {
     if (st.sort) { p.set('sort', st.sort); p.set('direction', st.sortDir); }
     const seq = (this._listSeq = (this._listSeq || 0) + 1);   // sırasız gelen eski yanıtı yok say
     return api('/regulations?' + p.toString())
-      .then(r => { if (seq === this._listSeq) this.setState({ records: r.data.items.map(toRecord), total: r.data.total }); })
+      .then(r => {
+        if (seq !== this._listSeq) return;
+        const records = r.data.items.map(toRecord), patch = { records, total: r.data.total, listLoaded: true };
+        // ayrıntı açıkken (karar sonrası liste yenilenir) gezinme sırası değişmez; doğrudan bağlantıyla açıldıysa ilk liste sırayı kurar
+        if (this.state.view !== 'detail' || !this.state.navIds.length) patch.navIds = records.map(x => x.id);
+        this.setState(patch);
+      })
       .catch(this.fail);
   };
 
-  update = (patch) => { this.setState(patch); this.loadList(patch); };
+  // Filtre değişince adres çubuğu (filtre sorgusu) güncellenir; geçmişe yeni giriş eklenmez
+  listUrl = (st = this.state) => {
+    const p = new URLSearchParams();
+    Object.keys(URL_FILTER_KEYS).forEach(k => { const v = st.filters[k]; if (v && v !== 'all') p.set(URL_FILTER_KEYS[k], v); });
+    if (st.activeMetric) p.set('metric', METRIC_PARAM[st.activeMetric]);
+    const qs = p.toString();
+    return (location.pathname === '/admin' ? '/' : location.pathname) + (qs ? '?' + qs : '');
+  };
+  update = (patch) => {
+    this.setState(patch); this.loadList(patch);
+    try { history.replaceState(null, '', this.listUrl(Object.assign({}, this.state, patch))); } catch (e) { /* adres güncellenemezse sorun değil */ }
+  };
 
   // ------------------------------------------------------------------ gezinme ve filtreler
-  goToList = () => { if (location.pathname === '/admin') history.pushState(null, '', '/'); this.setState({ view: 'list', unitModalOpen: false, contentModalOpen: false, detail: null }); this.loadList(); this.loadStats(); };
-  openDetail = (id) => {
-    this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, contentModalOpen: false, detail: null });
-    api('/regulations/' + id).then(r => this.setState({ detail: toRecord(r.data), detailEtag: r.etag })).catch(this.fail);
+  showList = (push, over = {}) => {
+    if (push) {
+      const url = this.listUrl();
+      if (location.pathname + location.search + location.hash !== url) history.pushState(null, '', url);
+    }
+    this.setState({ view: 'list', unitModalOpen: false, contentModalOpen: false, detail: null });
+    this.loadList(over); this.loadStats();
+  };
+  goToList = () => this.showList(true);
+  // mode: 'push' (listeden açılış: Geri düğmesi listeye döner), 'replace' (önceki/sonraki: geçmiş şişmez), 'none' (adres zaten doğru)
+  openDetail = (id, mode = 'push') => {
+    if (mode !== 'none') {
+      const url = this.listUrl() + '#kayit=' + id;
+      if (mode === 'replace') history.replaceState(null, '', url); else history.pushState(null, '', url);
+    }
+    // açılan kayıt listede "okundu" olur (sunucuya /views ile yazılır)
+    const records = this.state.records.map(r => r.id === id && !r.viewed ? Object.assign({}, r, { viewed: true }) : r);
+    this.setState({ view: 'detail', selectedId: id, detailTab: 'ozet', unitModalOpen: false, contentModalOpen: false, detail: null, records });
+    api('/regulations/' + id).then(r => { if (this.state.selectedId === id) this.setState({ detail: toRecord(r.data), detailEtag: r.etag }); }).catch(this.fail);
     api('/regulations/' + id + '/views', { method: 'POST' }).catch(() => {});
+  };
+  stepRecord = (delta) => {
+    const { navIds, selectedId, busy } = this.state;
+    const next = navIds[navIds.indexOf(selectedId) + delta];
+    if (busy || navIds.indexOf(selectedId) < 0 || next === undefined) return;
+    this.openDetail(next, 'replace');
+  };
+  goPrevRecord = () => this.stepRecord(-1);
+  goNextRecord = () => this.stepRecord(1);
+
+  // Kullanıcı adı: denetim izine yazılır; değişince "okunmamış" durumu yeni ada göre yeniden hesaplanır
+  changeUser = () => {
+    const current = storedUser() || (this.state.me && this.state.me.name) || '';
+    const name = window.prompt('Adınız (kararlar ve denetim izinde bu ad görünür):', current);
+    if (name === null) return;
+    storeUser(name.trim());
+    this.loadMeta(); this.loadList();
+    this.showToast(name.trim() ? 'Adınız güncellendi.' : 'Varsayılan ad kullanılacak.');
   };
   setTabOzet = () => this.setState({ detailTab: 'ozet' });
   setTabAudit = () => this.setState({ detailTab: 'audit' });
@@ -976,7 +1224,10 @@ class Component extends DCLogic {
     const filters = Object.assign({}, this.state.filters, { search: e.target.value });
     this.setState({ filters, page: 1 });
     clearTimeout(this._searchTimer);
-    this._searchTimer = setTimeout(() => this.loadList({ filters, page: 1 }), 300);
+    this._searchTimer = setTimeout(() => {
+      this.loadList({ filters, page: 1 });
+      try { history.replaceState(null, '', this.listUrl(Object.assign({}, this.state, { filters }))); } catch (e) { /* önemsiz */ }
+    }, 300);
   };
   setFilterSource = (e) => this.setFilter('source', e.target.value);
   setFilterSeverity = (e) => this.setFilter('severity', e.target.value);
@@ -1021,6 +1272,7 @@ class Component extends DCLogic {
         this.showToast(r.data.via === 'crawler'
           ? `${src.name}: tarama talebi crawler'a iletildi; kaynak meşgul değilse kısa süre içinde başlar.`
           : `${src.name}: tarama başlatıldı.`);
+        if (this.state.view === 'admin') this.loadScans();
         setTimeout(() => { this.setSourceRunning(src.code, false); this.loadMeta(); }, RUN_COOLDOWN_MS);
       })
       .catch(e => { this.setSourceRunning(src.code, false); this.fail(e); });
@@ -1038,6 +1290,7 @@ class Component extends DCLogic {
     this.loadAdminSettings();
     this.loadAlerts();
     this.loadMetrics();
+    this.loadScans();
   };
   loadAdminSettings = () => api('/admin/settings?detail=true').then(r => {
     const draft = {};
@@ -1075,13 +1328,48 @@ class Component extends DCLogic {
   };
   loadMetrics = () => api('/admin/metrics').then(r => this.setState({ metrics: r.data })).catch(this.fail);
 
+  // GET /admin/scans: etkin taramalar, crawler kuyruğu, tarama geçmişi ve arka plan işleri. Bir şey sürerken
+  // SCAN_REFRESH_BUSY_MS'de bir, değilse SCAN_REFRESH_IDLE_MS'de bir yenilenir; yalnız Yönetim açıkken ve sekme görünürken.
+  scanKeys = (s) => new Set([].concat(
+    s.active.map(a => 'a:' + (a.id == null ? a.source : a.id)), s.queued.map(q => 'q:' + q.id), s.jobs.active.map(j => 'j:' + j.id)));
+  loadScans = (filter) => {
+    const f = filter && filter.source !== undefined ? filter : this.state.scanFilter;
+    const q = new URLSearchParams();
+    if (f.source) q.set('source', f.source);
+    if (f.status) q.set('status', f.status);
+    const before = this.state.scans;
+    return api('/admin/scans' + (q.toString() ? '?' + q.toString() : ''))
+      .then(r => {
+        if (this.state.view !== 'admin' || this.state.scanFilter !== f) return;   // sayfa/filtre değişti: eski yanıt atılır
+        this.setState({ scans: r.data, scansAt: Date.now() });
+        // bir tarama/iş bittiyse Kaynaklar tablosundaki "Son tarama" da güncellensin
+        if (before) { const now = this.scanKeys(r.data); if ([...this.scanKeys(before)].some(k => !now.has(k))) this.loadMetrics(); }
+        this.scheduleScans(r.data);
+      })
+      .catch(e => { if (!this.state.scans) this.fail(e); this.scheduleScans(this.state.scans); });
+  };
+  scheduleScans = (s) => {
+    clearTimeout(this._scansTimer);
+    if (this.state.view !== 'admin') return;
+    const busy = !!s && (s.active.length || s.queued.length || s.jobs.active.length);
+    this._scansTimer = setTimeout(() => {
+      if (document.hidden || this.state.view !== 'admin') this.scheduleScans(this.state.scans); else this.loadScans();
+    }, busy ? SCAN_REFRESH_BUSY_MS : SCAN_REFRESH_IDLE_MS);
+  };
+  setScanFilter = (patch) => {
+    const f = Object.assign({}, this.state.scanFilter, patch);
+    this.setState({ scanFilter: f });
+    this.loadScans(f);
+  };
+  toggleScan = (id) => this.setState({ scanExpanded: Object.assign({}, this.state.scanExpanded, { [id]: !this.state.scanExpanded[id] }) });
+
   setAdminField = (key, value) => this.setState({ adminForm: Object.assign({}, this.state.adminForm, { [key]: value }) });
   backfillSource = (src) => {
     const { from, to } = this.state.adminForm;
     if (!from || !to) { this.showToast('Geçmişi taramak için yukarıdan başlangıç ve bitiş tarihini seçin.'); return; }
     this.setAdminBusy('backfill:' + src.code, true);
     api('/admin/sources/' + encodeURIComponent(src.code) + '/backfill', { method: 'POST', body: { from, to } })
-      .then(r => this.showToast(`${src.name}: ${r.data.days} günlük geçmiş taraması ${r.data.via === 'crawler' ? "crawler'a iletildi" : 'başlatıldı'}.`))
+      .then(r => { this.showToast(`${src.name}: ${r.data.days} günlük geçmiş taraması ${r.data.via === 'crawler' ? "crawler'a iletildi" : 'başlatıldı'}.`); this.loadScans(); })
       .catch(this.fail)
       .then(() => this.setAdminBusy('backfill:' + src.code, false));
   };
@@ -1090,9 +1378,16 @@ class Component extends DCLogic {
     if (!rpFrom || !rpTo) { this.showToast('Yeniden işleme için tarih aralığını seçin.'); return; }
     this.setAdminBusy('reprocess', true);
     api('/admin/reprocess', { method: 'POST', body: { stage: rpStage, from: rpFrom, to: rpTo, source: rpSource || null } })
-      .then(() => this.showToast(`Yeniden işleme kuyruğa alındı (${REPROCESS_STAGES[rpStage]}).`))
+      .then(() => { this.showToast(`Yeniden işleme kuyruğa alındı (${REPROCESS_STAGES[rpStage]}).`); this.loadScans(); })
       .catch(this.fail)
       .then(() => this.setAdminBusy('reprocess', false));
+  };
+  runRetryFailed = () => {
+    this.setAdminBusy('retryFailed', true);
+    api('/admin/retry-failed', { method: 'POST', body: {} })
+      .then(r => { this.showToast(r.data.count ? `${r.data.count} başarısız kayıt yeniden denenmek üzere kuyruğa alındı.` : 'Yeniden denenecek başarısız kayıt yok.'); this.loadScans(); })
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('retryFailed', false));
   };
   verifyAudit = () => {
     this.setAdminBusy('audit', true);
@@ -1127,7 +1422,7 @@ class Component extends DCLogic {
   writeFailed = (e) => {
     this.setState({ busy: false, confirmType: null, unitModalOpen: false, contentModalOpen: false });
     this.showToast(e.status === 409 || e.status === 412 ? e.message + ' Kayıt yenilendi.' : 'Hata: ' + e.message);
-    if (this.state.selectedId) this.openDetail(this.state.selectedId);
+    if (this.state.selectedId) this.openDetail(this.state.selectedId, 'replace');
   };
 
   doConfirm = () => {
@@ -1224,15 +1519,16 @@ class Component extends DCLogic {
         effBg: r.effectiveSoon ? 'color-mix(in oklch, var(--primary) 12%, white)' : 'transparent',
         effColor: r.effectiveSoon ? 'var(--primary)' : 'var(--muted-foreground)',
         effWeight: r.effectiveSoon ? 600 : 400,
-        openFn: () => this.openDetail(r.id) };
-  runRetryFailed = () => {
-    this.setAdminBusy('retryFailed', true);
-    api('/admin/retry-failed', { method: 'POST', body: {} })
-      .then(r => this.showToast(r.data.count ? `${r.data.count} başarısız kayıt yeniden denenmek üzere kuyruğa alındı.` : 'Yeniden denenecek başarısız kayıt yok.'))
-      .catch(this.fail)
-      .then(() => this.setAdminBusy('retryFailed', false));
-  };
+        openFn: () => this.openDetail(r.id),
+        keyFn: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.openDetail(r.id); } },
+        // okunmamış = bu kullanıcı ayrıntıyı hiç açmamış; bekleyen kayıtta vurgulanır
+        unreadDisplay: !r.viewed && r.status === 'Bekliyor' ? 'block' : 'none',
+        titleWeight: !r.viewed && r.status === 'Bekliyor' ? 600 : 500 };
     });
+
+    const { navIds, selectedId: navSelected, listLoaded } = this.state;
+    const navIdx = navIds.indexOf(navSelected);
+    const prevRecordDisabled = busy || navIdx <= 0, nextRecordDisabled = busy || navIdx < 0 || navIdx >= navIds.length - 1;
 
     const stats = { pending: apiStats.pending, criticalPending: apiStats.criticalHighPending };
     const pendingCount = apiStats.pending;
@@ -1305,7 +1601,9 @@ class Component extends DCLogic {
     const hasActiveFilters = filters.source !== 'all' || filters.severity !== 'all' || filters.status !== 'all' || filters.unit !== 'all' || filters.date !== 'all' || filters.search !== '';
 
     const confirmMeta = {
-      approve: { title: 'Kaydı onaylıyor musunuz?', body: `"${selected ? selected.title : ''}" kaydı onaylanacak ve ${selected ? selected.suggestedUnits.map(s => s.unit).join(', ') : ''} birimine yönlendirilecek.`, icon: 'check', iconBg: 'color-mix(in oklch, var(--primary) 14%, white)', iconColor: 'var(--primary)', btnBg: 'var(--primary)', btnLabel: 'Onayla' },
+      approve: { title: 'Kaydı onaylıyor musunuz?', body: `"${selected ? selected.title : ''}" kaydı onaylanacak` + (selected && selected.suggestedUnits.length
+        ? ` ve ${selected.suggestedUnits.map(s => s.unit).join(', ')} birimine yönlendirilecek.`
+        : '; birim önerisi olmadığı için hiçbir birime yönlendirilmeyecek (önce "Birim değiştir" ile birim seçebilirsiniz).'), icon: 'check', iconBg: 'color-mix(in oklch, var(--primary) 14%, white)', iconColor: 'var(--primary)', btnBg: 'var(--primary)', btnLabel: 'Onayla' },
       reject: { title: 'Kaydı reddediyor musunuz?', body: `"${selected ? selected.title : ''}" kaydı reddedilecek ve herhangi bir birime yönlendirilmeyecek.`, icon: 'x', iconBg: 'color-mix(in oklch, var(--destructive) 12%, white)', iconColor: 'var(--destructive)', btnBg: 'var(--destructive)', btnLabel: 'Reddet' }
     };
     const cm2 = confirmType ? confirmMeta[confirmType] : null;
@@ -1328,14 +1626,77 @@ class Component extends DCLogic {
       severity: ALERT_SEVERITY_LABELS[a.severity] || a.severity,
       sevColor: a.severity === 'down' ? 'var(--destructive)' : a.severity === 'delayed' ? 'color-mix(in oklch, var(--warning) 55%, black)' : 'var(--muted-foreground)',
       when: a.resolvedAt ? `${fmtDateTime(a.openedAt)} → ${fmtDateTime(a.resolvedAt)}` : `${fmtDateTime(a.openedAt)} · son: ${fmtDateTime(a.lastSeenAt)}` }));
+    // ---- taramalar ve işler (GET /admin/scans)
+    const { scans, scansAt, scanFilter, scanExpanded } = this.state;
+    const sc = scans || EMPTY_SCANS;
+    const drift = scansAt ? Math.round((Date.now() - scansAt) / 1000) : 0;   // yanıttan beri geçen süre: sayaçlar yenilemeler arasında da ilerler
+    const dur = (sec, live) => sec == null ? '—' : fmtDuration(live ? sec + drift : sec);
+    const GREEN = 'color-mix(in oklch, var(--success) 45%, black)', AMBER = 'color-mix(in oklch, var(--warning) 55%, black)';
+    const busySources = new Set(sc.active.map(a => a.source).concat(sc.queued.map(q => q.source)));
+    const activeScanRows = sc.active.map(a => ({
+      name: a.sourceName, requests: a.requests == null ? '—' : String(a.requests),
+      kind: a.pendingIngest ? "Crawler'da çalışıyor" : a.backfillDay ? `Geçmiş tarama · gün ${a.backfillDay}` : 'Tarama',
+      elapsed: a.pendingIngest ? 'kayıt aktarımı bekleniyor' : dur(a.elapsedSec, true) }));
+    const reqKind = (q) => q.kind === 'backfill' ? `Geçmiş tarama ${(q.params || {}).date_from || ''} – ${(q.params || {}).date_to || ''}` : 'Şimdi tara';
+    const queuedRows = sc.queued.map(q => ({
+      kind: reqKind(q), name: q.sourceName, by: q.requestedBy || '—', wait: dur(q.waitSec, q.status === 'pending'),
+      status: q.status === 'running' ? `${REQUEST_STATUS_LABELS.running}${q.claimedBy ? ': ' + q.claimedBy : ''}` : REQUEST_STATUS_LABELS[q.status] || q.status }));
+    const recentRequestRows = sc.recentRequests.map(q => ({
+      kind: reqKind(q), name: q.sourceName, by: q.requestedBy || '—', wait: dur(q.waitSec), color: q.status === 'failed' ? 'var(--destructive)' : GREEN,
+      status: `${REQUEST_STATUS_LABELS[q.status] || q.status} · ${fmtDateTime(q.finishedAt)}`, note: q.error || '' }));
+    const scanDetail = (r) => {
+      const lines = r.errors.map(e => '• ' + e);
+      if (r.errorCount > r.errors.length) lines.push(`… ve ${r.errorCount - r.errors.length} hata daha`);
+      r.channels.forEach(c => lines.push(`${c.name}: ${c.items} öğe, ${c.new} yeni` + (c.changed ? `, ${c.changed} değişen` : '')
+        + (c.error ? ` · HATA: ${c.error}` : '') + (c.warnings ? ` · ${c.warnings} uyarı` : '') + (c.stopped ? ' · durduruldu' : '') + (c.incomplete ? ' · liste eksik' : '')));
+      return lines.length ? lines.join('\n') : 'Ayrıntı yok.';
+    };
+    const recentScanRows = sc.recent.map(r => ({
+      name: r.sourceName, toggleFn: () => this.toggleScan(r.id), open: !!scanExpanded[r.id], detailText: scanDetail(r),
+      statusText: `${RUN_STATUS_LABELS[r.status] || r.status} · ${fmtDateTime(r.startedAt)}` + (r.backfillDay ? ` (gün ${r.backfillDay})` : ''),
+      color: r.status === 'success' ? GREEN : r.status === 'failed' ? 'var(--destructive)' : r.status === 'partial' ? AMBER : 'var(--foreground)',
+      durationText: dur(r.durationSec), requestsText: String(r.requests), newText: `${r.itemsNew} / ${r.itemsListed}`,
+      problemText: [r.errorCount ? `${r.errorCount} hata` : '', r.structureAlert ? 'yapı uyarısı' : ''].filter(Boolean).join(' · ') || '—',
+      problemColor: r.errorCount ? 'var(--destructive)' : r.structureAlert ? AMBER : 'var(--muted-foreground)' }));
+    const jobParams = (j) => {
+      const p = j.params || {};
+      if (j.kind === 'backfill') return `${j.source || ''} · ${p.from} – ${p.to}`;
+      if (j.kind === 'reprocess') return `${REPROCESS_STAGES[p.stage] ? REPROCESS_STAGES[p.stage].split(' (')[0] : p.stage} · ${p.from} – ${p.to}` + (p.source ? ` · ${p.source}` : '');
+      if (j.kind === 'retry_failed') return [p.count ? `${p.count} kayıt` : '', p.stage || '', p.source || ''].filter(Boolean).join(' · ') || 'tümü';
+      if (j.kind === 'regenerate') return `Kayıt ${p.regulationId}`;
+      return j.source || '';
+    };
+    const jobColor = { success: GREEN, failed: 'var(--destructive)', interrupted: AMBER, skipped: 'var(--muted-foreground)' };
+    const jobRows = sc.jobs.active.concat(sc.jobs.recent).map(j => {
+      const live = j.status === 'queued' || j.status === 'running', res = j.result ? JSON.stringify(j.result) : '';
+      const detail = j.error || (res.length > 160 ? res.slice(0, 160) + '…' : res);
+      return { kind: JOB_KIND_LABELS[j.kind] || j.kind, params: jobParams(j), status: JOB_STATUS_LABELS[j.status] || j.status,
+        color: jobColor[j.status] || 'var(--foreground)', by: j.requestedBy || '—', when: fmtDateTime(j.startedAt || j.createdAt),
+        time: live ? dur(j.elapsedSec, true) : dur(j.durationSec), detail, hasDetail: !!detail,
+        detailColor: j.status === 'failed' || j.status === 'interrupted' ? 'var(--destructive)' : 'var(--muted-foreground)' };
+    });
+    const cr = sc.crawler;
+    const crawlerText = !scans ? '' : !cr ? 'Yerel kurulum' : cr.error ? 'Crawler durumu okunamadı' : !cr.heartbeatAt ? 'Crawler sinyali yok'
+      : `Crawler: ${cr.hosts[0] ? cr.hosts[0].host : '—'} · sinyal ${fmtDuration(Math.max(0, Math.round((Date.now() - Date.parse(cr.heartbeatAt)) / 1000)))} önce${cr.stale ? ' (bayat)' : ''}`;
+    const scanStatusTabs = SCAN_STATUS_TABS.map(([v, label]) => ({ label, fn: () => this.setScanFilter({ status: v }),
+      bg: tabStyle(scanFilter.status === v).bg, color: tabStyle(scanFilter.status === v).color }));
+    const scanVals = {
+      crawlerText, crawlerColor: cr && (cr.error || cr.stale || !cr.heartbeatAt) ? 'var(--destructive)' : 'var(--muted-foreground)',
+      scansUpdatedText: scansAt ? 'son güncelleme ' + new Date(scansAt).toLocaleTimeString('tr-TR') : 'yükleniyor…',
+      activeScanRows, noActiveScans: !!scans && activeScanRows.length === 0, activeEmptyText: 'Şu anda süren tarama yok.',
+      showQueue: !!cr, queuedRows, noQueued: queuedRows.length === 0, recentRequestRows, hasRecentRequests: recentRequestRows.length > 0,
+      scanSource: scanFilter.source, setScanSource: (e) => this.setScanFilter({ source: e.target.value }), scanStatusTabs,
+      recentScanRows, noRecentScans: !!scans && recentScanRows.length === 0,
+      recentEmptyText: scanFilter.source || scanFilter.status ? 'Bu filtreyle tarama kaydı yok.' : 'Henüz tarama kaydı yok.',
+      jobRows, noJobs: !!scans && jobRows.length === 0 };
     const metricRows = ((metrics && metrics.sources) || []).map(s => {
-      const run = s.lastRun, running = !!runningSources[s.code], bf = !!adminBusy['backfill:' + s.code];
+      const run = s.lastRun, scanning = busySources.has(s.code), running = !!runningSources[s.code] || scanning, bf = !!adminBusy['backfill:' + s.code];
       return { code: s.code, name: s.name,
         runText: run ? `${RUN_STATUS_LABELS[run.status] || run.status} · ${fmtDateTime(run.startedAt)}` : 'Henüz tarama yok',
         runColor: !run ? 'var(--muted-foreground)' : run.status === 'success' ? 'color-mix(in oklch, var(--success) 45%, black)' : run.status === 'failed' ? 'var(--destructive)' : 'var(--foreground)',
         durationText: run ? fmtDuration(run.durationSec) : '—', requestsText: run ? String(run.requests) : '—',
         newText: run ? `${run.itemsNew} / ${run.itemsListed}` : '—', nextDueText: s.nextDue ? fmtDateTime(s.nextDue) : '—',
-        runFn: () => this.runSource(s), runDisabled: running, runLabel: running ? 'İstendi' : 'Şimdi tara', runOpacity: running ? 0.5 : 1,
+        runFn: () => this.runSource(s), runDisabled: running, runLabel: scanning ? 'Taranıyor' : running ? 'İstendi' : 'Şimdi tara', runOpacity: running ? 0.5 : 1,
         backfillFn: () => this.backfillSource(s), backfillDisabled: bf, backfillOpacity: bf ? 0.5 : 1 };
     });
     const llm = metrics && metrics.llm;
@@ -1348,7 +1709,7 @@ class Component extends DCLogic {
       settingsSaveDisabled: !!adminBusy.settings, settingsSaveOpacity: adminBusy.settings ? 0.5 : 1,
       alertTabs, alertRows, hasAlerts: alertRows.length > 0, noAlerts: alertRows.length === 0,
       alertEmptyText: alertStatus === 'open' ? 'Açık alarm yok.' : 'Alarm kaydı yok.',
-      metricRows, hasMetrics: metricRows.length > 0,
+      metricRows, hasMetrics: metricRows.length > 0, ...scanVals,
       llmP95: llm ? fmtMs(llm.p95Ms) : '—', llmP50: llm ? fmtMs(llm.p50Ms) : '—',
       llmCalls: llm ? `${llm.calls} çağrı, ${llm.failed} hatalı (son ${llm.windowHours} sa)` : '',
       pendingIngest: pending == null ? '—' : String(pending),
@@ -1360,6 +1721,7 @@ class Component extends DCLogic {
       setRpTo: (e) => this.setAdminField('rpTo', e.target.value), setRpStage: (e) => this.setAdminField('rpStage', e.target.value),
       stageOptions: Object.keys(REPROCESS_STAGES).map(k => ({ value: k, label: REPROCESS_STAGES[k] })),
       runReprocess: this.runReprocess, reprocessDisabled: !!adminBusy.reprocess, reprocessOpacity: adminBusy.reprocess ? 0.5 : 1,
+      runRetryFailed: this.runRetryFailed, retryFailedDisabled: !!adminBusy.retryFailed, retryFailedOpacity: adminBusy.retryFailed ? 0.5 : 1,
       verifyAudit: this.verifyAudit, auditDisabled: !!adminBusy.audit, auditOpacity: adminBusy.audit ? 0.5 : 1,
       hasAuditResult: !!auditResult,
       auditOk: !!auditResult && auditResult.ok,
@@ -1370,7 +1732,11 @@ class Component extends DCLogic {
       filters, unitOptions: units, sourceOptions: sources, hasActiveFilters,
       setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,
       setFilterStatus: this.setFilterStatus, setFilterUnit: this.setFilterUnit, setFilterDate: this.setFilterDate, clearFilters: this.clearFilters,
-      visibleRecords, hasResults: total > 0, noResults: total === 0,
+      visibleRecords, hasResults: total > 0, noResults: listLoaded && total === 0, isLoadingList: !listLoaded,
+      userLabel: storedUser() || (me && me.name) || 'Kullanıcı', changeUser: this.changeUser,
+      navLabel: navIdx < 0 ? '' : `Sayfada ${navIdx + 1} / ${navIds.length}`,
+      goPrevRecord: this.goPrevRecord, goNextRecord: this.goNextRecord,
+      prevRecordDisabled, nextRecordDisabled, prevRecordOpacity: prevRecordDisabled ? 0.4 : 1, nextRecordOpacity: nextRecordDisabled ? 0.4 : 1,
       resultCountLabel: rangeLabel, pageSize, setPageSize: this.setPageSize,
       totalPages, currentPage: safePage, pageNumbers,
       prevDisabled: safePage <= 1, nextDisabled: safePage >= totalPages,
@@ -1431,4 +1797,3 @@ class Component extends DCLogic {
 </script>
 </body>
 </html>
-      runRetryFailed: this.runRetryFailed, retryFailedDisabled: !!adminBusy.retryFailed, retryFailedOpacity: adminBusy.retryFailed ? 0.5 : 1,

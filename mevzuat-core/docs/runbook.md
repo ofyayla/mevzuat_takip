@@ -72,6 +72,17 @@ Yerel deneme (kurum topolojisinin küçük kopyası: crawler + mongo + api/worke
 
 - **Sağlık:** portal durum çubuğu veya `GET /api/v1/sources/health`. Beat izlemeyi 10 dakikada bir çalıştırır;
   alarmlar `mevzuat-monitor alerts` / `GET /api/v1/admin/alerts`.
+- **Taramalar ve işler:** Yönetim sayfasındaki ("/admin") **Taramalar ve işler** bölümü (`GET /api/v1/admin/scans`):
+  *Aktif taramalar* (`fetch_run` `running` + crawler sinyalindeki "çalışıyor" listesi; kaydı henüz aktarılmamış tarama
+  "kayıt aktarımı bekleniyor" görünür), *Crawler kuyruğu* (yalnız `CRAWL_MODE=remote`: Mongo `crawl_requests`
+  `pending`/`running` ve son 24 saatte biten talepler), *Son taramalar* (kaynak/durum filtreli; satıra tıklayınca hatalar ve
+  kanal ayrıntısı) ve *Arka plan işleri* (`job_run`: yeniden işleme, başarısızları yeniden deneme, özet yeniden üretme,
+  yerel backfill, yerel "şimdi tara"; CLI'dan başlatılanlar `via=cli` ile). Bir şey sürerken 10 sn'de bir yenilenir.
+  `Yarıda kaldı (interrupted)`: işin kalp atışı 10 dk'dan uzun süre gelmedi (süreç öldü) ya da iş 6 saatten uzun süre
+  kuyrukta kaldı (Celery worker kapalı). Yerel kurulumda `running` kalmış tarama kaydı, canlı bir backfill işi yoksa
+  `CELERY_TASK_TIME_LIMIT_S` + 30 dk sonra `failed (interrupted)` yapılır (izleme görevi ve bu uç nokta temizler);
+  uzak modda bu temizliği crawler kendisi yapar. Resmî Gazete backfill'inde `fetch_run.started_at` gerçek başlangıç değil
+  tarama günüdür: bu satırlarda süre gösterilmez, "(gün …)" etiketi çıkar.
 - **Kalite:** `mevzuat-process review` (tekilleştirmede belirsiz kalan çiftler),
   `GET /api/v1/evaluation/filtered-out?from&to` (YZ'nin ilgisiz bulduğu kayıtlar — örneklem kontrolü).
 - **Denetim izi bütünlüğü:** haftalık `mevzuat-monitor audit-verify` (veya `GET /api/v1/admin/audit/verify`).

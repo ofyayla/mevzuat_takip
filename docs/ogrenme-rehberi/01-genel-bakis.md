@@ -129,6 +129,7 @@ kopya odur. İçerik core'dakiyle aynıdır.
 | **raw_document** | Arşivlenmiş ham belge sürümü (`role`: main / attachment / listing) | Mongo `raw_documents` / PG `raw_document` |
 | **regulation** | Tekilleştirilmiş düzenleme kaydı (portaldaki kayıt) | PG `regulation` |
 | **crawl_request** | LAN'dan crawler'a bırakılan "şimdi tara" / "backfill" talebi | Mongo `crawl_requests` |
+| **job_run** | Yönetim/CLI'dan başlatılan arka plan işi (yeniden işleme, başarısızları yeniden deneme, özet üretme, yerel backfill / "şimdi tara") ve durumu; Yönetim sayfasında "Taramalar ve işler" bölümünde görünür | PG `job_run`, `services/jobs.py` |
 | **İK-1..8** | Kapsam formundaki iş kalemleri: 1 toplama, 2 işleme/tekilleştirme, 3 tespit/önem, 4 özet, 5 birim, 6 portal, 7 izleme, 8 test/devreye alma | `backend-gelistirme-plani.md` §6 |
 | **CRAWL_MODE** | `remote`: kurum (DMZ crawler + ingest). `local`: tek kutu/geliştirme (Celery `collect` kuyruğu tarar) | `settings.py` |
 

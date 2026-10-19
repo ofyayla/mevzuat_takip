@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arşiv · Mevzuat Takip Portalı</title>
+<!-- Dış yazı tipi (Google Fonts) yok: kurum ağında dışarı çıkılmaz; Inter/JetBrains Mono yoksa sistem yazı tipine düşülür -->
+<style>
+  /* Portal (Mevzuat Takip Portali.dc.html) ile aynı tasarım belirteçleri */
+  :root {
+    --background: oklch(1 0 0); --foreground: oklch(0.145 0 0); --card: oklch(1 0 0);
+    --primary: oklch(0.511 0.096 186.391); --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0); --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+    --destructive: oklch(0.577 0.245 27.325); --success: oklch(0.62 0.13 152); --warning: oklch(0.78 0.14 75);
+    --info: oklch(0.62 0.14 240); --border: oklch(0.92 0 0);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-pill: 9999px;
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sidebar-bg: color-mix(in oklch, var(--primary) 38%, black);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-sans); background: var(--background); color: var(--foreground);
+         font-size: 15px; line-height: 1.5; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 20px; padding: 14px 32px;
+           border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background) 88%, transparent);
+           backdrop-filter: blur(12px); flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .logo { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--sidebar-bg); display: flex;
+          align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .brand b { display: block; font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .brand small { font-size: 11px; color: var(--muted-foreground); }
+  .crumb { font-size: 13px; color: var(--muted-foreground); }
+  .crumb a { color: var(--muted-foreground); text-decoration: none; } .crumb a:hover { color: var(--foreground); }
+  .grow { flex: 1; }
+  a.pill { display: flex; align-items: center; padding: 5px 12px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+           color: var(--foreground); text-decoration: none; font-size: 12.5px; white-space: nowrap; }
+  a.pill:hover { background: var(--secondary); }
+  input, select, button { font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--card);
+                          color: var(--foreground); border-radius: var(--radius-sm); padding: 7px 10px; }
+  select, button { cursor: pointer; }
+  button:hover:not(:disabled), select:hover { background: var(--secondary); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+  main { padding: 24px 32px 48px; max-width: 1560px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lead { color: var(--muted-foreground); font-size: 14px; margin: 0 0 18px; max-width: 920px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { display: flex; align-items: baseline; gap: 8px; padding: 9px 16px; border-radius: var(--radius-md); background: var(--card);
+         border: 1px solid var(--border); cursor: pointer; font-size: 14px; }
+  .tab:hover { background: var(--secondary); }
+  .tab.on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+  .tab .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tab .h { font-size: 12px; color: var(--muted-foreground); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .filters .q { flex: 1 1 280px; min-width: 200px; }
+  .filters label { font-size: 12.5px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-xs);
+          overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+       color: var(--muted-foreground); padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--muted);
+       white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: var(--foreground); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.row { cursor: pointer; } tr.row:hover td { background: var(--secondary); }
+  tr.row.open td { background: var(--secondary); border-bottom-color: transparent; }
+  tr.row:last-child td { border-bottom: none; }
+  td.title { max-width: 560px; font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.nowrap { white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+         background: var(--muted); color: var(--muted-foreground); white-space: nowrap; margin: 1px 2px 1px 0; }
+  .tag.irrelevant { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 35%, white);
+                    background: color-mix(in oklch, var(--destructive) 7%, white); }
+  .tag.baseline { color: var(--info); border-color: color-mix(in oklch, var(--info) 35%, white);
+                  background: color-mix(in oklch, var(--info) 8%, white); }
+  .muted { color: var(--muted-foreground); font-size: 12.5px; }
+  tr.detail td { padding: 0 14px 14px; background: var(--secondary); }
+  .dbox { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; font-size: 13.5px; }
+  .dbox h3 { font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground);
+             margin: 14px 0 6px; } .dbox h3:first-child { margin-top: 0; }
+  .dbox p { margin: 0; white-space: pre-wrap; }
+  .dbox ul { margin: 0; padding-left: 18px; }
+  .dbox a { color: var(--primary); word-break: break-all; }
+  .pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--border); }
+  .pager button { min-width: 34px; padding: 5px 9px; }
+  .pager button.cur { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .pager .gap { color: var(--muted-foreground); padding: 0 2px; }
+  .pager input { width: 64px; padding: 5px 8px; }
+  .empty { padding: 48px 20px; text-align: center; color: var(--muted-foreground); font-size: 14px; }
+  .warn { border: 1px solid color-mix(in oklch, var(--warning) 60%, white); background: color-mix(in oklch, var(--warning) 14%, white);
+          border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; margin-bottom: 14px; }
+  .err { border-color: color-mix(in oklch, var(--destructive) 40%, white); background: color-mix(in oklch, var(--destructive) 8%, white); }
+  .loading { opacity: 0.55; transition: opacity 0.15s; }
+  @media (max-width: 760px) {
+    header, main { padding-left: 16px; padding-right: 16px; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><div class="logo">M</div><div><b>Mevzuat Takip Portalı</b><small>Mevzuat ve Uyum Başkanlığı</small></div></a>
+  <div class="crumb"><a href="./">Kayıtlar</a> › Arşiv</div>
+  <div class="grow"></div>
+  <a class="pill" href="./surec" title="İşleme hattının durumları ve canlı sayıları">Süreç haritası</a>
+</header>
+<main>
+  <h1>Arşiv</h1>
+  <p class="lead">Portal listesinde görünmeyen kayıtlar: yapay zekânın <b>bankayla ilgisiz</b> bulduğu düzenlemeler ve kanalın
+    <b>ilk taramasında</b> sitede zaten duran (analiz edilmemiş) içerik. Yanlış elenen bir kayıt olup olmadığını buradan
+    kontrol edebilirsiniz. Kayıt sayısı büyük olabileceği için liste sayfa sayfa yüklenir; aramayı, tarih ve kaynak süzgeçleriyle daraltın.</p>
+
+  <div id="alerts"></div>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="filters">
+    <input class="q" id="q" type="search" placeholder="Başlık veya kurum ara…" aria-label="Ara" autocomplete="off">
+    <select id="source" aria-label="Kaynak"><option value="">Tüm kaynaklar</option></select>
+    <label>Yayın: <input type="date" id="from" aria-label="Başlangıç tarihi"> – <input type="date" id="to" aria-label="Bitiş tarihi"></label>
+    <select id="sort" aria-label="Sıralama">
+      <option value="publish_date:desc">Yayın tarihi (yeni → eski)</option>
+      <option value="publish_date:asc">Yayın tarihi (eski → yeni)</option>
+      <option value="detected_at:desc">Tespit zamanı (yeni → eski)</option>
+      <option value="title:asc">Başlık (A → Z)</option>
+      <option value="issuer:asc">Kurum (A → Z)</option>
+      <option value="score:asc" id="optScore">İlgililik skoru (düşük → yüksek)</option>
+      <option value="score:desc" id="optScore2">İlgililik skoru (yüksek → düşük)</option>
+    </select>
+    <select id="size" aria-label="Sayfa boyutu">
+      <option value="25">25 / sayfa</option><option value="50">50 / sayfa</option><option value="100">100 / sayfa</option>
+    </select>
+    <button id="clear" title="Tüm süzgeçleri temizle">Temizle</button>
+  </div>
+
+  <div class="card" id="card">
+    <table>
+      <thead><tr>
+        <th class="sortable" data-sort="title">Başlık</th>
+        <th class="sortable hide-sm" data-sort="issuer">Kurum</th>
+        <th class="hide-sm">Kaynak</th>
+        <th class="sortable num" data-sort="publish_date">Yayın</th>
+        <th class="num hide-sm" id="thScore">Skor</th>
+        <th>Tür</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden></div>
+    <div class="pager" id="pager"></div>
+  </div>
+</main>
+<script>
+// Veri: GET /api/v1/archive/regulations (+ /{id}). Portal ile aynı bağlantı kuralı: window.MTP_API_BASE.
+// Durum adres çubuğundadır (?tur=ilgisiz&q=…&sayfa=3): bağlantı paylaşılabilir, geri/ileri düğmeleri çalışır.
+const API_BASE = window.MTP_API_BASE || '/api/v1';
+const NUM = new Intl.NumberFormat('tr-TR');
+const DATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+const DATETIME = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const KINDS = [
+  { key: 'irrelevant', param: 'ilgisiz', label: 'İlgisiz', hint: 'YZ bankayla ilgisiz buldu', tag: 'İlgisiz' },
+  { key: 'baseline', param: 'ilk-tarama', label: 'İlk tarama', hint: 'Analiz edilmedi', tag: 'İlk tarama' },
+  { key: 'all', param: 'tumu', label: 'Tümü', hint: '', tag: '' },
+];
+const MAX_PAGES = 2000;   // sunucudaki sınırla aynı
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => iso ? DATE.format(new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''))) : '—';
+
+let state = { kind: 'irrelevant', q: '', source: '', from: '', to: '', sort: 'publish_date', dir: 'desc', size: 25, page: 1 };
+let counts = { irrelevant: null, baseline: null, all: null }, openId = null, reqSeq = 0, qTimer = null;
+
+async function api(path) {
+  const res = await fetch(API_BASE + path, { headers: { Accept: 'application/json' } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
+  }
+  return res.json();
+}
+
+// ---- adres çubuğu ↔ durum
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const kind = KINDS.find(k => k.param === p.get('tur'));
+  const [sort, dir] = (p.get('sirala') || 'publish_date:desc').split(':');
+  state = { kind: kind ? kind.key : 'irrelevant', q: p.get('q') || '', source: p.get('kaynak') || '', from: p.get('bas') || '',
+            to: p.get('bit') || '', sort, dir: dir === 'asc' ? 'asc' : 'desc',
+            size: [25, 50, 100].includes(+p.get('boyut')) ? +p.get('boyut') : 25, page: Math.max(1, +p.get('sayfa') || 1) };
+}
+function writeUrl(push) {
+  const p = new URLSearchParams();
+  p.set('tur', KINDS.find(k => k.key === state.kind).param);
+  if (state.q) p.set('q', state.q);
+  if (state.source) p.set('kaynak', state.source);
+  if (state.from) p.set('bas', state.from);
+  if (state.to) p.set('bit', state.to);
+  if (state.sort !== 'publish_date' || state.dir !== 'desc') p.set('sirala', state.sort + ':' + state.dir);
+  if (state.size !== 25) p.set('boyut', state.size);
+  if (state.page > 1) p.set('sayfa', state.page);
+  const url = location.pathname + '?' + p;
+  try { push ? history.pushState(null, '', url) : history.replaceState(null, '', url); } catch (_) {}
+}
+function syncControls() {
+  $('q').value = state.q; $('source').value = state.source; $('from').value = state.from; $('to').value = state.to;
+  $('sort').value = state.sort + ':' + state.dir; $('size').value = state.size;
+  const noScore = state.kind === 'baseline';   // ilk tarama kayıtlarının skoru yoktur
+  $('optScore').hidden = $('optScore2').hidden = $('thScore').hidden = noScore;
+  document.querySelectorAll('#rows td.score').forEach(td => td.hidden = noScore);
+}
+
+// ---- yükleme
+function query() {
+  const p = new URLSearchParams({ kind: state.kind, page: state.page, page_size: state.size, sort: state.sort, direction: state.dir });
+  if (state.q.trim()) p.set('q', state.q.trim());
+  if (state.source) p.set('source', state.source);
+  if (state.from) p.set('from', state.from);
+  if (state.to) p.set('to', state.to);
+  return p;
+}
+
+async function load() {
+  const seq = ++reqSeq;   // eski yanıt yenisinin üzerine yazmasın (hızlı yazma / sayfa değiştirme)
+  $('card').classList.add('loading');
+  try {
+    const res = await api('/archive/regulations?' + query());
+    if (seq !== reqSeq) return;
+    $('alerts').innerHTML = '';
+    counts = res.counts;
+    if (res.pages && state.page > res.pages) { state.page = res.pages; writeUrl(false); return load(); }   // süzgeç sonrası sayfa dışı kaldı
+    render(res);
+  } catch (e) {
+    if (seq !== reqSeq) return;
+    $('alerts').innerHTML = `<div class="warn err">Kayıtlar alınamadı: ${esc(e.message)}</div>`;
+  } finally {
+    if (seq === reqSeq) $('card').classList.remove('loading');
+  }
+}
+
+function renderTabs() {
+  $('tabs').innerHTML = KINDS.map(k => `<div class="tab${state.kind === k.key ? ' on' : ''}" role="tab" tabindex="0" data-kind="${k.key}"
+      aria-selected="${state.kind === k.key}"><span>${k.label}</span><span class="n">${counts[k.key] == null ? '…' : NUM.format(counts[k.key])}</span>
+      ${k.hint ? `<span class="h hide-sm">${esc(k.hint)}</span>` : ''}</div>`).join('');
+  document.querySelectorAll('.tab').forEach(t => {
+    const go = () => { state.kind = t.dataset.kind; state.page = 1; openId = null; changed(true); };
+    t.addEventListener('click', go);
+    t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
+  });
+}
+
+function render(res) {
+  renderTabs();
+  syncControls();
+  const showScore = state.kind !== 'baseline';
+  $('rows').innerHTML = res.items.map(it => {
+    const k = KINDS.find(x => x.key === it.kind) || { tag: it.kind };
+    const score = it.relevanceScore == null ? '—' : it.relevanceScore.toFixed(2);
+    return `<tr class="row${openId === it.id ? ' open' : ''}" data-id="${it.id}" tabindex="0" aria-expanded="${openId === it.id}">
+      <td class="title">${esc(it.title)}</td>
+      <td class="hide-sm">${esc(it.issuer || '—')}</td>
+      <td class="hide-sm">${it.sources.map(s => `<span class="tag">${esc(s)}</span>`).join('') || '—'}</td>
+      <td class="num">${fmtDate(it.publishDate)}</td>
+      <td class="num hide-sm score"${showScore ? '' : ' hidden'}>${score}</td>
+      <td class="nowrap"><span class="tag ${esc(it.kind)}">${esc(k.tag)}</span></td></tr>
+      ${openId === it.id ? `<tr class="detail" data-for="${it.id}"><td colspan="6"><div class="dbox">Yükleniyor…</div></td></tr>` : ''}`;
+  }).join('');
+  const empty = $('empty');
+  empty.hidden = res.items.length > 0;
+  if (!res.items.length) empty.textContent = (state.q || state.source || state.from || state.to)
+    ? 'Bu süzgeçlerle eşleşen kayıt yok.' : 'Bu türde kayıt yok.';
+  document.querySelectorAll('tr.row').forEach(tr => {
+    const toggle = () => { const id = +tr.dataset.id; openId = openId === id ? null : id; render(res); };
+    tr.addEventListener('click', toggle);
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
+  });
+  renderPager(res);
+  if (openId != null && res.items.some(i => i.id === openId)) loadDetail(openId);
+  else openId = null;
+}
+
+async function loadDetail(id) {
+  const box = () => { const tr = document.querySelector(`tr.detail[data-for="${id}"] .dbox`); return openId === id ? tr : null; };
+  try {
+    const d = await api('/archive/regulations/' + id);
+    const b = box(); if (!b) return;
+    const docs = (d.documents || []).map(x => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title || x.url)}</a>
+        <span class="muted"> · ${esc(x.source)}${x.role === 'attachment' ? ' · ek' : ''}${x.publishedAt ? ' · ' + fmtDate(x.publishedAt) : ''}</span></li>`).join('');
+    const criteria = (d.criteria || []).map(c => `<li>${esc(typeof c === 'string' ? c : (c.name || c.criterion || JSON.stringify(c)))}${c.met === false ? ' <span class="muted">(karşılanmadı)</span>' : ''}</li>`).join('');
+    b.innerHTML = `${d.note ? `<h3>Durum</h3><p>${esc(d.note)}</p>` : ''}
+      ${d.kind === 'irrelevant' ? `<h3>YZ gerekçesi${d.relevanceScore != null ? ' · skor ' + d.relevanceScore.toFixed(2) : ''}${d.uncertain ? ' · belirsiz' : ''}</h3>
+        <p>${esc(d.rationale || 'Gerekçe kaydı yok.')}</p>` : ''}
+      ${criteria ? `<h3>Değerlendirilen ölçütler</h3><ul>${criteria}</ul>` : ''}
+      <h3>Kaynak belgeler</h3>${docs ? `<ul>${docs}</ul>` : '<p class="muted">Bağlı belge yok.</p>'}
+      <h3>Kayıt</h3><p class="muted">#${d.id} · tespit ${d.detectedAt ? DATETIME.format(new Date(d.detectedAt)) : '—'}${d.classifiedAt ? ' · sınıflandırma ' + DATETIME.format(new Date(d.classifiedAt)) : ''}</p>`;
+  } catch (e) {
+    const b = box(); if (b) b.innerHTML = `<span class="muted" style="color:var(--destructive)">${esc(e.message)}</span>`;
+  }
+}
+
+// ---- sayfalama: 1 … 4 5 [6] 7 8 … 40 + "git"
+function pageList(cur, last) {
+  const set = new Set([1, last, cur, cur - 1, cur + 1, cur - 2, cur + 2].filter(p => p >= 1 && p <= last));
+  const out = []; let prev = 0;
+  [...set].sort((a, b) => a - b).forEach(p => { if (p - prev > 1) out.push('…'); out.push(p); prev = p; });
+  return out;
+}
+function renderPager(res) {
+  const pager = $('pager');
+  if (!res.total) { pager.innerHTML = ''; return; }
+  const last = Math.min(res.pages, MAX_PAGES), cur = res.page;
+  const from = (cur - 1) * res.pageSize + 1, to = Math.min(res.total, cur * res.pageSize);
+  pager.innerHTML = `<span class="muted">${NUM.format(from)}–${NUM.format(to)} / ${NUM.format(res.total)} kayıt</span><span class="grow" style="flex:1"></span>
+    <button data-p="${cur - 1}" ${cur <= 1 ? 'disabled' : ''} aria-label="Önceki sayfa">‹</button>
+    ${pageList(cur, last).map(p => p === '…' ? '<span class="gap">…</span>' : `<button data-p="${p}" class="${p === cur ? 'cur' : ''}" ${p === cur ? 'aria-current="page"' : ''}>${NUM.format(p)}</button>`).join('')}
+    <button data-p="${cur + 1}" ${cur >= last ? 'disabled' : ''} aria-label="Sonraki sayfa">›</button>
+    ${last > 7 ? `<span class="muted" style="margin-left:8px">Sayfaya git</span><input type="number" id="goto" min="1" max="${last}" aria-label="Sayfa numarası">` : ''}
+    ${res.pages > MAX_PAGES ? `<span class="muted">Yalnızca ilk ${NUM.format(MAX_PAGES)} sayfa gezilebilir; aramayı daraltın.</span>` : ''}`;
+  pager.querySelectorAll('button[data-p]').forEach(b => b.addEventListener('click', () => gotoPage(+b.dataset.p)));
+  const g = $('goto');
+  if (g) g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && g.value) gotoPage(Math.min(last, Math.max(1, +g.value))); });
+}
+function gotoPage(p) {
+  state.page = p; openId = null; changed(true);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function changed(push) { writeUrl(push); syncControls(); load(); }
+
+// ---- denetimler
+function resetPage() { state.page = 1; openId = null; }
+$('q').addEventListener('input', () => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => { state.q = $('q').value; resetPage(); changed(false); }, 300);   // her tuşta sorgu atılmaz
+});
+$('source').addEventListener('change', () => { state.source = $('source').value; resetPage(); changed(true); });
+$('from').addEventListener('change', () => { state.from = $('from').value; resetPage(); changed(true); });
+$('to').addEventListener('change', () => { state.to = $('to').value; resetPage(); changed(true); });
+$('sort').addEventListener('change', () => { [state.sort, state.dir] = $('sort').value.split(':'); resetPage(); changed(true); });
+$('size').addEventListener('change', () => { state.size = +$('size').value; resetPage(); changed(true); });
+$('clear').addEventListener('click', () => { state = { ...state, q: '', source: '', from: '', to: '', sort: 'publish_date', dir: 'desc', page: 1 }; openId = null; changed(true); });
+document.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => {
+  const s = th.dataset.sort;
+  state.dir = state.sort === s ? (state.dir === 'asc' ? 'desc' : 'asc') : (s === 'publish_date' ? 'desc' : 'asc');
+  state.sort = s; resetPage(); changed(true);
+}));
+window.addEventListener('popstate', () => { readUrl(); openId = null; syncControls(); load(); });
+
+async function init() {
+  readUrl();
+  if (state.sort === 'score' && state.kind === 'baseline') { state.sort = 'publish_date'; state.dir = 'desc'; }
+  syncControls();
+  api('/sources').then(list => {
+    $('source').innerHTML = '<option value="">Tüm kaynaklar</option>' + list.map(s => `<option value="${esc(s.code)}">${esc(s.name)}</option>`).join('');
+    $('source').value = state.source;
+  }).catch(() => {});
+  renderTabs();
+  load();
+}
+init();
+</script>
+</body>
+</html>

@@ -116,7 +116,6 @@ class Regulation(Base):
     ``regulation_source_link`` ile bağlanır; YZ adımları (İK-3..5) düzenleme başına bir kez çalışır."""
 
     __tablename__ = "regulation"
-
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(Text)
     issuer: Mapped[str | None] = mapped_column(String(64), index=True)       # kurum kodu (BDDK, SPK …)
@@ -320,6 +319,30 @@ class Alert(Base):
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class JobRun(Base):
+    """Yönetimden / CLI'dan başlatılan arka plan işleri (BackgroundTasks, Celery, CLI). Yönetim sayfasındaki
+    "Taramalar ve işler" bölümü bunu gösterir. Uzak moddaki taramaların kaydı Mongo ``crawl_requests``'tir."""
+
+    __tablename__ = "job_run"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    # run | backfill | reprocess | retry_failed | regenerate
+    kind: Mapped[str] = mapped_column(String(24), index=True)
+    # queued | running | success | failed | skipped | interrupted
+    status: Mapped[str] = mapped_column(String(16), index=True, default="queued")
+    via: Mapped[str | None] = mapped_column(String(16))                  # inline | celery | cli
+    source_code: Mapped[str | None] = mapped_column(String(32), index=True)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    requested_by: Mapped[str | None] = mapped_column(String(200))
+    worker: Mapped[str | None] = mapped_column(String(100))              # ana makine:pid
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 class Outbox(Base):

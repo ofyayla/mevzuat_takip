@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app.db import Alert, make_sessionmaker
 from app.monitoring.reprocess import STAGES, backfill, local_store, reprocess
 from app.monitoring.service import evaluate, run_monitor
+from app.services.jobs import cli_job
 from app.settings import get_settings
 
 ICON = {"ok": "  ", "delayed": "! ", "down": "X "}
@@ -76,7 +77,10 @@ def cmd_backfill(args) -> int:
                                    {"date_from": args.date_from, "date_to": args.date_to}, requested_by="cli")
         print(f"DMZ crawler'a iletildi (talep {rid}); sonuç ingest ile gelir")
         return 0
-    rep = backfill(local_store(make_sessionmaker(s.database_url), s), s, args.code, d_from, d_to)
+    sf = make_sessionmaker(s.database_url)
+    with cli_job(sf, "backfill", source=args.code, params={"from": args.date_from, "to": args.date_to}) as job:
+        rep = backfill(local_store(sf, s), s, args.code, d_from, d_to)
+        job.result = {"days": rep.days, "new": rep.new, "runs": rep.runs}
     for r in rep.runs:
         print(r)
     print(f"{rep.days} gün, {rep.new} yeni öğe")
@@ -87,8 +91,12 @@ def cmd_reprocess(args) -> int:
     from app.ai.llm_client import get_llm
 
     s = get_settings()
-    out = reprocess(make_sessionmaker(s.database_url), s, args.stage, date.fromisoformat(args.date_from),
-                    date.fromisoformat(args.date_to), source=args.source, llm=get_llm(s))
+    sf = make_sessionmaker(s.database_url)
+    with cli_job(sf, "reprocess", source=args.source, params={
+            "stage": args.stage, "from": args.date_from, "to": args.date_to, "source": args.source}) as job:
+        out = reprocess(sf, s, args.stage, date.fromisoformat(args.date_from), date.fromisoformat(args.date_to),
+                        source=args.source, llm=get_llm(s))
+        job.result = out
     print(out)
     return 0
 
@@ -110,7 +118,10 @@ def cmd_retry_failed(args) -> int:
     if llm is None:
         print("LLM_PROVIDER=none — app/.env içinde LLM_PROVIDER ve LLM_API_KEY ayarlayın", file=sys.stderr)
         return 1
-    out = retry_failed(sf, s, llm=llm, stages=stages, source=args.source, ids=args.id, limit=args.limit)
+    with cli_job(sf, "retry_failed", source=args.source, params={
+            "stage": args.stage, "source": args.source, "ids": args.id, "limit": args.limit}) as job:
+        out = retry_failed(sf, s, llm=llm, stages=stages, source=args.source, ids=args.id, limit=args.limit)
+        job.result = out
     print(out)
     return 1 if out["still_failed"] or out["llm_unavailable"] else 0
 

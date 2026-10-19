@@ -157,6 +157,11 @@ Quadlet'e `HostName=mevzuat-crawler` ekleyin, uzun işlerde kilidi periyodik yen
 - **Öneri:** `ALERT_WEBHOOK_URL`'i kurum izleme sistemine bağlayın (öncelikli). Ardından 05 §4'teki sorgulardan
   bir yönetim paneli üretin (portalda admin sayfası). Kaynak başına son tarama süresi, istek sayısı, `next_due`,
   bekleyen aktarım ve LLM p95 gösterilsin. "Şimdi tara" ve backfill aynı panele düğme olarak eklensin.
+- **Durum:** Yönetim sayfasına eklendi. Üstüne **Taramalar ve işler** bölümü geldi: etkin taramalar, crawler kuyruğu,
+  tarama geçmişi ve arka plan işleri (`GET /api/v1/admin/scans`, `job_run`). Yerel kurulumda `running` kalan tarama
+  kayıtları artık `services/jobs.sweep_stale` ile kapatılır (§19'daki yerel mod boşluğu; uzak modu crawler zaten temizler).
+  **Kalan:** Resmî Gazete backfill'i `fetch_run.started_at`'a gerçek başlangıcı değil tarama gününü yazar; gerçek süre
+  için ayrı bir `scan_date` alanı (ortak runner/store ve Mongo sözleşmesi) gerekir.
 - **Durum:** Portaldaki "Yönetim" sayfası ve `GET /api/v1/admin/metrics` bunu karşılıyor (08 §8); istek sayısı dâhil.
   Prometheus ucu ve webhook bağlantısı hâlâ açık.
 

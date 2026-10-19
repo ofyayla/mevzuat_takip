@@ -22,12 +22,28 @@ def _session_factory():
 
 
 @app.task(name="app.tasks.collect.collect_source", bind=True, max_retries=0)
-def collect_source(self, code: str, channels: list[str] | None = None, max_details: int = 200) -> dict:
-    """Bir kaynağı tarar. Aynı kaynak için eşzamanlı ikinci çalıştırma kilitle engellenir."""
+def collect_source(self, code: str, channels: list[str] | None = None, max_details: int = 200,
+                   job_id: int | None = None) -> dict:
+    """Bir kaynağı tarar. Aynı kaynak için eşzamanlı ikinci çalıştırma kilitle engellenir.
+
+    ``job_id``: yönetimden başlatılan taramanın ``job_run`` kaydı (Beat'in başlattıkları izlenmez; ``fetch_run`` bırakırlar)."""
     settings = get_settings()
     if settings.crawl_mode == "remote":   # toplama DMZ crawler'da; LAN internete çıkamaz
         log.warning("%s: CRAWL_MODE=remote iken collect görevi çalışmaz (DMZ crawler'a talep bırakın)", code)
         return {"source": code, "status": "skipped"}
+    if job_id is None:
+        return _collect(settings, code, channels, max_details)
+    from app.services.jobs import track_job
+
+    with track_job(_session_factory(), job_id) as h:
+        out = _collect(settings, code, channels, max_details)
+        h.result = out
+        if out["status"] == "skipped":
+            h.skip("başka bir tarama sürüyor")
+    return out
+
+
+def _collect(settings, code: str, channels: list[str] | None, max_details: int) -> dict:
     source = load_sources(settings.sources_file).get(code)
     try:
         with source_lock(code, redis_url=settings.redis_url, lock_dir=settings.lock_dir):
