@@ -426,6 +426,52 @@ def _retry_failed_bg(sf, settings: Settings, body: "RetryFailedIn", actor: Actor
     return result
 
 
+class RebaselineIn(BaseModel):
+    cutoff: date
+
+
+@admin.get("/rebaseline")
+def admin_rebaseline_preview(session: SessionDep, settings: SettingsDep, actor: ActorDep, cutoff: date | None = None):
+    """Baseline sınırı önizlemesi: kaynak başına dönüştürülecek kayıt ve taranacak aralık. ``cutoff`` verilmezse yalnızca
+    kayıtlı sınır döner."""
+    from app.services.rebaseline import get_cutoff, plan_rebaseline
+
+    require(actor, ROLE_ADMIN)
+    if cutoff is None:
+        current = get_cutoff(session)
+        return {"current": current.isoformat() if current else None}
+    return plan_rebaseline(session, settings, cutoff)
+
+
+@admin.post("/rebaseline", status_code=202)
+def admin_rebaseline(body: RebaselineIn, session: SessionDep, background: BackgroundTasks, settings: SettingsDep,
+                     actor: ActorDep, request: Request):
+    """Sınır tarihi ve sonrasındaki BASELINE kayıtları YZ hattına alır; sınıra kadar taranmamış kaynakları tarar."""
+    from app.services.jobs import create_job, run_job
+    from app.services.rebaseline import plan_rebaseline
+
+    require(actor, ROLE_ADMIN)
+    if settings.llm_provider in ("", "none", None):
+        raise ApiError(400, "llm_required", "bu işlem için LLM yapılandırılmalı")
+    if body.cutoff > date.today():
+        raise ApiError(400, "invalid_cutoff", "sınır tarihi bugünden ileri olamaz")
+    plan = plan_rebaseline(session, settings, body.cutoff)
+    sf = request.app.state.session_factory
+    jid = create_job(session, "rebaseline", requested_by=actor.name,
+                     params={"cutoff": body.cutoff.isoformat(), "count": plan["converted"], "crawl": plan["crawl"]})
+    background.add_task(run_job, sf, jid, _rebaseline_bg, sf, settings, body, actor)
+    return {"status": "queued", "count": plan["converted"], "crawl": plan["crawl"], "jobId": jid}
+
+
+def _rebaseline_bg(sf, settings: Settings, body: "RebaselineIn", actor: Actor) -> dict:
+    from app.ai.llm_client import get_llm
+    from app.services.rebaseline import apply_rebaseline
+
+    result = apply_rebaseline(sf, settings, body.cutoff, llm=get_llm(settings), actor=actor)
+    log.info("rebaseline: %s", result)
+    return result
+
+
 class BackfillIn(BaseModel):
     date_from: date = Field(alias="from")
     date_to: date = Field(alias="to")

@@ -12,6 +12,7 @@ params:
   id_prefix: kimliğin başına eklenen önek (aynı sayıyı paylaşan ayrı kimlik uzayları için; opsiyonel)
   id_pattern: URL'den kimlik regex'i
   pagination: {param: 'page', start: 2, max_pages: 1}  — ilk sayfa urls'deki adres; ek sayfalar ?param=N
+              (geçmişi tara modunda — ctx.depth_until — en eski öğe sınır tarihine inene kadar sayfalanır)
 """
 from __future__ import annotations
 
@@ -21,6 +22,8 @@ from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import parse_tr_date
 from app.collectors.strategies._html import absolutize, clean, external_id, node_signature, parse_html
 from app.collectors.strategies._urls import expand_urls
+
+DEEP_MAX_PAGES = 30   # geçmişi tara (ctx.depth_until): adres başına ek sayfa üst sınırı
 
 
 class CssListStrategy:
@@ -33,25 +36,39 @@ class CssListStrategy:
         seen: set[str] = set()
         signatures: list[str] = []
         pages = 0
+        deep = ctx.depth_until is not None and bool(pag)   # geçmişi tara: sınır tarihine inene kadar sayfala
+        incomplete = False
+        warnings: list[str] = []
         for base in expand_urls(p["urls"], ctx.now):
+            extra_pages = max(pag.get("max_pages", 0), DEEP_MAX_PAGES) if deep else pag.get("max_pages", 0)
             page_urls = [(base, None)]
             if pag:
                 start = pag.get("start", 2)
-                page_urls += [(base, {pag["param"]: n}) for n in range(start, start + pag.get("max_pages", 0))]
-            for url, params in page_urls:
+                page_urls += [(base, {pag["param"]: n}) for n in range(start, start + extra_pages)]
+            for n, (url, params) in enumerate(page_urls):
                 resp = ctx.fetcher.get(url, params=params)
                 pages += 1
                 tree = parse_html(resp.text, strip_chrome=p.get("strip_chrome", True))
                 nodes = tree.css(p["item"])
                 signatures.append(node_signature(nodes))
+                page_dates = []
                 for node in nodes:
                     ref = self._item(ctx, node, resp.final_url)
+                    if ref and ref.published_at:
+                        page_dates.append(ref.published_at)
                     if ref and ref.url not in seen:
                         seen.add(ref.url)
                         items.append(ref)
                 if pag and not nodes:
                     break
-        return ChannelResult(items=items, pages_fetched=pages, signature=signatures[0] if signatures else "")
+                if deep:
+                    if page_dates and min(page_dates) < ctx.depth_until:
+                        break   # sınır tarihine inildi
+                    if n + 1 >= len(page_urls):
+                        incomplete = True
+                        warnings.append(f"{base}: {len(page_urls)} sayfa tarandı ama sınır tarihine inilemedi")
+        return ChannelResult(items=items, pages_fetched=pages, signature=signatures[0] if signatures else "",
+                             warnings=warnings, incomplete=incomplete)
 
     def _item(self, ctx: ChannelContext, node, page_url: str) -> ItemRef | None:
         p = ctx.channel.params

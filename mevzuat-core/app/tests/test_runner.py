@@ -1,5 +1,5 @@
 """SourceCollector: yeni/değişen tespiti, sürümleme, ekler, dış host, erteleme, boş liste uyarısı."""
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -151,6 +151,36 @@ def test_first_run_is_baseline_until_backlog_done(settings):
     assert not rep.channels[0].baseline and rep.new == 1
     new = [r for r in docs(sf) if r.external_id.startswith("/d/3")]
     assert {(r.role, r.is_baseline) for r in new} == {("main", False), ("attachment", False)}
+
+
+def test_history_from_decides_baseline_by_publish_date(settings):
+    """Baseline sınırı: kanal ilk taramada olsa da karar yayım tarihine göre verilir; tarihsiz öğe kanala uyar."""
+    src = make_source()
+    rows = [("/d/1", "Eski", "24.09.2026"), ("/d/2", "Sınırda", "25.09.2026"), ("/d/3", "Yeni", "26.09.2026"),
+            ("/d/4", "Tarihsiz", "")]
+    pages = {LIST: (listing(*rows), "text/html")}
+    pages.update({f"https://ornek.gov.tr/d/{i}": (f"<p>{i}</p>", "text/html") for i in range(1, 5)})
+    c, sf = collector(settings, src, pages)
+    rep = c.run(history_from=date(2026, 9, 25))
+    assert rep.channels[0].baseline                      # kanal hâlâ ilk taramada
+    assert {r.external_id: r.is_baseline for r in docs(sf)} == {
+        "/d/1": True, "/d/2": False, "/d/3": False, "/d/4": True}
+
+
+def test_history_from_does_not_flag_old_items_as_new_after_baseline_closed(settings):
+    """Baseline kapanmış kanalda geriye dönük taramada sınırdan eski öğe NEW'e düşmemeli (YZ'ye gitmemeli)."""
+    src = make_source()
+    pages = {LIST: (listing(("/d/1", "Bir", "25.09.2026")), "text/html"),
+             "https://ornek.gov.tr/d/1": ("<p>1</p>", "text/html"),
+             "https://ornek.gov.tr/d/2": ("<p>2</p>", "text/html"),
+             "https://ornek.gov.tr/d/3": ("<p>3</p>", "text/html")}
+    c, sf = collector(settings, src, pages)
+    assert c.run().channels[0].baseline_complete
+    pages[LIST] = (listing(("/d/1", "Bir", "25.09.2026"), ("/d/2", "Eski", "10.07.2026"),
+                           ("/d/3", "Ağustos", "05.08.2026")), "text/html")
+    c.run(history_from=date(2026, 8, 1))
+    got = {r.external_id: r.is_baseline for r in docs(sf)}
+    assert got == {"/d/1": True, "/d/2": True, "/d/3": False}
 
 
 def test_merge_channel_stats_keeps_last_signature_and_stops_early():

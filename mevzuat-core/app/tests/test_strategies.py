@@ -1,7 +1,7 @@
 """Strateji parametrelerinin birim testleri (HMB/GİB/KGK için eklenen: POST gövdesi, inline HTML, uç nokta
 başına sorgu ve adres şablonu, data-href)."""
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 from app.collectors.config import SourceConfig
@@ -120,7 +120,50 @@ def test_json_api_catch_up_stops_on_a_short_last_page(settings):
     assert res.pages_fetched == 2 and not res.incomplete and len(res.items) == 3
 
 
+def test_json_api_depth_until_pages_back_to_the_cutoff_even_during_baseline(settings):
+    base = "https://www.ornek.gov.tr/api/list?page={p}&size=2"
+    src = source({"name": "c", "strategy": "json_api", "params": {
+        "method": "POST", "urls": [base.format(p=0)], "body": {}, "items_path": "content", "id": "x-{id}",
+        "url": "https://www.ornek.gov.tr/x/{id}", "date": ["d"], "max_pages": 1}})
+
+    def rows(*pairs):
+        return json.dumps({"content": [{"id": i, "title": f"Başlık {i}", "d": d} for i, d in pairs]}), "application/json"
+
+    pages = {request_key("POST", base.format(p=n), json_body({})): rows(*r) for n, r in enumerate([
+        [(6, "2026-09-10"), (5, "2026-09-05")], [(4, "2026-08-20"), (3, "2026-08-10")],
+        [(2, "2026-07-25"), (1, "2026-07-20")], [(0, "2026-07-01"), (-1, "2026-06-30")]])}
+    f = DictFetcher(src, settings, pages)
+    res = list_channel(src, src.channel("c"), f, now=NOW, depth_until=date(2026, 8, 1))   # known_ids yok: baseline
+    assert res.pages_fetched == 3 and not res.incomplete        # sınırın altına inen sayfada durur, sayfa 3 çekilmez
+    assert [i.external_id for i in res.items] == ["x-6", "x-5", "x-4", "x-3", "x-2", "x-1"]
+
+
+def test_json_api_depth_until_marks_incomplete_when_cap_is_reached(settings, monkeypatch):
+    from app.collectors.strategies import json_api
+
+    monkeypatch.setattr(json_api, "DEEP_MAX_PAGES", 2)
+    base = "https://www.ornek.gov.tr/api/list?page={p}&size=2"
+    src = source({"name": "c", "strategy": "json_api", "params": {
+        "method": "POST", "urls": [base.format(p=0)], "body": {}, "items_path": "content", "id": "x-{id}",
+        "url": "https://www.ornek.gov.tr/x/{id}", "date": ["d"]}})
+    page = json.dumps({"content": [{"id": 1, "title": "a", "d": "2026-09-01"}, {"id": 2, "title": "b", "d": "2026-09-02"}]})
+    pages = {request_key("POST", base.format(p=n), json_body({})): (page, "application/json") for n in range(3)}
+    res = list_channel(src, src.channel("c"), DictFetcher(src, settings, pages), now=NOW, depth_until=date(2026, 8, 1))
+    assert res.pages_fetched == 2 and res.incomplete and "sınır tarihine inilemedi" in res.warnings[0]
+
+
 # ------------------------------------------------------------------------------------------------ wordpress_api
+
+def test_wordpress_depth_until_queries_from_the_cutoff_with_more_pages(settings):
+    ch = {"name": "c", "strategy": "wordpress_api", "params": {
+        "api_base": "https://www.ornek.gov.tr/portal/v2/", "endpoints": ["posts"], "max_pages": 1, "per_page": 1}}
+    src = source(ch)
+    f = RecordingFetcher(src, settings, lambda url: json.dumps([_wp_post(int(parse_qs(urlsplit(url).query)["page"][0]),
+                                                                          "s", [])]).encode() if "page=3" not in url else b"[]")
+    list_channel(src, src.channel("c"), f, now=NOW, since=NOW, depth_until=date(2026, 8, 1))
+    q = parse_qs(urlsplit(f.urls[0]).query)
+    assert q["modified_after"] == ["2026-08-01T00:00:00"]       # since yerine sınır tarihi
+    assert len(f.urls) == 3                                     # max_pages=1 yükseltildi; boş sayfada durdu
 
 def _wp_post(pid, slug, cats):
     return {"id": pid, "date": "2026-10-07T17:30:00", "modified": "2026-10-07T15:03:58", "slug": slug,

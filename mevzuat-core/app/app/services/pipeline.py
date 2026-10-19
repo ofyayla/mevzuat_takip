@@ -95,7 +95,7 @@ EDGES: list[Edge] = [
     Edge("raw:LINKED", "reg:NEW", "yeni düzenleme"),
     Edge("raw:LINKED", "reg:BASELINE", "ilk tarama"),
     Edge("reg:NEW", "reg:MERGED", "birleştirme"),
-    Edge("reg:BASELINE", "reg:NEW", "yeniden işleme"),
+    Edge("reg:BASELINE", "reg:NEW", "yeniden işleme / baseline sınırı"),
     Edge("reg:NEW", "reg:RELEVANT", "ilgililik + önem", "ai"),
     Edge("reg:NEW", "reg:IRRELEVANT", "ilgisiz", "ai"),
     Edge("reg:NEW", "reg:AI_FAILED", "hata", "ai"),

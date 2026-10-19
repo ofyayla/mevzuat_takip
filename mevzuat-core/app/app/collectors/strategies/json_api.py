@@ -36,6 +36,8 @@ from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import parse_iso_datetime, parse_tr_date
 from app.collectors.strategies._html import clean, inline_document
 
+DEEP_MAX_PAGES = 40   # geçmişi tara (ctx.depth_until): adres başına sayfa üst sınırı
+
 
 def _fill(template: str, item: dict) -> str:
     names = [f for _, f, _, _ in string.Formatter().parse(template) if f]
@@ -82,7 +84,11 @@ class JsonApiStrategy:
         bodies = p.get("body", {})
         bodies = bodies if isinstance(bodies, list) else [bodies]
         requests = [(url, body) for url in p["urls"] for body in (bodies if post else [None])]
-        max_pages = max(int(p.get("max_pages", 1)), 1) if ctx.known_ids else 1
+        deep = ctx.depth_until is not None   # geçmişi tara: baseline'da bile, en eski öğe sınır tarihine inene kadar
+        if deep:
+            max_pages = max(int(p.get("max_pages", 1)), DEEP_MAX_PAGES)
+        else:
+            max_pages = max(int(p.get("max_pages", 1)), 1) if ctx.known_ids else 1
         warnings: list[str] = []
         incomplete = False
         for url, body in requests:
@@ -99,6 +105,7 @@ class JsonApiStrategy:
                 if not isinstance(data, list):
                     break
                 page_ids: list[str] = []
+                page_dates: list = []
                 for obj in data:
                     if not isinstance(obj, dict):
                         continue
@@ -108,6 +115,8 @@ class JsonApiStrategy:
                     ref = self._item(ctx, obj)
                     if ref:
                         page_ids.append(ref.external_id)
+                        if ref.published_at:
+                            page_dates.append(ref.published_at)
                         if ref.external_id not in seen:
                             seen.add(ref.external_id)
                             items.append(ref)
@@ -116,11 +125,15 @@ class JsonApiStrategy:
                 size = _page_size(url)
                 if not data or (size and len(data) < size):
                     break   # son sayfa
-                if ctx.known_ids(page_ids):
+                if deep:
+                    if page_dates and min(page_dates) < ctx.depth_until:
+                        break   # sınır tarihine inildi
+                elif ctx.known_ids(page_ids):
                     break   # arşivde bilinen öğeye ulaşıldı: kesinti aralığı kapandı
                 if page + 1 >= max_pages:
                     incomplete = True
-                    warnings.append(f"{url}: {max_pages} sayfa tarandı ama arşivdeki bir öğeyle örtüşme bulunamadı")
+                    warnings.append(f"{url}: {max_pages} sayfa tarandı ama " + (
+                        "sınır tarihine inilemedi" if deep else "arşivdeki bir öğeyle örtüşme bulunamadı"))
         signature = hashlib.sha1(",".join(sorted(keys)).encode()).hexdigest()[:16] if keys else ""
         return ChannelResult(items=items, pages_fetched=pages, signature=signature, warnings=warnings,
                              incomplete=incomplete)

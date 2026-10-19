@@ -63,6 +63,9 @@ class ChannelContext:
     # Telafi sayfalaması: kimlik listesi → arşivde zaten olanlar. Doluysa (ve kanal baseline dışındaysa) sayfalayan
     # stratejiler, sayfadaki hiçbir öğe arşivde yokken sonraki sayfaya geçer (kesinti sırasında kaçan öğeler için).
     known_ids: Callable[[list[str]], set[str]] | None = None
+    # Geçmişi tara (baseline sınırı): doluysa geriye dönük sayfalayabilen stratejiler bu tarihe kadar iner
+    # (en eski öğenin tarihi bunun altına düşünce durur). Sayfalayamayanlar (tek sayfa/RSS) etkilenmez.
+    depth_until: date | None = None
 
 
 class Strategy(Protocol):

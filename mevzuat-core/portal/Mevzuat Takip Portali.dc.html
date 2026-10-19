@@ -361,6 +361,29 @@ window.__resources = {
               </section>
 
               <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+                <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Baseline sınırı</h2>
+                <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Bu tarihten önce yayımlananlar baseline kalır; bu tarih ve sonrası YZ hattına girer. Taranmış kayıtlar doğrudan işlenir, sınır tarihine kadar taranmamış kaynaklar önce taranır. Önce önizleyin: işlenecek kayıt sayısı YZ maliyetini belirler.</p>
+                <p style="font-size:12.5px; color:var(--muted-foreground); margin:0 0 12px;">{{ rbCurrentText }}</p>
+                <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+                  <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">Sınır tarihi
+                    <input type="date" value="{{ rbCutoff }}" onChange="{{ setRbCutoff }}" style="height:36px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; font-family:var(--font-sans); background:var(--background); color:var(--foreground);" />
+                  </label>
+                  <button onClick="{{ previewRebaseline }}" disabled="{{ rbPreviewDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ rbPreviewOpacity }}; font-family:var(--font-sans);">Önizle</button>
+                  <button onClick="{{ runRebaseline }}" disabled="{{ rbRunDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:none; background:var(--primary); color:var(--primary-foreground); font-size:13px; font-weight:600; cursor:pointer; opacity:{{ rbRunOpacity }}; font-family:var(--font-sans);">Uygula</button>
+                </div>
+                <sc-if value="{{ hasRbPreview }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px; font-size:13.5px; font-weight:500;">{{ rbSummary }}</div>
+                  <sc-for list="{{ rbRows }}" as="rb" hint-placeholder-count="0">
+                    <div style="margin-top:4px; font-size:12.5px; color:var(--muted-foreground); display:flex; gap:8px;">
+                      <span style="width:110px; flex:0 0 auto; font-weight:500; color:var(--foreground);">{{ rb.source }}</span>
+                      <span style="width:70px; flex:0 0 auto;">{{ rb.converted }}</span>
+                      <span>{{ rb.text }}</span>
+                    </div>
+                  </sc-for>
+                </sc-if>
+              </section>
+
+              <section style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
                 <h2 style="font-size:16px; font-weight:600; margin:0 0 4px;">Denetim izi</h2>
                 <p style="font-size:13px; color:var(--muted-foreground); margin:0 0 12px;">Hash zincirini baştan sona doğrular; kopuk veya değiştirilmiş olay varsa listeler.</p>
                 <button onClick="{{ verifyAudit }}" disabled="{{ auditDisabled }}" style="height:36px; padding:0 16px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; opacity:{{ auditOpacity }}; font-family:var(--font-sans);">Zinciri doğrula</button>
@@ -1030,7 +1053,8 @@ const RUN_COOLDOWN_MS = 60000;
 const REPROCESS_STAGES = { extract: 'Metin çıkarma (belgeden metin okuma)', classify: 'Sınıflandırma (ilgili mi, önem düzeyi)', summarize: 'Özetleme', match: 'Birim eşleme (hangi birime ait)' };
 const RUN_STATUS_LABELS = { success: 'Başarılı', partial: 'Kısmi', failed: 'Başarısız', running: 'Sürüyor' };
 const ALERT_SEVERITY_LABELS = { down: 'Kesinti', delayed: 'Gecikme', warning: 'Uyarı' };
-const JOB_KIND_LABELS = { run: 'Şimdi tara', backfill: 'Geçmiş tarama', reprocess: 'Yeniden işleme', retry_failed: 'Başarısızları yeniden deneme', regenerate: 'Özeti yeniden üretme' };
+const JOB_KIND_LABELS = { run: 'Şimdi tara', backfill: 'Geçmiş tarama', reprocess: 'Yeniden işleme', retry_failed: 'Başarısızları yeniden deneme', regenerate: 'Özeti yeniden üretme', rebaseline: 'Baseline sınırı' };
+const REBASELINE_ACTIONS = { covered: 'arşiv sınıra kadar var', crawl: 'sınıra kadar taranacak', crawl_shallow: 'hiç taranmamış: sitenin gösterdiği kadarı alınacak', shallow: 'liste daha geriye gitmiyor: yalnızca mevcut kayıtlar işlenir' };
 const JOB_STATUS_LABELS = { queued: 'Kuyrukta', running: 'Sürüyor', success: 'Tamamlandı', failed: 'Başarısız', skipped: 'Atlandı', interrupted: 'Yarıda kaldı' };
 const REQUEST_STATUS_LABELS = { pending: 'Bekliyor', running: "Crawler'da", done: 'Tamamlandı', failed: 'Başarısız' };
 const SCAN_REFRESH_BUSY_MS = 10000, SCAN_REFRESH_IDLE_MS = 60000;   // bir şey sürerken sık, değilse seyrek yenile
@@ -1079,7 +1103,8 @@ class Component extends DCLogic {
     adminSettings: null, settingsDraft: {}, settingsErrors: {}, settingsError: '',
     alerts: [], alertStatus: 'open', metrics: null, auditResult: null, adminBusy: {},
     scans: null, scansAt: 0, scanFilter: { source: '', status: '' }, scanExpanded: {},
-    adminForm: { from: '', to: '', rpSource: '', rpFrom: '', rpTo: '', rpStage: 'extract' }
+    adminForm: { from: '', to: '', rpSource: '', rpFrom: '', rpTo: '', rpStage: 'extract', rbCutoff: '' },
+    rebaseline: null     // GET /admin/rebaseline?cutoff=… önizlemesi (cutoff alanı hangi tarih için olduğunu söyler)
   };
 
   handleKeyDown = (event) => {
@@ -1305,7 +1330,12 @@ class Component extends DCLogic {
     this.loadAlerts();
     this.loadMetrics();
     this.loadScans();
+    this.loadRebaselineCurrent();
   };
+  loadRebaselineCurrent = () => api('/admin/rebaseline').then(r => {
+    const f = this.state.adminForm;
+    this.setState({ rbCurrent: r.data.current, adminForm: f.rbCutoff ? f : Object.assign({}, f, { rbCutoff: r.data.current || '' }) });
+  }).catch(this.fail);
   loadAdminSettings = () => api('/admin/settings?detail=true').then(r => {
     const draft = {};
     Object.keys(r.data.values).forEach(k => { draft[k] = String(r.data.values[k]); });
@@ -1402,6 +1432,28 @@ class Component extends DCLogic {
       .then(r => { this.showToast(r.data.count ? `${r.data.count} başarısız kayıt yeniden denenmek üzere kuyruğa alındı.` : 'Yeniden denenecek başarısız kayıt yok.'); this.loadScans(); })
       .catch(this.fail)
       .then(() => this.setAdminBusy('retryFailed', false));
+  };
+  setRbCutoff = (value) => this.setState({ adminForm: Object.assign({}, this.state.adminForm, { rbCutoff: value }), rebaseline: null });
+  previewRebaseline = () => {
+    const cutoff = this.state.adminForm.rbCutoff;
+    if (!cutoff) { this.showToast('Önizleme için sınır tarihini seçin.'); return; }
+    this.setAdminBusy('rebaselinePreview', true);
+    api('/admin/rebaseline?cutoff=' + encodeURIComponent(cutoff))
+      .then(r => { if (this.state.adminForm.rbCutoff === cutoff) this.setState({ rebaseline: r.data }); })
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('rebaselinePreview', false));
+  };
+  // Önizlenmemiş tarih uygulanamaz: kullanıcı kaç kaydın YZ'ye gireceğini görmeden başlatmasın.
+  runRebaseline = () => {
+    const { rebaseline, adminForm } = this.state;
+    if (!rebaseline || rebaseline.cutoff !== adminForm.rbCutoff) { this.showToast('Önce sınır tarihini önizleyin.'); return; }
+    const crawl = rebaseline.crawl.length ? ` ${rebaseline.crawl.length} kaynak taranacak.` : '';
+    if (!window.confirm(`${rebaseline.cutoff} ve sonrası: ${rebaseline.converted} kayıt YZ hattına alınacak.${crawl} Devam edilsin mi?`)) return;
+    this.setAdminBusy('rebaseline', true);
+    api('/admin/rebaseline', { method: 'POST', body: { cutoff: rebaseline.cutoff } })
+      .then(r => { this.showToast(`Baseline sınırı uygulanıyor: ${r.data.count} kayıt, ${r.data.crawl.length} kaynak taraması.`); this.setState({ rebaseline: null, rbCurrent: rebaseline.cutoff }); this.loadScans(); })
+      .catch(this.fail)
+      .then(() => this.setAdminBusy('rebaseline', false));
   };
   verifyAudit = () => {
     this.setAdminBusy('audit', true);
@@ -1624,6 +1676,8 @@ class Component extends DCLogic {
 
     // ---- yönetim sayfası
     const { adminSettings, settingsDraft, settingsErrors, settingsError, alerts, alertStatus, metrics, auditResult, adminBusy, adminForm } = this.state;
+    const rebaselinePreview = this.state.rebaseline;
+    const rebaselinePreviewed = !!rebaselinePreview && rebaselinePreview.cutoff === adminForm.rbCutoff;
     const specs = (adminSettings && adminSettings.specs) || {};
     const settingRows = Object.keys(specs).map(k => {
       const sp = specs[k], err = settingsErrors[k] || '';
@@ -1678,6 +1732,7 @@ class Component extends DCLogic {
       if (j.kind === 'reprocess') return `${REPROCESS_STAGES[p.stage] ? REPROCESS_STAGES[p.stage].split(' (')[0] : p.stage} · ${p.from} – ${p.to}` + (p.source ? ` · ${p.source}` : '');
       if (j.kind === 'retry_failed') return [p.count ? `${p.count} kayıt` : '', p.stage || '', p.source || ''].filter(Boolean).join(' · ') || 'tümü';
       if (j.kind === 'regenerate') return `Kayıt ${p.regulationId}`;
+      if (j.kind === 'rebaseline') return `${p.cutoff} ve sonrası` + (p.count ? ` · ${p.count} kayıt` : '') + (p.crawl && p.crawl.length ? ` · ${p.crawl.length} kaynak taranacak` : '');
       return j.source || '';
     };
     const jobColor = { success: GREEN, failed: 'var(--destructive)', interrupted: AMBER, skipped: 'var(--muted-foreground)' };
@@ -1736,6 +1791,16 @@ class Component extends DCLogic {
       stageOptions: Object.keys(REPROCESS_STAGES).map(k => ({ value: k, label: REPROCESS_STAGES[k] })),
       runReprocess: this.runReprocess, reprocessDisabled: !!adminBusy.reprocess, reprocessOpacity: adminBusy.reprocess ? 0.5 : 1,
       runRetryFailed: this.runRetryFailed, retryFailedDisabled: !!adminBusy.retryFailed, retryFailedOpacity: adminBusy.retryFailed ? 0.5 : 1,
+      rbCutoff: adminForm.rbCutoff, setRbCutoff: (e) => this.setRbCutoff(e.target.value),
+      rbCurrentText: this.state.rbCurrent ? `Uygulanan sınır: ${this.state.rbCurrent}` : 'Henüz sınır uygulanmadı.',
+      previewRebaseline: this.previewRebaseline, rbPreviewDisabled: !!adminBusy.rebaselinePreview || !adminForm.rbCutoff,
+      rbPreviewOpacity: adminBusy.rebaselinePreview || !adminForm.rbCutoff ? 0.5 : 1,
+      runRebaseline: this.runRebaseline, rbRunDisabled: !!adminBusy.rebaseline || !rebaselinePreviewed,
+      rbRunOpacity: adminBusy.rebaseline || !rebaselinePreviewed ? 0.5 : 1,
+      hasRbPreview: !!rebaselinePreview,
+      rbSummary: !rebaselinePreview ? '' : `${rebaselinePreview.cutoff} ve sonrası: ${rebaselinePreview.converted} kayıt YZ hattına alınacak` + (rebaselinePreview.crawl.length ? `; taranacak: ${rebaselinePreview.crawl.join(', ')}` : '') + '.',
+      rbRows: !rebaselinePreview ? [] : rebaselinePreview.sources.map(r => ({ source: r.source, converted: String(r.converted),
+        text: REBASELINE_ACTIONS[r.action] + (r.range ? ` (${r.range.from} – ${r.range.to})` : '') + (r.earliest ? ` · en eski kayıt ${r.earliest}` : '') })),
       verifyAudit: this.verifyAudit, auditDisabled: !!adminBusy.audit, auditOpacity: adminBusy.audit ? 0.5 : 1,
       hasAuditResult: !!auditResult,
       auditOk: !!auditResult && auditResult.ok,

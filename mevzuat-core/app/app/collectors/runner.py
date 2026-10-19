@@ -14,6 +14,9 @@ Kurallar:
   hatalar engellemez), liste eksik/şüpheli biçimde boş (``expected.min_items_per_run``; ``baseline_empty_runs``
   ardışık koşudan sonra kabul edilir) ya da koşu durdurulmuş. Geçici hata ``baseline_max_runs`` koşudan uzun
   süremez; aksi halde sonradan gelen gerçek düzenlemeler sessizce BASELINE sayılırdı.
+- ``history_from`` (Yönetim → Baseline sınırı, ``backfill``): doluysa baseline kararı kanalın ilk taramasına değil
+  öğenin yayım tarihine bağlanır (tarihi sınırdan önceyse BASELINE, sınır ve sonrası yeni; tarihsiz öğe kanalın
+  durumuna uyar) ve sayfalayabilen stratejiler listeyi sınır tarihine kadar geriye doğru okur.
 - Beklenmeyen hatalar taramayı kesmez: öğe hatası uyarıya, kanal hatası ``rep.error``'a dönüşür ve ``finish_run``
   her koşulda çağrılır (``fetch_runs`` kaydı ``running`` kalmaz).
 """
@@ -23,7 +26,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
 from app.collectors.base import ChannelContext, ChannelResult, FetchedDocument, ItemRef
@@ -126,9 +129,10 @@ def run_issues(reports: list[ChannelReport]) -> list[str]:
 
 def list_channel(source: SourceConfig, channel: ChannelConfig, fetcher: Fetcher, *,
                  now: datetime | None = None, since: datetime | None = None,
-                 known_ids: Callable[[list[str]], set[str]] | None = None) -> ChannelResult:
+                 known_ids: Callable[[list[str]], set[str]] | None = None,
+                 depth_until: date | None = None) -> ChannelResult:
     ctx = ChannelContext(source=source, channel=channel, fetcher=fetcher, now=now or datetime.now(timezone.utc),
-                         since=since, known_ids=known_ids)
+                         since=since, known_ids=known_ids, depth_until=depth_until)
     result = get_strategy(channel.strategy).list_items(ctx)
     result.items = _normalize_external(result.items)
     return result
@@ -223,6 +227,13 @@ def fetch_documents(source: SourceConfig, channel: ChannelConfig, ref: ItemRef, 
     return docs
 
 
+def _baseline_item(channel_baseline: bool, published_at: date | None, history_from: date | None) -> bool:
+    """Yeni öğe BASELINE mı? Sınır tarihi yoksa kanalın durumuna; varsa yayım tarihine bakılır (tarihsiz öğe kanala)."""
+    if history_from is None or published_at is None:
+        return channel_baseline
+    return published_at < history_from
+
+
 def _is_permanent(e: FetchError) -> bool:
     """Tekrar denemenin sonucu değiştirmeyeceği hata (404/410, boyut, izin listesi); geçici hata baseline'ı tutar."""
     if isinstance(e, TransientFetchError):
@@ -242,7 +253,7 @@ class SourceCollector:
         self.should_stop = should_stop or (lambda: False)   # servis kapanırken tarama temiz biçimde bırakılır
 
     def run(self, *, channels: list[str] | None = None, max_details: int = 200,
-            now: datetime | None = None) -> RunReport:
+            now: datetime | None = None, history_from: date | None = None) -> RunReport:
         now = now or datetime.now(timezone.utc)
         self.store.upsert_source(self.source)
         since = self.store.last_success(self.source.code)
@@ -253,7 +264,7 @@ class SourceCollector:
         reports: list[ChannelReport] = []
         completed = False
         try:
-            self._run_channels(run_id, selected, max_details, now, since, prev_channels, reports)
+            self._run_channels(run_id, selected, max_details, now, since, prev_channels, reports, history_from)
             completed = True
         finally:   # istisna yükselse bile kayıt "running" kalmasın
             failed = [r for r in reports if r.error]
@@ -276,7 +287,7 @@ class SourceCollector:
         return RunReport(self.source.code, run_id, status, reports, self.fetcher.request_count, errors)
 
     def _run_channels(self, run_id, selected: list[ChannelConfig], max_details: int, now: datetime, since, prev_channels: dict,
-                      reports: list[ChannelReport]) -> None:
+                      reports: list[ChannelReport], history_from: date | None = None) -> None:
         budget = max_details
         for channel in selected:
             rep = ChannelReport(channel.name)
@@ -292,7 +303,8 @@ class SourceCollector:
                 # Telafi sayfalaması yalnız baseline kapandıktan sonra: ilk taramada tüm geçmişi çekmeyiz
                 known = None if rep.baseline else (
                     lambda ids: set(self.store.latest_documents(self.source.code, ids)))
-                result = list_channel(self.source, channel, self.fetcher, now=now, since=since, known_ids=known)
+                result = list_channel(self.source, channel, self.fetcher, now=now, since=since, known_ids=known,
+                                      depth_until=history_from)
             except Exception as e:  # noqa: BLE001 — kanal hatası çalıştırmayı durdurmamalı
                 if isinstance(e, FetchError):   # ağ/HTTP hatası beklenen durumdur: traceback yerine tek satır
                     log.warning("%s/%s liste hatası: %s", self.source.code, channel.name, e)
@@ -307,7 +319,7 @@ class SourceCollector:
             rep.structure_changed = bool(prev.get("signature") and rep.signature
                                          and prev["signature"] != rep.signature)
             try:
-                budget = self._store_items(run_id, channel, result.items, rep, budget, rep.baseline, now)
+                budget = self._store_items(run_id, channel, result.items, rep, budget, rep.baseline, now, history_from)
             except Exception as e:  # noqa: BLE001 — yazma/Mongo hatası diğer kanalları durdurmasın
                 log.exception("%s/%s kayıt hatası", self.source.code, channel.name)
                 rep.error = f"{type(e).__name__}: {e}"
@@ -332,7 +344,7 @@ class SourceCollector:
     # ------------------------------------------------------------------ yardımcılar
 
     def _store_items(self, run_id, channel: ChannelConfig, items: list[ItemRef], rep: ChannelReport, budget: int,
-                     baseline: bool = False, now: datetime | None = None) -> int:
+                     baseline: bool = False, now: datetime | None = None, history_from: date | None = None) -> int:
         existing = self.store.latest_documents(self.source.code, [i.external_id for i in items])
         refresh_budget = channel.refresh_max_per_run if channel.refresh_after_days else 0
         now = now or datetime.now(timezone.utc)
@@ -390,8 +402,8 @@ class SourceCollector:
                 rep.changed += 1
             else:
                 rep.new += 1
-            is_baseline = baseline and prev is None
-            over = [m for m in missing if m["last_error"].startswith(OVER_LIMIT)]
+            is_baseline = prev is None and _baseline_item(baseline, ref.published_at, history_from)
+            over =[m for m in missing if m["last_error"].startswith(OVER_LIMIT)]
             rep.att_pending += sum(1 for m in missing if not m["permanent"])
             rep.att_gave_up += sum(1 for m in missing if m["permanent"]) - len(over)
             if over:   # hata değil: sayfada sınırdan çok ek var. Koşuyu/hata listesini kirletmez, uyarıya tek satır

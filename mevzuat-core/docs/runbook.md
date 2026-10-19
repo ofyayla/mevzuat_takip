@@ -171,6 +171,33 @@ Yönetim → "Başarısız YZ kayıtları". Deneme sayacı sıfırlanır, her ka
 ilerler (sınıflandırma → özet → birim önerisi); kurtarılan kayıtlar denetim izine "Yeniden işlendi" olarak yazılır. LLM sunucusu
 kapalıysa iş durur ve kayıtlar yeniden denenebilir kalır.
 
+#### Baseline sınırını geriye çekme (belirli bir tarihten itibaren analiz)
+
+Baseline normalde kanalın ilk taramasına bağlıdır. Belirli bir tarihten (ör. 1 Ağustos) önceki her şeyi baseline sayıp o
+tarih ve sonrasını YZ hattına sokmak için:
+
+```bash
+mevzuat-monitor rebaseline --cutoff 2026-08-01 --dry-run   # kaynak bazlı önizleme (hiçbir şey değişmez)
+mevzuat-monitor rebaseline --cutoff 2026-08-01
+```
+
+API: `GET /api/v1/admin/rebaseline?cutoff=YYYY-MM-DD` (önizleme) ve `POST /api/v1/admin/rebaseline {cutoff}` (202, `rebaseline`
+işi). Portalda Yönetim → "Baseline sınırı": tarihi seçin, **Önizle** (kaç kayıt YZ'ye gireceğini ve hangi kaynakların taranacağını
+gösterir), sonra **Uygula**. Uygulanmış sınır `app_setting.baseline_cutoff` içinde tutulur.
+
+İşlem kaynak başına şöyle çalışır:
+
+- **Zaten taranmış kayıtlar:** `publish_date ≥ sınır` olan `BASELINE` düzenlemeler `NEW` yapılır ve YZ zincirine (sınıflandırma → özet →
+  birim önerisi) girer; denetim izine "Baseline sınırı" notuyla yazılır. `raw_document.is_baseline` değişmez. Sınırdan eski ve tarihsiz
+  kayıtlara dokunulmaz. LLM kapalıysa kayıtlar `NEW` kalır, zamanlanmış classify işi alır.
+- **Sınıra kadar taranmamış kaynaklar:** `backfill(history_from=sınır)` ile taranır (uzak modda DMZ crawler'a `backfill` talebi, RG
+  62 günlük parçalarla). Bu taramada baseline kararı kanalın durumuna değil yayım tarihine göre verilir: sınırdan öncesi `BASELINE`,
+  sonrası yeni → mevcut zincirle YZ'ye gider. Resmî Gazete gün gün; WordPress API (MASAK, HMB), sayfalı JSON/CSS listeler sınır tarihine
+  kadar geriye okunur. Tek sayfa/RSS listeleri (BDDK, KVKK, REKABET …) sitenin gösterdiğinden daha geriye gidemez; önizlemede
+  "liste daha geriye gitmiyor" olarak görünür ve yalnızca mevcut kayıtları dönüşür.
+- İşlem idempotenttir ve yalnızca `BASELINE → NEW` yönünde çalışır; sınırı ileri almak işlenmiş kayıtları geri çevirmez. Daha önce
+  OCR atlanmış (baseline) taranmış PDF'ler metinsiz kalabilir: özet "metin bekleniyor" olur (`OCR_BASELINE=true` ile yeniden çıkarılır).
+
 ### 4.6 LLM / OCR servisi erişilemiyor
 
 - Kayıtlar kaybolmaz. OCR hatasında belge metin katmanıyla bağlanır, taranmış sayfalar `extra.ocr_pending_pages`'te

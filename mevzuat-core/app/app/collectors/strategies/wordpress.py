@@ -13,17 +13,20 @@ params:
   category_map: {wp_kategori_id: kategori adı} — öğenin ilk eşleşen kategorisi; yoksa kanalın category değeri
   per_page: 50, max_pages: 3
   lookback_days: ilk çalıştırmada geriye bakış (varsayılan ayarlardaki collect_default_lookback_days)
+  (geçmişi tara modunda — ctx.depth_until — ``modified_after`` sınır tarihidir ve sayfa sınırı yükseltilir)
   overlap_hours: artımlı çalıştırmada güvenlik payı (varsayılan 6)
 """
 from __future__ import annotations
 
 import hashlib
 import html
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from app.collectors.base import ChannelContext, ChannelResult, ItemRef
 from app.collectors.dates import parse_iso_datetime
 from app.collectors.strategies._html import clean, inline_document
+
+DEEP_MAX_PAGES = 40   # geçmişi tara (ctx.depth_until): uç nokta başına sayfa üst sınırı
 
 _FIELDS = "id,date,modified,slug,link,title,content,excerpt,categories,type,parent"
 
@@ -34,7 +37,11 @@ class WordPressApiStrategy:
     def list_items(self, ctx: ChannelContext) -> ChannelResult:
         p = ctx.channel.params
         # Yuvarlama: aynı pencere içindeki tekrar çalıştırmalar aynı sorguyu üretir (önbellek/test tekrarlanabilirliği)
-        if ctx.since is not None:
+        max_pages = p.get("max_pages", 3)
+        if ctx.depth_until is not None:   # geçmişi tara: sınır tarihinden itibaren, sayfa sınırı yükseltilmiş
+            after = datetime.combine(ctx.depth_until, time.min)
+            max_pages = max(max_pages, DEEP_MAX_PAGES)
+        elif ctx.since is not None:
             after = (ctx.since - timedelta(hours=p.get("overlap_hours", 6))).replace(minute=0, second=0, microsecond=0)
         else:
             after = (ctx.now - timedelta(days=p.get("lookback_days", ctx.fetcher.settings.collect_default_lookback_days))
@@ -45,7 +52,7 @@ class WordPressApiStrategy:
         keys: set[str] = set()
         pages = 0
         for endpoint in p.get("endpoints", ["posts"]):
-            for page in range(1, p.get("max_pages", 3) + 1):
+            for page in range(1, max_pages + 1):
                 resp = ctx.fetcher.get(p["api_base"].rstrip("/") + "/" + endpoint, accept="application/json", params={
                     "per_page": p.get("per_page", 50), "page": page, "orderby": "modified", "order": "desc",
                     "modified_after": after_param, "_fields": _FIELDS, **(p.get("query") or {}).get(endpoint, {}),

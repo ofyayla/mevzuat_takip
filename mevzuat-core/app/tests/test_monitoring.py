@@ -315,6 +315,102 @@ def test_admin_retry_failed_endpoint(settings, env):  # noqa: F811
         assert s.scalars(select(JobRun)).first() is None                          # yapılacak iş yoksa kayıt açılmaz
 
 
+def _baseline_reg(sf, title, source, publish):
+    reg_id = _reg(sf, title=title, issuer=source, sources=[source], publish=publish)
+    with sf() as s:
+        s.get(Regulation, reg_id).processing_status = "BASELINE"
+        for raw in s.scalars(select(RawDocument).where(RawDocument.regulation_id == reg_id)):
+            raw.published_at = publish
+        s.commit()
+    return reg_id
+
+
+def test_plan_rebaseline_counts_converted_records_and_decides_crawl(settings, env):  # noqa: F811
+    from app.services.rebaseline import plan_rebaseline
+
+    sf, _ = env
+    _baseline_reg(sf, "Eski Karar", "BDDK", date(2026, 7, 20))
+    _baseline_reg(sf, "Ağustos Kararı", "BDDK", date(2026, 8, 5))
+    with sf() as s:
+        plan = plan_rebaseline(s, settings, date(2026, 8, 1), today=date(2026, 10, 19))
+    rows = {r["source"]: r for r in plan["sources"]}
+    assert plan["converted"] == 1 and rows["BDDK"]["converted"] == 1
+    assert rows["BDDK"]["action"] == "covered" and "BDDK" not in plan["crawl"]      # arşiv sınırdan eskiye uzanıyor
+    assert rows["RESMI_GAZETE"]["action"] == "crawl" and "RESMI_GAZETE" in plan["crawl"]
+    assert rows["RESMI_GAZETE"]["range"] == {"from": "2026-08-01", "to": "2026-10-19"}   # hiç taranmamış: sınırdan bugüne
+
+
+def test_plan_rebaseline_rg_range_ends_before_the_earliest_crawled_day(settings, env):  # noqa: F811
+    from app.services.rebaseline import plan_rebaseline, _rg_chunks
+
+    sf, _ = env
+    _baseline_reg(sf, "RG Kararı", "RESMI_GAZETE", date(2026, 9, 20))
+    with sf() as s:
+        row = {r["source"]: r for r in plan_rebaseline(s, settings, date(2026, 8, 1), today=date(2026, 10, 19))["sources"]}
+    assert row["RESMI_GAZETE"]["range"] == {"from": "2026-08-01", "to": "2026-09-19"}
+    chunks = _rg_chunks({"from": "2026-08-01", "to": "2026-10-19"})                  # 80 gün → 62 + 18
+    assert chunks == [(date(2026, 8, 1), date(2026, 10, 1)), (date(2026, 10, 2), date(2026, 10, 19))]
+
+
+def test_apply_rebaseline_converts_runs_ai_chain_and_is_idempotent(settings, env, monkeypatch):  # noqa: F811
+    from app.services import rebaseline as rb
+
+    sf, _ = env
+    old = _baseline_reg(sf, "Eski Karar", "BDDK", date(2026, 7, 20))
+    new = _baseline_reg(sf, "Bankaların Kredi İşlemlerine İlişkin Yönetmelik", "BDDK", date(2026, 8, 5))
+    undated = _baseline_reg(sf, "Tarihsiz Karar", "BDDK", None)
+    crawls = []
+    monkeypatch.setattr(rb, "_crawl", lambda sf_, st, code, d_from, d_to, cutoff, actor:
+                        crawls.append((code, d_from, cutoff)) or {"source": code, "status": "done"})
+    llm = FakeLLM(settings, lambda t, m, n: [rel()] * n if t == "relevance" else [sev("Yüksek")])
+    out = rb.apply_rebaseline(sf, settings, date(2026, 8, 1), llm=llm)
+    assert out["converted"] == 1 and not out["llm_unavailable"] and sum(out["by_status"].values()) == 1
+    with sf() as s:
+        assert s.get(Regulation, old).processing_status == "BASELINE"        # sınırdan eski: baseline kalır
+        assert s.get(Regulation, undated).processing_status == "BASELINE"    # tarihsiz: dokunulmaz
+        reg = s.get(Regulation, new)
+        assert reg.is_relevant and reg.processing_status not in ("BASELINE", "NEW", "AI_FAILED")
+        assert rb.get_cutoff(s) == date(2026, 8, 1)
+        assert s.scalars(select(AuditEvent).where(AuditEvent.regulation_id == new,
+                                                  AuditEvent.event_type == "reprocessed")).one().note.startswith("Baseline sınırı")
+    assert ("RESMI_GAZETE", date(2026, 8, 1), date(2026, 8, 1)) in crawls   # taranmamış kaynak sınırdan başlar
+    assert not any(code == "BDDK" for code, *_ in crawls)
+    assert rb.apply_rebaseline(sf, settings, date(2026, 8, 1), llm=llm)["converted"] == 0   # ikinci çalıştırma: iş yok
+    with pytest.raises(ValueError):
+        rb.apply_rebaseline(sf, settings, date(2026, 8, 1), llm=None)
+
+
+def test_apply_rebaseline_keeps_records_new_when_llm_is_down(settings, env, monkeypatch):  # noqa: F811
+    from app.ai.llm_client import LLMUnavailable
+    from app.services import rebaseline as rb
+
+    sf, _ = env
+    new = _baseline_reg(sf, "Ağustos Kararı", "BDDK", date(2026, 8, 5))
+    monkeypatch.setattr(rb, "_crawl", lambda *a: {"status": "done"})
+
+    def down(task, messages, n):
+        raise LLMUnavailable("zaman aşımı")
+
+    out = rb.apply_rebaseline(sf, settings, date(2026, 8, 1), llm=FakeLLM(settings, down))
+    assert out["llm_unavailable"]
+    with sf() as s:
+        assert s.get(Regulation, new).processing_status == "NEW"      # zamanlanmış classify işi alır
+
+
+def test_admin_rebaseline_endpoints(settings, env):  # noqa: F811
+    sf, _ = env
+    _baseline_reg(sf, "Ağustos Kararı", "BDDK", date(2026, 8, 5))
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "none"}), sf))
+    assert c.get("/api/v1/admin/rebaseline").json() == {"current": None}
+    prev = c.get("/api/v1/admin/rebaseline?cutoff=2026-08-01").json()
+    assert prev["converted"] == 1 and prev["cutoff"] == "2026-08-01" and prev["sources"]
+    assert c.post("/api/v1/admin/rebaseline", json={"cutoff": "2026-08-01"}).status_code == 400   # LLM yapılandırılmamış
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "openai"}), sf))
+    assert c.post("/api/v1/admin/rebaseline", json={"cutoff": "2999-01-01"}).status_code == 400    # gelecek tarih
+    with sf() as s:
+        assert s.scalars(select(JobRun)).first() is None
+
+
 def test_track_job_success_skip_and_failure(settings, env, monkeypatch):  # noqa: F811
     from app.services import jobs
 

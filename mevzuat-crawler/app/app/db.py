@@ -328,7 +328,7 @@ class JobRun(Base):
     __tablename__ = "job_run"
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    # run | backfill | reprocess | retry_failed | regenerate
+    # run | backfill | reprocess | retry_failed | regenerate | rebaseline
     kind: Mapped[str] = mapped_column(String(24), index=True)
     # queued | running | success | failed | skipped | interrupted
     status: Mapped[str] = mapped_column(String(16), index=True, default="queued")

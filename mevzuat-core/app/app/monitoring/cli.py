@@ -5,7 +5,8 @@
   mevzuat-monitor backfill KOD --from YYYY-MM-DD --to YYYY-MM-DD   # geçmiş dönemi yeniden topla (RG: gün gün)
   mevzuat-monitor reprocess STAGE --from … --to … [--source KOD]   # extract | classify | summarize | match
   mevzuat-monitor retry-failed [--stage S] [--source KOD] [--id N ...] [--dry-run]   # AI_FAILED kayıtları yeniden dene
-  mevzuat-monitor audit-verify [--id REG_ID]           # denetim izi hash zinciri bütünlük kontrolü
+  mevzuat-monitor rebaseline --cutoff YYYY-MM-DD [--dry-run]   # sınır ve sonrası YZ hattına girer, öncesi baseline kalır
+  mevzuat-monitor audit-verify [--id REG_ID]          # denetim izi hash zinciri bütünlük kontrolü
 """
 from __future__ import annotations
 
@@ -126,6 +127,32 @@ def cmd_retry_failed(args) -> int:
     return 1 if out["still_failed"] or out["llm_unavailable"] else 0
 
 
+def cmd_rebaseline(args) -> int:
+    from app.ai.llm_client import get_llm
+    from app.services.rebaseline import apply_rebaseline, plan_rebaseline
+
+    s = get_settings()
+    sf = make_sessionmaker(s.database_url)
+    cutoff = date.fromisoformat(args.cutoff)
+    if args.dry_run:
+        with sf() as ses:
+            plan = plan_rebaseline(ses, s, cutoff)
+        print(f"sınır {plan['cutoff']}: YZ'ye alınacak {plan['converted']} kayıt; taranacak: {plan['crawl'] or '-'}")
+        for r in plan["sources"]:
+            print(f"  {r['source']:<14} {r['action']:<14} dönüşecek={r['converted']:<5} en eski={r['earliest'] or '-'} "
+                  f"{r['range'] or ''}")
+        return 0
+    llm = get_llm(s)
+    if llm is None:
+        print("LLM_PROVIDER=none — app/.env içinde LLM_PROVIDER ve LLM_API_KEY ayarlayın", file=sys.stderr)
+        return 1
+    with cli_job(sf, "rebaseline", params={"cutoff": args.cutoff}) as job:
+        out = apply_rebaseline(sf, s, cutoff, llm=llm)
+        job.result = out
+    print(out)
+    return 1 if out["llm_unavailable"] else 0
+
+
 def cmd_audit_verify(args) -> int:
     from app.services.audit import verify_chain
 
@@ -166,6 +193,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=1000)
     p.add_argument("--dry-run", action="store_true", help="işlemeden yalnızca yeniden denenecek kayıtları göster")
     p.set_defaults(fn=cmd_retry_failed)
+    p = sub.add_parser("rebaseline")
+    p.add_argument("--cutoff", required=True, help="YYYY-MM-DD: bu tarih ve sonrası YZ hattına girer, öncesi baseline kalır")
+    p.add_argument("--dry-run", action="store_true", help="işlemeden yalnızca kaynak bazlı önizlemeyi göster")
+    p.set_defaults(fn=cmd_rebaseline)
     p = sub.add_parser("audit-verify")
     p.add_argument("--id", type=int)
     p.set_defaults(fn=cmd_audit_verify)

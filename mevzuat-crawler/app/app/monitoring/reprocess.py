@@ -37,20 +37,32 @@ def local_store(session_factory: sessionmaker[Session], settings: Settings) -> S
     return SqlCrawlStore(session_factory, get_storage(settings))
 
 
+DEEP_MAX_RUNS = 20   # history_from ile tek kaynak taraması: ertelenen öğe kalmayana kadar en çok bu kadar koşu
+
+
 def backfill(store: CrawlStore, settings: Settings, code: str, date_from: date, date_to: date,
-             *, fetcher_factory=None, should_stop=None) -> BackfillReport:
-    """``store``: yerel kurulumda ``local_store(...)``; DMZ crawler'da ``MongoCrawlStore`` (LAN'dan tarama talebiyle)."""
+             *, fetcher_factory=None, should_stop=None, history_from: date | None = None) -> BackfillReport:
+    """``store``: yerel kurulumda ``local_store(...)``; DMZ crawler'da ``MongoCrawlStore`` (LAN'dan tarama talebiyle).
+
+    ``history_from`` (Yönetim → Baseline sınırı): baseline kararı kanalın ilk taramasına değil öğenin yayım tarihine
+    bağlanır (sınırdan öncesi BASELINE, sonrası yeni → YZ hattı) ve sayfalayabilen kaynaklar sınıra kadar geriye okunur.
+    RG dışı kaynaklarda detay bütçesi (``max_details``) yüzünden ertelenen öğeler için koşu, ertelenen kalmayana
+    kadar tekrarlanır; aksi halde bunlar sonraki zamanlanmış taramada tarihe bakılmadan BASELINE sayılabilirdi."""
     source = load_sources(settings.sources_file).get(code)
     rep = BackfillReport()
     if code != "RESMI_GAZETE":
-        col = SourceCollector(source, settings, store, fetcher=fetcher_factory(source) if fetcher_factory else None,
-                              should_stop=should_stop)
-        try:
-            r = col.run()
-        finally:
-            col.fetcher.close()
-        rep.days, rep.new = 1, r.new
-        rep.runs.append({"status": r.status, "new": r.new})
+        for _ in range(DEEP_MAX_RUNS if history_from else 1):
+            col = SourceCollector(source, settings, store, fetcher=fetcher_factory(source) if fetcher_factory else None,
+                                  should_stop=should_stop)
+            try:
+                r = col.run(history_from=history_from)
+            finally:
+                col.fetcher.close()
+            rep.days, rep.new = 1, rep.new + r.new
+            deferred = sum(c.deferred for c in r.channels)
+            rep.runs.append({"status": r.status, "new": r.new, "deferred": deferred})
+            if not deferred or (should_stop and should_stop()):
+                break
         return rep
     # RG: her gün için "o günün akşamı" gibi tara, geriye bakış 0 (yalnızca o gün, asıl + mükerrer)
     data = source.model_dump()
@@ -66,7 +78,7 @@ def backfill(store: CrawlStore, settings: Settings, code: str, date_from: date, 
         col = SourceCollector(day_source, settings, store, should_stop=should_stop,
                               fetcher=fetcher_factory(day_source) if fetcher_factory else None)
         try:
-            r = col.run(now=datetime.combine(d, time(23, 0), tzinfo=tz))
+            r = col.run(now=datetime.combine(d, time(23, 0), tzinfo=tz), history_from=history_from)
         finally:
             col.fetcher.close()
         rep.new += r.new
@@ -163,6 +175,31 @@ def failed_regulations(session: Session, *, stages: list[str] | None = None, sou
     return out
 
 
+def run_ai_chain(session_factory: sessionmaker[Session], llm, settings: Settings, *, classify_ids: list[int] = (),
+                 summarize_ids: list[int] = (), match_ids: list[int] = ()) -> bool:
+    """Kayıtları verilen aşamadan başlatıp zincirin sonuna kadar (classify → summarize → match) ilerletir; ilgili bulunan
+    kayıtlar sonraki aşamaya geçer. LLM sunucusu kapalıysa True döner (kalanlar yeniden denenebilir kalır)."""
+    unavailable = False
+    summarize_ids, match_ids = list(summarize_ids), list(match_ids)
+    if classify_ids:
+        from app.ai.classify import classify_pending
+
+        c = classify_pending(session_factory, llm, settings, ids=list(classify_ids), limit=len(classify_ids))
+        summarize_ids += c.relevant_ids
+        unavailable = c.unavailable
+    if summarize_ids and not unavailable:
+        from app.ai.summary import summarize_pending
+
+        sm = summarize_pending(session_factory, llm, settings, ids=summarize_ids, limit=len(summarize_ids))
+        match_ids += sm.ids
+        unavailable = sm.unavailable
+    if match_ids and not unavailable:
+        from app.ai.unit_matching import match_pending
+
+        unavailable = match_pending(session_factory, llm, settings, ids=match_ids, limit=len(match_ids)).unavailable
+    return unavailable
+
+
 def retry_failed(session_factory: sessionmaker[Session], settings: Settings, *, llm, stages: list[str] | None = None,
                  source: str | None = None, ids: list[int] | None = None, limit: int = 1000, actor=None) -> dict:
     """YZ hattında hata veren (``AI_FAILED``) kayıtları, deneme hakkı bitmiş olanlar dahil, yeniden çalıştırır.
@@ -184,24 +221,8 @@ def retry_failed(session_factory: sessionmaker[Session], settings: Settings, *, 
         s.commit()
     by_stage = {st: [i for i, v in todo.items() if v == st] for st in FAILED_STAGES.values()}
     result: dict = {"retried": len(todo), "by_stage": {k: len(v) for k, v in by_stage.items() if v}}
-    unavailable = False
-    summarize_ids, match_ids = list(by_stage["summarize"]), list(by_stage["match"])
-    if by_stage["classify"]:
-        from app.ai.classify import classify_pending
-
-        c = classify_pending(session_factory, llm, settings, ids=by_stage["classify"], limit=len(todo))
-        summarize_ids += c.relevant_ids
-        unavailable = c.unavailable
-    if summarize_ids and not unavailable:
-        from app.ai.summary import summarize_pending
-
-        sm = summarize_pending(session_factory, llm, settings, ids=summarize_ids, limit=len(summarize_ids))
-        match_ids += sm.ids
-        unavailable = sm.unavailable
-    if match_ids and not unavailable:
-        from app.ai.unit_matching import match_pending
-
-        unavailable = match_pending(session_factory, llm, settings, ids=match_ids, limit=len(match_ids)).unavailable
+    unavailable = run_ai_chain(session_factory, llm, settings, classify_ids=by_stage["classify"],
+                               summarize_ids=by_stage["summarize"], match_ids=by_stage["match"])
     with session_factory() as s:
         regs = list(s.scalars(select(Regulation).where(Regulation.id.in_(todo))))
         for reg in regs:

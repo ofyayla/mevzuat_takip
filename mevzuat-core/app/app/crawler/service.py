@@ -149,12 +149,12 @@ class CrawlerService:
         log.warning("%s kaynağının Mongo kayıtları silindi: %s", code, out)
         return out
 
-    def run_backfill(self, code: str, date_from: date, date_to: date) -> dict:
+    def run_backfill(self, code: str, date_from: date, date_to: date, history_from: date | None = None) -> dict:
         from app.monitoring.reprocess import backfill
 
         with self._lock(code):
             rep = backfill(self.store, self.settings, code, date_from, date_to, fetcher_factory=self.fetcher_factory,
-                           should_stop=self.stop.is_set)
+                           should_stop=self.stop.is_set, history_from=history_from)
         out = {"source": code, "days": rep.days, "new": rep.new, "runs": rep.runs}
         if rep.interrupted_at:
             out["interrupted_at"] = rep.interrupted_at.isoformat()
@@ -168,7 +168,8 @@ class CrawlerService:
                                          max_details=p.get("max_details", 200))
             elif req["kind"] == "backfill":
                 result = self.run_backfill(req["source_code"], date.fromisoformat(p["date_from"]),
-                                           date.fromisoformat(p["date_to"]))
+                                           date.fromisoformat(p["date_to"]),
+                                           date.fromisoformat(p["history_from"]) if p.get("history_from") else None)
                 if resume := result.get("interrupted_at"):   # servis kapanıyor: talep kaldığı günden sürdürülür
                     requeue_request(self.db, req["_id"], {"date_from": resume})
                     log.info("backfill %s günden sürdürülmek üzere kuyruğa alındı", resume)
