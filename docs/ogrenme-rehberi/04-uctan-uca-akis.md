@@ -134,6 +134,8 @@ stateDiagram-v2
   (`services/regulations.py:visible`). Kayıt, özet ve birim önerisi tamamlanmadan önce de **ilgili bulunduğu anda**
   portala düşer. Özet ve öneriler sonradan dolar.
 - Canlı sayılar ve bu grafik portalda `/surec` sayfasında (`services/pipeline.py`, `GET /api/v1/pipeline`).
+- Portal listesine düşmeyen iki durum (`IRRELEVANT`, `BASELINE`) binlerce kayıt olabilir; tamamı `/arsiv` sayfasında
+  sunucu tarafı sayfalamayla sorgulanır (`services/archive.py`, `GET /api/v1/archive/regulations`).
 
 ## 5. Zamanlama ve gecikme (core tarafı)
 
