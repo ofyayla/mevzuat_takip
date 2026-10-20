@@ -132,6 +132,10 @@ window.__resources = {
                 <i data-lucide="archive" style="width:14px; height:14px; color:var(--primary);"></i>
                 Arşiv
               </a>
+              <a href="./karsilastirma" title="Başkanlık Excel listesini sistem kayıtlarıyla karşılaştır" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; text-decoration:none; font-family:var(--font-sans); white-space:nowrap;">
+                <i data-lucide="git-compare" style="width:14px; height:14px; color:var(--primary);"></i>
+                Karşılaştırma
+              </a>
               <button onClick="{{ loadAdmin }}" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:var(--radius-pill); border:1px solid var(--border); background:var(--background); color:var(--foreground); font-size:13px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
                 <i data-lucide="refresh-cw" style="width:14px; height:14px; color:var(--primary);"></i>
                 Yenile
@@ -533,6 +537,10 @@ window.__resources = {
             </button>
           </sc-if>
           <span style="margin-left:auto; font-size:12px; color:var(--muted-foreground); white-space:nowrap;">{{ resultCountLabel }}</span>
+          <button onClick="{{ exportExcel }}" disabled="{{ exportDisabled }}" title="Geçerli süzgeç ve sıralamadaki tüm kayıtları Excel olarak indirir" style="display:flex; align-items:center; gap:6px; height:36px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card); color:var(--foreground); font-size:13px; font-weight:500; cursor:pointer; font-family:var(--font-sans);">
+            <i data-lucide="download" style="width:14px; height:14px;"></i>
+            {{ exportLabel }}
+          </button>
         </div>
 
         <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
@@ -1187,8 +1195,8 @@ class Component extends DCLogic {
   };
   loadStats = () => api('/regulations/stats').then(r => this.setState({ stats: r.data })).catch(this.fail);
 
-  loadList = (over = {}) => {
-    const st = Object.assign({}, this.state, over);
+  // Liste ve Excel dışa aktarımı aynı süzgeç/sıralama parametrelerini kullanır (sayfalama hariç)
+  filterParams = (st) => {
     const f = st.filters, p = new URLSearchParams();
     if (f.source !== 'all') p.set('source', f.source);
     if (f.severity !== 'all') p.set('severity', f.severity);
@@ -1197,8 +1205,37 @@ class Component extends DCLogic {
     if (f.date !== 'all') p.set('date_range', f.date);
     if (f.search) p.set('q', f.search);
     if (st.activeMetric) p.set('metric', METRIC_PARAM[st.activeMetric]);
-    p.set('page', st.page); p.set('page_size', st.pageSize);
     if (st.sort) { p.set('sort', st.sort); p.set('direction', st.sortDir); }
+    return p;
+  };
+
+  exportExcel = async () => {
+    if (this.state.exporting) return;
+    this.setState({ exporting: true });
+    try {
+      const user = storedUser();
+      const res = await fetch(API_BASE + '/regulations/export?' + this.filterParams(this.state).toString(), {
+        headers: user ? { 'X-Demo-User': encodeURIComponent(user) } : {}
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err.error && err.error.message) || ('HTTP ' + res.status));
+      }
+      const blob = await res.blob();
+      const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'mevzuat.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (res.headers.get('X-Export-Truncated') === 'true') this.showToast(`Excel'e yalnızca ilk 5000 kayıt aktarıldı (toplam ${res.headers.get('X-Export-Total')}); süzgeçle daraltın.`);
+    } catch (e) { this.fail(e); }
+    this.setState({ exporting: false });
+  };
+
+  loadList = (over = {}) => {
+    const st = Object.assign({}, this.state, over);
+    const p = this.filterParams(st);
+    p.set('page', st.page); p.set('page_size', st.pageSize);
     const seq = (this._listSeq = (this._listSeq || 0) + 1);   // sırasız gelen eski yanıtı yok say
     return api('/regulations?' + p.toString())
       .then(r => {
@@ -1824,6 +1861,8 @@ class Component extends DCLogic {
       auditProblems: !auditResult ? [] : auditResult.problems.slice(0, 20).map(p => ({ text: `Kayıt ${p.regulation_id == null ? '—' : p.regulation_id} · olay ${p.id == null ? '—' : p.id}: ${p.problem}` })),
       isListView: view === 'list' || view === 'detail', isDetailView: view === 'detail',
       filters, unitOptions: units, sourceOptions: sources, hasActiveFilters,
+      exportExcel: this.exportExcel, exportDisabled: !!this.state.exporting || total === 0,
+      exportLabel: this.state.exporting ? 'Hazırlanıyor…' : "Excel'e aktar",
       setSearch: this.setSearch, setFilterSource: this.setFilterSource, setFilterSeverity: this.setFilterSeverity,
       setFilterStatus: this.setFilterStatus, setFilterUnit: this.setFilterUnit, setFilterDate: this.setFilterDate, clearFilters: this.clearFilters,
       visibleRecords, hasResults: total > 0, noResults: listLoaded && total === 0, isLoadingList: !listLoaded,
