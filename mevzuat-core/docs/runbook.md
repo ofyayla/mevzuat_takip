@@ -195,6 +195,12 @@ gösterir), sonra **Uygula**. Uygulanmış sınır `app_setting.baseline_cutoff`
   sonrası yeni → mevcut zincirle YZ'ye gider. Resmî Gazete gün gün; WordPress API (MASAK, HMB), sayfalı JSON/CSS listeler sınır tarihine
   kadar geriye okunur. Tek sayfa/RSS listeleri (BDDK, KVKK, REKABET …) sitenin gösterdiğinden daha geriye gidemez; önizlemede
   "liste daha geriye gitmiyor" olarak görünür ve yalnızca mevcut kayıtları dönüşür.
+- **Kesintiye dayanıklıdır** (dağıtım, OOM, pod yeniden başlaması): hiçbir kayıt kaybolmaz. İlerleme `job_run.result`'a adım adım
+  yazılır (`phase`: crawl → ai → done, `crawl[]` her tarama parçası). Süreç ölürse iş "Yarıda kaldı" olur; Beat'in
+  `resume-rebaseline` görevi (10 dk) aynı sınırla yeni iş açıp sürdürür (en çok 5 kez art arda; sonra elle başlatın). Tarama
+  talepleri `dedupe_key` ile tekilleşir (aynı talep bekliyor/çalışıyor/bitmişse yenisi açılmaz), tamamlanan yerel taramalar
+  atlanır, YZ zinciri önceki koşuda `NEW` yapılmış bekleyenleri de alır. Çalışan bir iş varken ikinci "Uygula" 409 döner.
+  Redis/Beat yoksa otomatik devam yoktur; "Uygula"yı yeniden basmak yeterli ve güvenlidir.
 - İşlem idempotenttir ve yalnızca `BASELINE → NEW` yönünde çalışır; sınırı ileri almak işlenmiş kayıtları geri çevirmez. Daha önce
   OCR atlanmış (baseline) taranmış PDF'ler metinsiz kalabilir: özet "metin bekleniyor" olur (`OCR_BASELINE=true` ile yeniden çıkarılır).
 

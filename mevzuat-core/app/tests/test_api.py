@@ -365,6 +365,8 @@ def test_admin_scans_lists_active_recent_and_filters(settings, env, client):  # 
     assert [r["source"] for r in c.get("/api/v1/admin/scans", params={"source": "SPK"}).json()["recent"]] == ["SPK"]
     assert len(c.get("/api/v1/admin/scans", params={"limit": 2}).json()["recent"]) == 2
     assert c.get("/api/v1/admin/scans", params={"status": "bogus"}).json()["error"]["code"] == "validation_error"
+    aq = body["aiQueue"]
+    assert [s["status"] for s in aq["stages"]] == ["NEW", "RELEVANT", "SUMMARIZED", "AI_FAILED"] and aq["waiting"] >= 0
 
 
 def test_admin_jobs_recorded_for_background_tasks(settings, env, client, monkeypatch):  # noqa: F811

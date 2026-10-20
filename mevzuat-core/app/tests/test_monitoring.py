@@ -397,6 +397,89 @@ def test_apply_rebaseline_keeps_records_new_when_llm_is_down(settings, env, monk
         assert s.get(Regulation, new).processing_status == "NEW"      # zamanlanmış classify işi alır
 
 
+def test_rebaseline_saves_progress_and_resume_continues_without_losing_or_repeating_work(settings, env, monkeypatch):  # noqa: F811
+    from app.services import rebaseline as rb
+    from app.services.jobs import create_job
+
+    sf, _ = env
+    cutoff = date(2026, 8, 1)
+    new = _baseline_reg(sf, "Bankaların Kredi İşlemlerine İlişkin Yönetmelik", "BDDK", date(2026, 8, 5))
+    crawls = []
+
+    def fake_crawl(sf_, st, code, d_from, d_to, cutoff_, actor):
+        crawls.append(code)
+        return {"source": code, "from": d_from.isoformat(), "to": d_to.isoformat(), "status": "done"}
+
+    monkeypatch.setattr(rb, "_crawl", fake_crawl)
+    llm = FakeLLM(settings, lambda t, m, n: [rel()] * n if t == "relevance" else [sev("Yüksek")])
+    # 1. koşu: kayıtlar NEW yapıldı ama süreç YZ'ye geçmeden öldü (iş "interrupted", ilerleme kayıtlı)
+    with sf() as s:
+        jid = create_job(s, "rebaseline", requested_by="t", params={"cutoff": cutoff.isoformat()})
+    with sf() as s:
+        reg = s.get(Regulation, new)
+        reg.processing_status, reg.extra = "NEW", {"rebaselined_at": cutoff.isoformat()}
+        job = s.get(JobRun, jid)
+        job.status, job.result = "interrupted", {"crawl": [{"source": "BDDK", "status": "done", "key": rb.crawl_key(
+            cutoff, "BDDK", cutoff, date.today())}]}
+        s.commit()
+    # SPK taraması yapılmış sayılsın; RG ve diğerleri yapılmamış
+    spk_key = rb.crawl_key(cutoff, "SPK", cutoff, date.today())
+    with sf() as s:
+        s.get(JobRun, jid).result = {"crawl": [{"source": "SPK", "status": "done", "key": spk_key}]}
+        s.commit()
+    out = rb.resume_interrupted(sf, settings, llm=llm)
+    assert out["status"] == "resumed" and out["resumedFrom"] == jid
+    assert "SPK" not in crawls and "RESMI_GAZETE" in crawls                  # biten tarama tekrarlanmadı
+    with sf() as s:
+        reg = s.get(Regulation, new)
+        assert reg.is_relevant and reg.processing_status not in ("NEW", "AI_FAILED")   # önceki koşunun NEW'i de işlendi
+        resumed = s.get(JobRun, out["jobId"])
+        assert resumed.status == "success" and resumed.result["phase"] == "done"
+        assert {e["source"] for e in resumed.result["crawl"]} >= {"SPK", "RESMI_GAZETE"}
+        assert next(e for e in resumed.result["crawl"] if e["source"] == "SPK")["skipped"]
+    assert rb.resume_interrupted(sf, settings, llm=llm)["status"] == "nothing_to_resume"   # artık kesilmiş iş yok
+
+
+def test_resume_interrupted_gives_up_after_repeated_interruptions(settings, env):  # noqa: F811
+    from app.services import rebaseline as rb
+    from app.services.jobs import create_job
+
+    sf, _ = env
+    with sf() as s:
+        for _ in range(rb.MAX_AUTO_RESUMES + 1):
+            jid = create_job(s, "rebaseline", params={"cutoff": "2026-08-01"})
+            s.get(JobRun, jid).status = "interrupted"
+        s.commit()
+    llm = FakeLLM(settings, lambda t, m, n: [rel()] * n)
+    assert rb.resume_interrupted(sf, settings, llm=llm)["status"] == "gave_up"
+
+
+def test_submit_crawl_request_once_dedupes_pending_running_and_done(mdb):
+    from app.mongo import REQUESTS, finish_crawl_request, submit_crawl_request_once
+
+    first, created = submit_crawl_request_once(mdb, "backfill", "BDDK", {"history_from": "2026-08-01"}, "k1")
+    assert created
+    assert submit_crawl_request_once(mdb, "backfill", "BDDK", {}, "k1") == (first, False)       # bekliyor
+    doc = mdb[REQUESTS].find_one_and_update({"status": "pending"}, {"$set": {"status": "running"}})
+    assert submit_crawl_request_once(mdb, "backfill", "BDDK", {}, "k1") == (first, False)       # çalışıyor
+    finish_crawl_request(mdb, doc["_id"], ok=True)
+    assert submit_crawl_request_once(mdb, "backfill", "BDDK", {}, "k1") == (first, False)       # bitti
+    assert submit_crawl_request_once(mdb, "backfill", "BDDK", {}, "k2")[1]                      # başka anahtar: yeni
+    finish_crawl_request(mdb, doc["_id"], ok=False, error="x")
+    assert submit_crawl_request_once(mdb, "backfill", "BDDK", {}, "k1")[1]                      # başarısız: yeniden açılır
+
+
+def test_admin_rebaseline_rejects_second_job_while_one_is_running(settings, env):  # noqa: F811
+    from app.services.jobs import create_job
+
+    sf, _ = env
+    with sf() as s:
+        create_job(s, "rebaseline", params={"cutoff": "2026-08-01"})                            # queued
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": "", "llm_provider": "openai"}), sf))
+    r = c.post("/api/v1/admin/rebaseline", json={"cutoff": "2026-08-01"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "rebaseline_running"
+
+
 def test_admin_rebaseline_endpoints(settings, env):  # noqa: F811
     sf, _ = env
     _baseline_reg(sf, "Ağustos Kararı", "BDDK", date(2026, 8, 5))

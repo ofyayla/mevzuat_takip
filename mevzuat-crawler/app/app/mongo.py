@@ -82,6 +82,20 @@ def submit_crawl_request(db, kind: str, source_code: str, params: dict | None = 
     return str(res.inserted_id)
 
 
+def submit_crawl_request_once(db, kind: str, source_code: str, params: dict, dedupe_key: str,
+                              requested_by: str | None = None) -> tuple[str, bool]:
+    """``submit_crawl_request`` ama aynı ``dedupe_key`` ile bekleyen, çalışan ya da başarıyla bitmiş talep varsa yenisini
+    açmaz. ``(talep_id, yeni_açıldı_mı)`` döner. Başarısız talepler sayılmaz: yeniden açılır. Kesilen bir işin yeniden
+    çalıştırılması (``rebaseline``) böylece aynı taramayı ikinci kez kuyruğa koymaz."""
+    existing = db[REQUESTS].find_one({"dedupe_key": dedupe_key, "status": {"$in": ["pending", "running", "done"]}})
+    if existing is not None:
+        return str(existing["_id"]), False
+    res = db[REQUESTS].insert_one({"kind": kind, "source_code": source_code, "params": params or {},
+                                   "requested_by": requested_by, "status": "pending", "created_at": utcnow(),
+                                   "dedupe_key": dedupe_key})
+    return str(res.inserted_id), True
+
+
 def claim_crawl_request(db, owner: str, busy_codes: list[str]) -> dict | None:
     from pymongo import ReturnDocument
 

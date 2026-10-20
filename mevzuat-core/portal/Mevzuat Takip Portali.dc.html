@@ -211,6 +211,16 @@ window.__resources = {
               </sc-for>
             </div>
 
+            <div>
+              <h3 style="font-size:13px; font-weight:600; margin:0 0 8px;">YZ kuyruğu</h3>
+              <div style="font-size:12.5px; color:var(--muted-foreground); padding:0 0 4px;">{{ aiQueueNote }}</div>
+              <sc-for list="{{ aiQueueRows }}" as="aq" hint-placeholder-count="4">
+                <div style="display:grid; grid-template-columns:minmax(220px,1.6fr) 90px minmax(150px,1fr); gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--border); font-size:13px;">
+                  <span style="font-weight:500;">{{ aq.label }}</span><span style="color:{{ aq.color }};">{{ aq.count }}</span><span style="color:var(--muted-foreground);">{{ aq.oldest }}</span>
+                </div>
+              </sc-for>
+            </div>
+
             <sc-if value="{{ showQueue }}" hint-placeholder-val="{{ false }}">
               <div>
                 <h3 style="font-size:13px; font-weight:600; margin:0 0 8px;">Crawler kuyruğu</h3>
@@ -1395,7 +1405,7 @@ class Component extends DCLogic {
   scheduleScans = (s) => {
     clearTimeout(this._scansTimer);
     if (this.state.view !== 'admin') return;
-    const busy = !!s && (s.active.length || s.queued.length || s.jobs.active.length);
+    const busy = !!s && (s.active.length || s.queued.length || s.jobs.active.length || (s.aiQueue && s.aiQueue.waiting));
     this._scansTimer = setTimeout(() => {
       if (document.hidden || this.state.view !== 'admin') this.scheduleScans(this.state.scans); else this.loadScans();
     }, busy ? SCAN_REFRESH_BUSY_MS : SCAN_REFRESH_IDLE_MS);
@@ -1705,6 +1715,10 @@ class Component extends DCLogic {
       name: a.sourceName, requests: a.requests == null ? '—' : String(a.requests),
       kind: a.pendingIngest ? "Crawler'da çalışıyor" : a.backfillDay ? `Geçmiş tarama · gün ${a.backfillDay}` : 'Tarama',
       elapsed: a.pendingIngest ? 'kayıt aktarımı bekleniyor' : dur(a.elapsedSec, true) }));
+    const aiq = sc.aiQueue || { stages: [], waiting: 0 };
+    const aiQueueRows = aiq.stages.map(s => ({ label: s.label, count: String(s.count), oldest: s.count && s.oldestAt ? `en eski: ${fmtDateTime(s.oldestAt)}` : '',
+      color: s.status === 'AI_FAILED' && s.count ? 'var(--destructive)' : s.count ? 'color-mix(in oklch, var(--info) 55%, black)' : 'var(--muted-foreground)' }));
+    const aiQueueNote = aiq.waiting ? `${aiq.waiting} kayıt YZ hattında bekliyor.` : 'YZ hattında bekleyen kayıt yok.';
     const reqKind = (q) => q.kind === 'backfill' ? `Geçmiş tarama ${(q.params || {}).date_from || ''} – ${(q.params || {}).date_to || ''}` : 'Şimdi tara';
     const queuedRows = sc.queued.map(q => ({
       kind: reqKind(q), name: q.sourceName, by: q.requestedBy || '—', wait: dur(q.waitSec, q.status === 'pending'),
@@ -1753,6 +1767,7 @@ class Component extends DCLogic {
       crawlerText, crawlerColor: cr && (cr.error || cr.stale || !cr.heartbeatAt) ? 'var(--destructive)' : 'var(--muted-foreground)',
       scansUpdatedText: scansAt ? 'son güncelleme ' + new Date(scansAt).toLocaleTimeString('tr-TR') : 'yükleniyor…',
       activeScanRows, noActiveScans: !!scans && activeScanRows.length === 0, activeEmptyText: 'Şu anda süren tarama yok.',
+      aiQueueRows, aiQueueNote,
       showQueue: !!cr, queuedRows, noQueued: queuedRows.length === 0, recentRequestRows, hasRecentRequests: recentRequestRows.length > 0,
       scanSource: scanFilter.source, setScanSource: (e) => this.setScanFilter({ source: e.target.value }), scanStatusTabs,
       recentScanRows, noRecentScans: !!scans && recentScanRows.length === 0,

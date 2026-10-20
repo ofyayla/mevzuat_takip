@@ -82,6 +82,8 @@ def build_beat_schedule() -> dict:
                            "options": {"expires": 600}}
     schedule["match-pending"] = {"task": "app.tasks.ai.match_units", "schedule": _crontab("27,57 * * * *"),
                                  "options": {"expires": 1800}}
+    schedule["resume-rebaseline"] = {"task": "app.tasks.ai.resume_rebaseline", "schedule": _crontab("*/10 * * * *"),
+                                     "options": {"expires": 600}}
     return schedule
 
 

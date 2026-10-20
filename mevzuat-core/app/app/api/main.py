@@ -455,19 +455,27 @@ def admin_rebaseline(body: RebaselineIn, session: SessionDep, background: Backgr
         raise ApiError(400, "llm_required", "bu işlem için LLM yapılandırılmalı")
     if body.cutoff > date.today():
         raise ApiError(400, "invalid_cutoff", "sınır tarihi bugünden ileri olamaz")
+    from app.db import JobRun
+    from app.services.jobs import sweep_stale
+
+    sweep_stale(session, settings)
+    session.commit()
+    if session.scalars(select(JobRun).where(JobRun.kind == "rebaseline",
+                                            JobRun.status.in_(("queued", "running")))).first():
+        raise ApiError(409, "rebaseline_running", "Baseline sınırı işi zaten sürüyor; bitmesini bekleyin")
     plan = plan_rebaseline(session, settings, body.cutoff)
     sf = request.app.state.session_factory
     jid = create_job(session, "rebaseline", requested_by=actor.name,
                      params={"cutoff": body.cutoff.isoformat(), "count": plan["converted"], "crawl": plan["crawl"]})
-    background.add_task(run_job, sf, jid, _rebaseline_bg, sf, settings, body, actor)
+    background.add_task(run_job, sf, jid, _rebaseline_bg, sf, settings, body, actor, jid)
     return {"status": "queued", "count": plan["converted"], "crawl": plan["crawl"], "jobId": jid}
 
 
-def _rebaseline_bg(sf, settings: Settings, body: "RebaselineIn", actor: Actor) -> dict:
+def _rebaseline_bg(sf, settings: Settings, body: "RebaselineIn", actor: Actor, job_id: int) -> dict:
     from app.ai.llm_client import get_llm
     from app.services.rebaseline import apply_rebaseline
 
-    result = apply_rebaseline(sf, settings, body.cutoff, llm=get_llm(settings), actor=actor)
+    result = apply_rebaseline(sf, settings, body.cutoff, llm=get_llm(settings), actor=actor, job_id=job_id)
     log.info("rebaseline: %s", result)
     return result
 

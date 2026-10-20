@@ -119,6 +119,26 @@ def _mongo_state(settings: Settings, names: dict[str, str], now: datetime) -> di
     return out
 
 
+AI_QUEUE_STAGES = (("NEW", "classify", "Sınıflandırma bekliyor"), ("RELEVANT", "summarize", "Özet bekliyor"),
+                   ("SUMMARIZED", "match", "Birim eşleme bekliyor"), ("AI_FAILED", "failed", "YZ hatası"))
+
+
+def ai_queue(session: Session) -> dict:
+    """YZ hattında bekleyen kayıtlar (durum bazında) ve en eski bekleyenin ``detected_at``'ı. Beat bunları 30 dk'lık
+    turlarla, baseline sınırı/yeniden işleme işleri ise doğrudan işler."""
+    from sqlalchemy import func
+
+    from app.db import Regulation
+
+    codes = [c for c, _, _ in AI_QUEUE_STAGES]
+    rows = session.execute(select(Regulation.processing_status, func.count(), func.min(Regulation.detected_at))
+                           .where(Regulation.processing_status.in_(codes)).group_by(Regulation.processing_status)).all()
+    by = {status: (n, oldest) for status, n, oldest in rows}
+    stages = [{"status": code, "stage": stage, "label": label, "count": by.get(code, (0, None))[0],
+               "oldestAt": _iso(by[code][1]) if code in by else None} for code, stage, label in AI_QUEUE_STAGES]
+    return {"stages": stages, "waiting": sum(s["count"] for s in stages if s["status"] != "AI_FAILED")}
+
+
 def collect_scans(session: Session, settings: Settings, now: datetime | None = None, *, source: str | None = None,
                   status: str | None = None, limit: int = 30) -> dict:
     now = now or datetime.now(timezone.utc)
@@ -150,6 +170,7 @@ def collect_scans(session: Session, settings: Settings, now: datetime | None = N
     recent_jobs = session.scalars(select(JobRun).where(JobRun.status.notin_(("queued", "running")))
                                   .order_by(JobRun.id.desc()).limit(RECENT_JOBS_LIMIT))
     return {"generatedAt": now.isoformat(), "crawlMode": settings.crawl_mode,
+            "aiQueue": ai_queue(session),
             "crawler": mongo["crawler"] if mongo else None,
             "active": active, "queued": mongo["queued"] if mongo else [],
             "recentRequests": mongo["recentRequests"] if mongo else [], "recent": recent,

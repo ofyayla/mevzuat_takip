@@ -27,6 +27,18 @@ def classify_regulations(ids: list[int] | None = None, limit: int = 100) -> dict
     return {k: v for k, v in rep.__dict__.items() if k != "errors"} | {"errors": rep.errors[:20]}
 
 
+@app.task(name="app.tasks.ai.resume_rebaseline")
+def resume_rebaseline() -> dict:
+    """Beat güvenlik ağı: süreç ölmesi (dağıtım, OOM) yüzünden kesilen baseline sınırı işini aynı sınırla sürdürür."""
+    from app.services.rebaseline import resume_interrupted
+
+    s = get_settings()
+    llm = get_llm(s)
+    if llm is None:
+        return {"status": "skipped", "reason": "LLM_PROVIDER=none"}
+    return resume_interrupted(_session_factory(), s, llm=llm)
+
+
 @app.task(name="app.tasks.ai.summarize_regulations")
 def summarize_regulations(ids: list[int] | None = None, limit: int = 50) -> dict:
     from app.ai.summary import summarize_pending
