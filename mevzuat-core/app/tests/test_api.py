@@ -68,6 +68,30 @@ def test_list_detail_and_stats(settings, env, client):  # noqa: F811
     assert c.get("/api/v1/regulations", params={"page_size": 500}).json()["error"]["code"] == "validation_error"
 
 
+def test_export_xlsx_uses_list_filters_and_neutralizes_formulas(settings, env, client):  # noqa: F811
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    reg_id = _ready(settings, env)
+    c, sf = client
+    r = c.get("/api/v1/regulations/export")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.openxmlformats")
+    assert "attachment" in r.headers["content-disposition"] and r.headers["x-export-truncated"] == "false"
+    rows = list(load_workbook(BytesIO(r.content)).active.iter_rows(values_only=True))
+    assert rows[0][:2] == ("Kurum", "Başlık") and len(rows) == 2
+    assert rows[1][7] == "Risk Yönetimi Başkanlığı" and rows[1][8] == GOOD["sentence"]
+    # süzgeç listeyle aynı çalışır; eşleşme yoksa yalnız başlık satırı kalır
+    empty = c.get("/api/v1/regulations/export", params={"source": "KVKK"})
+    assert len(list(load_workbook(BytesIO(empty.content)).active.iter_rows())) == 1
+    assert c.get("/api/v1/regulations/export", params={"status": "yok"}).json()["error"]["code"] == "invalid_status"
+    with sf() as s:
+        s.get(Regulation, reg_id).title = "=HYPERLINK(\"http://x\")"
+        s.commit()
+    rows = list(load_workbook(BytesIO(c.get("/api/v1/regulations/export").content)).active.iter_rows(values_only=True))
+    assert rows[1][1].startswith("'=")
+
+
 def test_irrelevant_and_merged_are_hidden(settings, env, client):  # noqa: F811
     reg_id = _ready(settings, env)
     c, sf = client

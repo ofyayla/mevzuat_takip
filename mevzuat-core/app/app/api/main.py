@@ -23,6 +23,7 @@ from app.api.auth import ROLE_ADMIN, ROLE_EXPERT, ROLE_VIEWER, current_actor, re
 from app.db import Unit, make_sessionmaker
 from app.services.archive import ArchiveQuery, archive_detail, list_archive
 from app.services.audit import Actor
+from app.services.export import MAX_EXPORT_ROWS, build_workbook, export_filename
 from app.services.health import sources_health
 from app.services.regulations import (
     REVIEW_STATUSES,
@@ -31,11 +32,13 @@ from app.services.regulations import (
     change_units,
     decide,
     edit_content,
+    export_regulations,
     get_visible,
     list_regulations,
     mark_viewed,
     serialize,
     stats,
+    today,
 )
 from app.settings import Settings, get_settings
 
@@ -43,6 +46,7 @@ log = logging.getLogger(__name__)
 PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
 PIPELINE_FILE = "surec-haritasi.html"
 ARCHIVE_FILE = "arsiv.html"
+COMPARE_FILE = "karsilastirma.html"
 VENDOR_TYPES = {".js": "application/javascript", ".css": "text/css", ".map": "application/json"}
 # Tam bir CSP (script-src vb.) bilinçli yok: portal satır içi betik ve stil kullanıyor. Yalnızca çerçeveye gömülmeyi
 # (clickjacking) ve içerik türü koklamayı kapatır.
@@ -135,6 +139,30 @@ def regulations(session: SessionDep, settings: SettingsDep, actor: ActorDep,
 def regulation_stats(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     require(actor, ROLE_VIEWER)
     return stats(session, settings)
+
+
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@api.get("/regulations/export")
+def regulations_export(session: SessionDep, settings: SettingsDep, actor: ActorDep,
+                       source: str | None = None, severity: str | None = None, status: str | None = None,
+                       unit: str | None = None, date_range: Literal["7", "30"] | None = None, q: str | None = None,
+                       metric: Literal["pending", "critical_high", "criticalHigh", "today", "upcoming"] | None = None,
+                       sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status"] | None = None,
+                       direction: Literal["asc", "desc"] = "desc"):
+    """Liste süzgeçlerine uyan kayıtları Excel (.xlsx) olarak indirir (sayfalamasız, en fazla ``MAX_EXPORT_ROWS``;
+    fazlası varsa ``X-Export-Truncated: true`` başlığı döner)."""
+    require(actor, ROLE_VIEWER)
+    if status and status not in REVIEW_STATUSES:
+        raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
+    query = ListQuery(source, severity, status, unit, int(date_range) if date_range else None, q, metric,
+                      sort=sort, direction=direction)
+    items, total = export_regulations(session, query, settings, MAX_EXPORT_ROWS)
+    headers = {"Content-Disposition": f'attachment; filename="{export_filename(today(settings))}"',
+               "X-Export-Total": str(total), "X-Export-Truncated": str(total > len(items)).lower(),
+               "Access-Control-Expose-Headers": "Content-Disposition, X-Export-Total, X-Export-Truncated"}
+    return Response(build_workbook(items), media_type=XLSX_TYPE, headers=headers)
 
 
 @api.get("/archive/regulations")
@@ -701,6 +729,40 @@ async def manual_detection_upload(session: SessionDep, actor: ActorDep, file: Up
             "items": [_md_out(m) for m in added]}
 
 
+@evaluation.post("/excel-compare")
+async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
+                        format: Literal["json", "xlsx"] = "json",
+                        title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
+                        text_threshold: Annotated[float, Query(ge=50, le=100)] = 80,
+                        date_from: Annotated[date | None, Query(alias="from")] = None,
+                        date_to: Annotated[date | None, Query(alias="to")] = None):
+    """Başkanlık Excel listesini sistem kayıtlarıyla karşılaştırır; veritabanına yazmaz. ``format=xlsx`` aynı sonucu
+    çalışma kitabı olarak döner (sunucu durum tutmaz, dosya yeniden gönderilir)."""
+    from app.evaluation.excel_compare import build_workbook as compare_workbook
+    from app.evaluation.excel_compare import compare, compare_filename, parse_sheet
+
+    require(actor, ROLE_VIEWER)
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise ApiError(413, "too_large", "dosya en fazla 5 MB olabilir")
+    if not (file.filename or "").lower().endswith((".csv", ".txt", ".xlsx", ".xlsm")):
+        raise ApiError(400, "unsupported_file", "CSV veya Excel (.xlsx) yükleyin")
+    try:
+        rows = parse_sheet(file.filename, content)
+    except Exception as e:  # noqa: BLE001 — bozuk dosya
+        raise ApiError(400, "invalid_file", f"dosya okunamadı: {e}") from e
+    if not rows:
+        raise ApiError(400, "empty_file", "dosyada Konu veya Metin sütunu dolu satır bulunamadı")
+    result = compare(session, rows, title_threshold=title_threshold, text_threshold=text_threshold,
+                     date_from=date_from, date_to=date_to)
+    session.rollback()   # salt okunur: eşleştirme sırasında oluşan hiçbir şey yazılmaz
+    if format == "xlsx":
+        headers = {"Content-Disposition": f'attachment; filename="{compare_filename(today(settings))}"',
+                   "Access-Control-Expose-Headers": "Content-Disposition"}
+        return Response(compare_workbook(result), media_type=XLSX_TYPE, headers=headers)
+    return result
+
+
 @evaluation.get("/manual-detections")
 def manual_detections(session: SessionDep, actor: ActorDep, date_from: Annotated[date | None, Query(alias="from")] = None,
                       date_to: Annotated[date | None, Query(alias="to")] = None):
@@ -798,6 +860,10 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     @app.get("/arsiv", include_in_schema=False)
     def archive_page():
         return FileResponse(settings.portal_dir / ARCHIVE_FILE, media_type="text/html; charset=utf-8")
+
+    @app.get("/karsilastirma", include_in_schema=False)
+    def compare_page():
+        return FileResponse(settings.portal_dir / COMPARE_FILE, media_type="text/html; charset=utf-8")
 
     @app.get("/support.js", include_in_schema=False)
     def support_js():
