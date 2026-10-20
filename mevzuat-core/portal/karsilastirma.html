@@ -311,8 +311,7 @@ function detail(i) {
   if (!reg) {
     return excel + `<h3>Sonuç</h3><p>${esc(i.categoryLabel)}${i.rawDocumentId ? ` — ham belge #${i.rawDocumentId} toplandı ama düzenleme kaydına bağlanmadı.` : ' — sistemde bu satıra benzeyen kayıt bulunamadı.'}</p>`;
   }
-  return excel + `<h3>Sistem kaydı</h3><p>#${reg.id} · ${esc(reg.issuer || '—')} · ${fmtDate(reg.publishDate)} · durum ${esc(reg.status)}
-      · önem ${esc(reg.severity || '—')}</p>
+  return excel + `<h3>Sistem kaydı</h3><p>#${reg.id} · ${esc(reg.issuer || '—')} · ${fmtDate(reg.publishDate)} · durum ${esc(reg.status)} · önem ${esc(reg.severity || '—')}</p>
     <h3>YZ kararı${reg.relevanceScore != null ? ' · skor ' + reg.relevanceScore.toFixed(2) : ''}</h3>
     <p>${esc(reg.rationale || 'Gerekçe kaydı yok.')}</p>`;
 }
