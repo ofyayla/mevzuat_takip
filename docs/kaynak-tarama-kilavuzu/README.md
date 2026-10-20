@@ -47,23 +47,22 @@ Görüntünün alt şeridinde kaynak, sayfa adı, adres ve çekim zamanı yazar.
 
 | # | Kaynak | Kanal sayısı | Tarama sıklığı | Bu kılavuzda ekran görüntüsü |
 |---|---|---|---|---|
-| 1 | [Resmî Gazete](#rg) | 1 (fihrist) | günde 7 kez | ⛔ alınamadı (§15) |
-| 2 | [BDDK](#bddk) | 7 | hafta içi saat başı 08–20 | ⛔ alınamadı (§15) |
-| 3 | [SPK](#spk) | 3 | günde 2–3 kez | ⛔ alınamadı (§15) |
+| 1 | [Resmî Gazete](#rg) | 1 (fihrist) | günde 7 kez | ✅ |
+| 2 | [BDDK](#bddk) | 7 | hafta içi saat başı 08–20 | ✅ |
+| 3 | [SPK](#spk) | 3 | günde 2–3 kez | ✅ |
 | 4 | [TCMB](#tcmb) | 2 | hafta içi günde 3 kez | ✅ |
-| 5 | [KVKK](#kvkk) | 3 | günde 2–3 kez | ⛔ alınamadı (§15) |
+| 5 | [KVKK](#kvkk) | 3 | günde 2–3 kez | ✅ |
 | 6 | [MASAK](#masak) | 1 (API) | günde 2–3 kez | ✅ |
 | 7 | [Ticaret Bakanlığı](#ticaret) | 2 | hafta içi günde 2 kez | ✅ |
-| 8 | [Rekabet Kurumu](#rekabet) | 2 | hafta içi günde 2 kez | ⛔ alınamadı (§15) |
+| 8 | [Rekabet Kurumu](#rekabet) | 2 | hafta içi günde 2 kez | ✅ |
 | 9 | [TKBB](#tkbb) | 2 | hafta içi günde 2 kez | ✅ |
 | 10 | [Hazine ve Maliye Bakanlığı](#hmb) | 2 (API) | günde 2–3 kez | ✅ |
-| 11 | [Gelir İdaresi Başkanlığı](#gib) | 8 (API) | günde 2–4 kez | ⛔ alınamadı (§15) |
-| 12 | [KGK](#kgk) | 3 | hafta içi günde 2 kez | ⛔ alınamadı (§15) |
+| 11 | [Gelir İdaresi Başkanlığı](#gib) | 8 (API) | günde 2–4 kez | ✅ |
+| 12 | [KGK](#kgk) | 3 | hafta içi günde 2 kez | ✅ |
 
-> ⛔ **Dürüst not:** Bu kılavuz hazırlanırken kullanılan bulut ortamından 12 sitenin 5'ine (TCMB, MASAK, TKBB, HMB, Ticaret)
-> erişilebildi. Diğer siteler bu ortamın internet çıkışını engelliyor (ayrıntı §15). **Engel sayfası görüntüleri kılavuza
-> konmadı, ekran görüntüsü uydurulmadı.** Bu kaynakların bölümlerinde taranan adresler ve okunan alanlar metin olarak
-> yer alıyor; görüntüler, kurum ağından tek komutla alınıp kılavuza eklenebilir (§15).
+> **Yöntem notu:** Siteler otomasyonlu (başsız) tarayıcıyı engellediği için BDDK, SPK, KVKK, Rekabet Kurumu ve KGK görüntüleri,
+> **gerçek bir Chrome tarayıcısında** sayfalar normal biçimde açılarak alındı (tarayıcı kimliği taklit edilmedi, engel aşılmadı). İşaretler
+> aynı seçicilerle sayfaya eklendi (§15). Bu beş kaynağın görüntüleri **JPEG**'dir; diğerleri PNG.
 
 ---
 
@@ -92,7 +91,17 @@ kurumu aşağıdaki listeye uyan ilanlar** ayrı kayıt olarak alınır (ör. bi
 **Beklenen sayfa yapısı** (yapılandırmadan): fihrist `#html-content` içinde bölüm başlığı (`YÜRÜTME VE İDARE BÖLÜMÜ`, `İLÂN BÖLÜMÜ` …),
 alt başlık (`YÖNETMELİKLER`, `TEBLİĞLER` …) ve madde bağlantılarından oluşur.
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py RESMI_GAZETE` → `img/rg-fihrist.png`*
+![Resmî Gazete günün fihristi](img/rg-fihrist.png)
+
+*<https://www.resmigazete.gov.tr/fihrist?tarih=2026-10-20> — asıl sayının fihristi (20.10.2026).*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Bölüm başlığı (`YÜRÜTME VE İDARE BÖLÜMÜ`; `İLÂN BÖLÜMÜ` gibi bölümler yukarıdaki kurala göre ayrıca ele alınır) |
+| 2 | Alt başlık / tür (`CUMHURBAŞKANI KARARLARI`, `ATAMA KARARLARI`, `YÖNETMELİKLER`…) |
+| 4 | Madde: `/eskiler/YYYY/MM/YYYYMMDD-N.htm` bağlantılı her satır ayrı bir kayıttır |
+
+Fihristte madde satırlarının yanında ayrı bir tarih alanı yoktur; yayım tarihi sayfanın `tarih=` parametresinden gelir.
 
 **Mutabakat soruları:** İLÂN BÖLÜMÜ'ndeki kurum listesi Başkanlığın izlediği kurumları kapsıyor mu? Listede olmayan ama izlenmesi gereken bir
 ilan veren kurum var mı?
@@ -126,7 +135,39 @@ ilan veren kurum var mı?
 
 **Bilerek taranmayanlar:** Duyuru/Liste **41** (İK), **42** (veri), Mevzuat/Liste **54** (Kurum iç düzenlemeleri), **63** (mülga).
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py BDDK` → `img/bddk-*.png`*
+### Görüntüler
+
+**Basın Duyuruları** (`duyurular`):
+
+![BDDK Basın Duyuruları](img/bddk-basin-duyurulari.jpg)
+
+*<https://www.bddk.org.tr/Duyuru/Liste/39>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Duyuru satırı: `/Duyuru/Detay/<no>` bağlantısı (her biri ayrı kayıt) |
+| 3 | Yayım tarihi (`.gorunenTarih`, satırın üstünde küçük mavi yazı) |
+
+**Resmî Gazete'de yayımlanan Kurul Kararları** (`rg_kurul_kararlari`):
+
+![BDDK Kurul Kararları](img/bddk-kurul-kararlari-rg.jpg)
+
+*<https://www.bddk.org.tr/Mevzuat/Liste/55>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Karar bağlantısı (`a.mevzuatBaslik`, `#partialContainer` içinde). **Karar tarihi ve karar sayısı başlığın başındaki `(18.09.2026 - 11572)` kalıbından ayrıştırılır**; satırın sağındaki ok simgesi ek dosyadır |
+
+**Düzenlemeler** (`duzenlemeler`; Mevzuat/Liste/49–52). Görüntüde *Bankacılık Kanununa İlişkin Düzenlemeler* sayfasının "Yönetmelikler" grubu açıktır:
+
+![BDDK Düzenlemeler](img/bddk-duzenlemeler.jpg)
+
+*<https://www.bddk.org.tr/Mevzuat/Liste/50>*
+
+| İşaret | Alan |
+|---|---|
+| 2 | Düzenleme grubu (akordeon başlığı: Yönetmelikler (39), Genelgeler (13), Tebliğler (6), Rehberler (19)…) — grup adı kayda **tür** olarak yazılır |
+| 1 | Düzenleme satırı; bağlantı çoğunlukla `mevzuat.gov.tr`'ye gider |
 
 **Mutabakat soruları:** Başkanlığın izlediği başka bir BDDK sayfası (ör. yönetmelik değişiklik özetleri, sektör verileri) var mı? İK ve iç düzenleme
 listelerinin kapsam dışı olması uygun mu?
@@ -147,7 +188,37 @@ listelerinin kapsam dışı olması uygun mu?
 | `basin_duyurulari` | <https://spk.gov.tr/duyurular/basin-duyurulari/2026> (yıl otomatik) | **Basın duyuruları** |
 | `mevzuat` | <https://mevzuat.spk.gov.tr/> (React ön yüz; liste `/api/Search/All` JSON uç noktasından) | Tebliğ, yönetmelik, rehber, ilke kararlarının **güncel (konsolide) metinleri**; 14 günde bir yeniden kontrol |
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py SPK`*
+**Bültenler** (`bultenler`):
+
+![SPK Bültenleri 2026](img/spk-bultenler.jpg)
+
+*<https://spk.gov.tr/spk-bultenleri/2026-yili-spk-bultenleri>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Bülten kartı (`.liste a.link`; PDF bağlantısı) |
+| 2 | Başlık (*Bülten No : 2026/71*) |
+| 3 | Yayımlanma tarihi (*Yayımlanma : 19 Ekim 2026 Pazartesi*) |
+
+**Basın duyuruları** (`basin_duyurulari`):
+
+![SPK Basın Duyuruları 2026](img/spk-basin-duyurulari.jpg)
+
+*<https://spk.gov.tr/duyurular/basin-duyurulari/2026>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Duyuru satırı |
+| 2 | Başlık |
+| 3 | Tarih (sağdaki kutu, ör. *14 Eki 2026*) |
+
+Sayfanın üstündeki yıl sekmeleri (2012–2026) ve 2. sayfa taranmaz; yalnızca takvim yılının ilk sayfası okunur.
+
+**Mevzuat** (`mevzuat`): React ön yüzü; liste ekranda değil `/api/Search/All` JSON uç noktasından gelir, bu yüzden görüntü işaretsizdir.
+
+![SPK Mevzuat Sistemi](img/spk-mevzuat.jpg)
+
+*<https://mevzuat.spk.gov.tr/> — tür grupları (Kanun, Tebliğ, Yönetmelik, Diğer Karar, Kurul Kararları ve İlke Kararları, Rehberler, Diğer).*
 
 **Mutabakat soruları:** Bültenler dışındaki "Kurul Karar Organı" kararları ayrıca izlenmeli mi? Yıl sayfası takvim yılına göre otomatik seçilir; bu yeterli mi?
 
@@ -234,7 +305,43 @@ Menüdeki *Dış Ticaret, Emisyon, İşçi Dövizleri* mevzuat sayfaları ile *T
 Kurul kararı ve yönetmelik bağlantılarının çoğu **doğrudan Resmî Gazete'ye** gider. Bu durumda crawler yalnızca liste satırını saklar;
 içeriğin kendisi Resmî Gazete kaynağından gelir ve sistem ikisini **tek düzenleme kaydında birleştirir**.
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py KVKK`*
+**Duyurular** (`duyurular`):
+
+![KVKK Duyurular](img/kvkk-duyurular.jpg)
+
+*<https://www.kvkk.gov.tr/Icerik/2015/Duyurular>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Duyuru kutusu (`.news__box`) |
+| 3 | Yayım tarihi (*15 Ekim 2026, Perşembe*) |
+| 4 | Başlık ve ayrıntı bağlantısı |
+
+**Kurul kararları** (`kurul_kararlari`):
+
+![KVKK Kurul Kararları](img/kvkk-kurul-kararlari.jpg)
+
+*<https://www.kvkk.gov.tr/Icerik/5419/kurul-kararlari>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Karar kutusu (`.members__item`) |
+| 2 | Başlık (karar tarihi ve sayısı, ör. *22.07.2026 Tarihli ve 2026/1491 Sayılı Karar*, başlıktan ayrıştırılır) |
+| 4 | "Devamını Gör" bağlantısı |
+
+**Mevzuat** (`mevzuat`: Yönetmelikler, Tebliğler, Rehberler). Görüntüde *Yönetmelikler*:
+
+![KVKK Yönetmelikler](img/kvkk-yonetmelikler.jpg)
+
+*<https://www.kvkk.gov.tr/Icerik/5257/yonetmelikler>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Mevzuat kutusu |
+| 2 | Başlık |
+| 4 | "Devamını Gör": çoğunlukla doğrudan Resmî Gazete'ye gider |
+
+> Sayfaların altında çerez bildirimi bandı görünür; görüntülerde kabul edilmedi, olduğu gibi bırakıldı.
 
 **Mutabakat soruları:** Yukarıdaki üç liste dışında Başkanlığın takip ettiği KVKK sayfaları (varsa: kurul karar özetleri, veri ihlali bildirimleri, yayınlar) var mı?
 
@@ -342,7 +449,28 @@ Liste satırlarında **tarih görünmez**.
 
 Kurul kararı hacmi yüksektir; **ilgililik filtresi bu kaynakta en çok elemeyi yapar**. Elenen kararları Arşiv ekranında görebilirsiniz.
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py REKABET`*
+**Duyurular** (`duyurular`):
+
+![Rekabet Kurumu Duyurular](img/rekabet-duyurular.jpg)
+
+*<https://www.rekabet.gov.tr/tr/Duyurular>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Duyuru: `/tr/Duyurular/…-<32 hane>` bağlantısı ("Detay") |
+| 2 | Başlık (`.tablotitle`) |
+| 3 | Tarih (sağ sütun, ör. *12.10.2026*) |
+
+**Kurul kararları** (`kurul_kararlari`):
+
+![Rekabet Kurumu Kurul Kararları](img/rekabet-kararlar.jpg)
+
+*<https://www.rekabet.gov.tr/tr/Kararlar> — toplam 10.465 karar listelenir; her sayfada 10 karar.*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Karar tablosu (`#kararList table.yantablo1`): yayımlanma tarihi, karar sayısı, karar tarihi, karar türü |
+| 4 | Karar özeti / ayrıntı bağlantısı (`Karar?kararId=…`) |
 
 **Mutabakat soruları:** Birleşme/devralma bildirimleri ve *Kurul Karar Özetleri* ayrıca izlenmeli mi? Bankacılıkla ilgisiz kararların elenmesi beklentiyle uyumlu mu?
 
@@ -471,7 +599,18 @@ GİB portalı bir Next.js uygulamasıdır; detay sayfalarının metni HTML'de bu
 **Bilerek izlenmeyenler** (13.10.2026 kararı): Bakanlar Kurulu Kararları (2018'den beri yeni yok), Genel Yazılar, KKDF ve uluslararası mevzuat, kanun gerekçeleri
 ve madde metinleri, Sistem/Uygulama duyuruları, Sınav/Kariyer duyuruları, Defterdarlık duyuruları.
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py GIB` (GİB'in liste uçları yalnız POST kabul ettiği için görüntü işaretsiz portal ekranıdır).*
+GİB'in liste uçları yalnız POST kabul ettiği için ham yanıt tarayıcıda gösterilemez; aşağıda aynı içeriğin sitedeki karşılığı olan
+**Mevzuat** sayfası görülür (*Vergi Mevzuatına Yeni Eklenenler*: özelge, tebliğ, CBK…):
+
+![GİB Mevzuat — Vergi Mevzuatına Yeni Eklenenler](img/gib-mevzuat.png)
+
+*<https://www.gib.gov.tr/mevzuat> — ön yüz, crawler'ın okuduğu JSON uçlarıyla aynı kaynaktan beslenir.*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Mevzuat satırı (`/mevzuat/kanun/<no>/<tür>/<kimlik>` bağlantısı) |
+| 2 | Başlık |
+| 3 | Yayım tarihi (satırın sağında tarih ve tür etiketi: Özelge, Tebliğ, Cumhurbaşkanı Kararı) |
 
 **Mutabakat soruları:** Vergi mevzuatı bankacılık için hangi ölçüde izlenmeli? Özelge ve sirkülerlerin her biri analize giriyor; ilgililik filtresi bunların çoğunu eleyecektir.
 *Genel Yazılar* ve *Uluslararası mevzuat* dışarıda kalıyor.
@@ -494,28 +633,50 @@ ve madde metinleri, Sistem/Uygulama duyuruları, Sınav/Kariyer duyuruları, Def
 
 Resmî Gazete'ye giden duyurular yalnızca liste satırı olarak saklanır. **İzlenmeyen:** TMS/TFRS ve TDS standart ağaçlarının tamamı (yeni yayımlar *Son Yayımlananlar*'dan gelir).
 
-*Ekran görüntüsü: alınamadı (§15). Komut: `python scripts/kaynak_ekran_goruntusu.py KGK`*
+**Duyurular** (`duyurular`):
+
+![KGK Duyurular](img/kgk-duyurular.jpg)
+
+*<https://www.kgk.gov.tr/Assignments/1/0/Duyurular->*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Duyuru satırı (`.v2-announcement-item`) |
+| 3 | Tarih kutusu (gün / ay / yıl) |
+| 4 | Başlık ve bağlantı (detay sayfası, PDF ya da Resmî Gazete) |
+
+**Son yayımlananlar** (`son_yayimlananlar`):
+
+![KGK Son Yayımlananlar](img/kgk-son-yayimlananlar.jpg)
+
+*<https://www.kgk.gov.tr/Assignments/2/0/Son-Yay%C4%B1mlananlar> — yıl seçilebilir; varsayılan 2026, sayfa başına 50 kayıt.*
+
+**Mevzuat** (`mevzuat`; 10 sayfa). Görüntüde *Yönetmelikler*:
+
+![KGK Mevzuat — Yönetmelikler](img/kgk-mevzuat-yonetmelikler.jpg)
+
+*<https://www.kgk.gov.tr/DynamicContentDetail/5106/Y%C3%B6netmelikler>*
+
+| İşaret | Alan |
+|---|---|
+| 1 | Mevzuat kartı (`.v2-page-content` içindeki `a[href]` / `a[data-href]`; yönetmelik, değişiklik yönetmeliği, güncel metin) |
 
 **Mutabakat soruları:** Standart ağaçlarının dışarıda bırakılması uygun mu?
 
 ---
 
-## 15. Ekran görüntüsü alınamayan kaynaklar ve tamamlama
+## 15. Görüntü alma yöntemi ve yenileme
 
-Bu kılavuz hazırlanırken kullanılan bulut ortamından **7 kaynağa** erişilemedi. Sebepler (her denemede kayıt altına alındı):
+12 kaynağın hepsinin canlı sayfasından görüntü alındı (28 çekim). Yöntem iki türlüdür:
 
-| Kaynak | Sonuç | Sebep |
-|---|---|---|
-| Resmî Gazete | bağlantı kapatıldı (boş yanıt) | Site, tarayıcı olmayan/bulut istemcilerini engelliyor; crawler bu yüzden tarayıcı TLS taklidi kullanıyor |
-| BDDK | TLS sertifika zinciri doğrulanamadı | Sunucu ara sertifikayı göndermiyor (crawler `config/certs` ile çözüyor); site yurt dışı IP'lerine de kapalı |
-| SPK | "Web Filter Violation" engel sayfası | SPK güvenlik duvarı bu IP'yi engelliyor |
-| KVKK | önce bağlantı reddi (ağ geçidi), sonra HTTP 500 "Güvenlik Sorunu" sayfası | Ortamın ağ politikası ve/veya site filtresi |
-| Rekabet Kurumu | HTTP 418 "Sayfaya erişiminiz engellenmiştir" | Site WAF'ı |
-| GİB | bağlantı kapatıldı (boş yanıt) | Site bulut IP'lerini engelliyor |
-| KGK | "The URL you requested has been blocked" | Site filtresi |
+- **Resmî Gazete, TCMB, MASAK, Ticaret, TKBB, HMB, GİB:** `scripts/kaynak_ekran_goruntusu.py` otomasyonlu tarayıcıyla çekti (PNG).
+- **BDDK, SPK, KVKK, Rekabet Kurumu, KGK:** Bu siteler otomasyonlu tarayıcıyı engelliyor (HTTP 500 "Web Page Blocked / Güvenlik Uyarısı", Rekabet'te HTTP 418).
+  Engeller **aşılmadı**, tarayıcı kimliği taklit edilmedi; sayfalar **gerçek bir Chrome tarayıcısında, normal bir kullanıcı gibi** açıldı. Betiğin ürettiği işaret
+  kodu (`--emit-js`) sayfada çalıştırıldı ve ekran görüntüsü alındı (JPEG).
 
-Engelleri **aşmaya çalışılmadı**; engel sayfalarının görüntüleri de kılavuza konmadı. Bu kaynakların görüntülerini kurum ağında (DMZ ya da
-Türkiye çıkışlı bir iş istasyonunda) tek komutla alabilirsiniz:
+### Görüntüleri yenileme
+
+Siteler değişir; görüntüleri ve seçicileri belirli aralıklarla yenileyin:
 
 ```bash
 cd mevzuat-core/app
@@ -525,13 +686,22 @@ python scripts/kaynak_ekran_goruntusu.py BDDK SPK   # yalnız bazı kaynaklar
 python scripts/kaynak_ekran_goruntusu.py --list     # çekim listesi
 ```
 
-- Görüntüler `docs/kaynak-tarama-kilavuzu/img/` altına yazılır (dosya adları yukarıdaki bölümlerde geçer); kılavuzdaki bölümlere ekleyin.
+Otomasyonlu çekim engellenen siteler için (`ERİŞİLEMEDİ` çıkar) iki yol vardır:
+
+1. Kurumun güvenlik ekibi çıkış IP'sini ilgili sitelerde izin listesine aldırırsa betik olduğu gibi çalışır.
+2. İşaret kodunu üretip kendi tarayıcınızda çalıştırın:
+   ```bash
+   python scripts/kaynak_ekran_goruntusu.py BDDK --emit-js js/   # js/<çekim-kimliği>.js dosyaları
+   ```
+   Sayfayı açın, ilgili `.js` dosyasının içeriğini tarayıcı konsoluna yapıştırın (çerçeveler eklenir ve sayfa ilk kayda kaydırılır), ekran görüntüsünü alıp
+   `docs/kaynak-tarama-kilavuzu/img/<çekim-kimliği>.png` olarak kaydedin. Akordeon/sekme gibi açılması gereken yerleri (ör. BDDK düzenlemeler) elle açın.
+
 - Betik, `config/sources.yaml`'daki seçicilerle işaretler. **İşaret bulunamazsa** rapora `UYARI: işaret bulunamadı` yazar: bu, sitenin şablonunun değiştiğini ve
   crawler'ın o sayfada artık kayıt okuyamayabileceğini gösterir — yani kılavuz aynı zamanda bir **seçici sağlık kontrolüdür**.
 - Engel/hata sayfası görürse görüntü üretmez ve `ERİŞİLEMEDİ` der.
-- Sonuç özeti `docs/kaynak-tarama-kilavuzu/cekim-raporu.json` dosyasına yazılır.
-- Bulut ortamında erişilebilen siteler için yapılan çekimlerde işaretler canlı sayfada **doğrulandı** (TKBB, TCMB, MASAK, HMB, Ticaret). Diğer kaynakların çekim tanımları
-  yapılandırmadan türetildi ve ilk çalıştırmada doğrulanmalıdır.
+- Sonuç özeti `docs/kaynak-tarama-kilavuzu/cekim-raporu.json` dosyasına yazılır (commit'lenmez).
+- Tüm işaretler canlı sayfada **doğrulandı** (20.10.2026). Bilinen iki sınır: BDDK kurul kararlarında tarih ayrı bir alan değil başlığın içindedir (görüntüde ayrı
+  çerçevelenmedi); SPK Mevzuat ekranı işaretsizdir (liste JSON uç noktasından gelir).
 
 ---
 

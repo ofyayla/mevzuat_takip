@@ -88,6 +88,72 @@ değişince yeniden üretilir: servis imajını derleyip `docker run --rm <imaj>
 
 - **Geliştirici öğrenme rehberi** (crawler'dan başlayarak uçtan uca mimari, tarama takvimi, uygulamalı
   alıştırmalar, geliştirme noktaları, sunum): `docs/ogrenme-rehberi/README.md`
+- **Kaynak tarama kılavuzu** (crawler'ın hangi kurum sayfalarını, hangi alanları okuyarak taradığı; mutabakat
+  toplantısı için): `docs/kaynak-tarama-kilavuzu/README.md`
 - Kurumda devreye alma: `mevzuat-core/docs/kurum-devreye-alma.md`
 - İşletim ve olay müdahalesi: `mevzuat-core/docs/runbook.md`
 - Mimari ve geliştirme planı: `mevzuat-core/docs/backend-gelistirme-plani.md`
+
+### Kaynak tarama — ekran görüntüleri
+
+Crawler'ın canlı sayfalarda okuduğu alanlar (1 kayıt · 2 başlık · 3 tarih · 4 bağlantı) numaralı çerçevelerle işaretlenmiştir.
+Ayrıntı ve mutabakat soruları: [Kaynak tarama kılavuzu](docs/kaynak-tarama-kilavuzu/README.md).
+
+| Resmî Gazete — fihrist | GİB — mevzuat |
+|---|---|
+| ![Resmî Gazete fihrist](docs/kaynak-tarama-kilavuzu/img/rg-fihrist.png) | ![GİB mevzuat](docs/kaynak-tarama-kilavuzu/img/gib-mevzuat.png) |
+
+| TCMB — basın duyuruları | TCMB — Atom beslemesi |
+|---|---|
+| ![TCMB basın duyuruları](docs/kaynak-tarama-kilavuzu/img/tcmb-basin-sayfa.png) | ![TCMB Atom beslemesi](docs/kaynak-tarama-kilavuzu/img/tcmb-basin-feed.png) |
+
+| TCMB — bankacılık mevzuatı | MASAK — duyurular |
+|---|---|
+| ![TCMB bankacılık mevzuatı](docs/kaynak-tarama-kilavuzu/img/tcmb-mevzuat-bankacilik.png) | ![MASAK duyurular](docs/kaynak-tarama-kilavuzu/img/masak-duyurular.png) |
+
+| MASAK — WordPress API | HMB — basın duyuruları |
+|---|---|
+| ![MASAK API](docs/kaynak-tarama-kilavuzu/img/masak-api.png) | ![HMB basın duyuruları](docs/kaynak-tarama-kilavuzu/img/hmb-basin-duyurulari.png) |
+
+| HMB — WordPress API | HMB — kanunlar |
+|---|---|
+| ![HMB API](docs/kaynak-tarama-kilavuzu/img/hmb-api.png) | ![HMB kanunlar](docs/kaynak-tarama-kilavuzu/img/hmb-kanunlar.png) |
+
+| Ticaret — duyurular | Ticaret — tüketici mevzuatı |
+|---|---|
+| ![Ticaret duyurular](docs/kaynak-tarama-kilavuzu/img/ticaret-duyurular.png) | ![Ticaret tüketici mevzuatı](docs/kaynak-tarama-kilavuzu/img/ticaret-tuketici-mevzuati.png) |
+
+| TKBB — duyurular | TKBB — idari düzenlemeler |
+|---|---|
+| ![TKBB duyurular](docs/kaynak-tarama-kilavuzu/img/tkbb-duyurular.png) | ![TKBB idari düzenlemeler](docs/kaynak-tarama-kilavuzu/img/tkbb-idari-duzenlemeler.png) |
+
+| BDDK — basın duyuruları | BDDK — Resmî Gazete kurul kararları |
+|---|---|
+| ![BDDK — basın duyuruları](docs/kaynak-tarama-kilavuzu/img/bddk-basin-duyurulari.jpg) | ![BDDK — Resmî Gazete kurul kararları](docs/kaynak-tarama-kilavuzu/img/bddk-kurul-kararlari-rg.jpg) |
+
+| BDDK — düzenlemeler | SPK — bültenler |
+|---|---|
+| ![BDDK — düzenlemeler](docs/kaynak-tarama-kilavuzu/img/bddk-duzenlemeler.jpg) | ![SPK — bültenler](docs/kaynak-tarama-kilavuzu/img/spk-bultenler.jpg) |
+
+| SPK — basın duyuruları | SPK — mevzuat sistemi |
+|---|---|
+| ![SPK — basın duyuruları](docs/kaynak-tarama-kilavuzu/img/spk-basin-duyurulari.jpg) | ![SPK — mevzuat sistemi](docs/kaynak-tarama-kilavuzu/img/spk-mevzuat.jpg) |
+
+| KVKK — duyurular | KVKK — kurul kararları |
+|---|---|
+| ![KVKK — duyurular](docs/kaynak-tarama-kilavuzu/img/kvkk-duyurular.jpg) | ![KVKK — kurul kararları](docs/kaynak-tarama-kilavuzu/img/kvkk-kurul-kararlari.jpg) |
+
+| KVKK — yönetmelikler | Rekabet — duyurular |
+|---|---|
+| ![KVKK — yönetmelikler](docs/kaynak-tarama-kilavuzu/img/kvkk-yonetmelikler.jpg) | ![Rekabet — duyurular](docs/kaynak-tarama-kilavuzu/img/rekabet-duyurular.jpg) |
+
+| Rekabet — kurul kararları | KGK — duyurular |
+|---|---|
+| ![Rekabet — kurul kararları](docs/kaynak-tarama-kilavuzu/img/rekabet-kararlar.jpg) | ![KGK — duyurular](docs/kaynak-tarama-kilavuzu/img/kgk-duyurular.jpg) |
+
+| KGK — son yayımlananlar | KGK — mevzuat |
+|---|---|
+| ![KGK — son yayımlananlar](docs/kaynak-tarama-kilavuzu/img/kgk-son-yayimlananlar.jpg) | ![KGK — mevzuat](docs/kaynak-tarama-kilavuzu/img/kgk-mevzuat-yonetmelikler.jpg) |
+
+Tüm 12 kaynağın görüntüsü vardır. BDDK, SPK, KVKK, Rekabet Kurumu ve KGK siteleri otomasyonlu tarayıcıyı engellediği için bu beş kaynağın görüntüleri
+gerçek bir Chrome tarayıcısında alındı (JPEG). Yöntem ve yenileme adımları: kılavuz §15.

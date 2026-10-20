@@ -89,7 +89,9 @@ OVERLAY = r"""
   const layer = document.createElement('div'); layer.id = '__marks';
   layer.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none';
   document.body.appendChild(layer);
-  const sx = window.scrollX, sy = window.scrollY; let first = null; const found = {};
+  // gövde konumlandırılmışsa (ör. sabit üst çubuk için kaydırılmış gövde) katman sayfa köşesinden kayar; farkı düş
+  const lo = layer.getBoundingClientRect();
+  const sx = -lo.left, sy = -lo.top; let first = null; const found = {};
   for (const m of marks) {
     let els = []; try { els = (new Function('return (' + m.find + ')'))() || []; } catch (e) { els = []; }
     els = Array.from(new Set(els)).filter(Boolean).slice(0, m.max); found[m.num] = els.length;
@@ -104,7 +106,7 @@ OVERLAY = r"""
         n.style.cssText = `position:absolute;left:${r.left+sx-16}px;top:${r.top+sy-16}px;width:30px;height:30px;border-radius:50%;`
           + `background:${m.color};color:#fff;font:700 17px/30px Arial,sans-serif;text-align:center;box-shadow:0 1px 4px #0006`;
         layer.appendChild(n);
-        if (!first || r.top + sy < first) first = r.top + sy;
+        if (first === null || r.top + window.scrollY < first) first = r.top + window.scrollY;
       }
     });
   }
@@ -136,7 +138,13 @@ def marks_from_config(source: dict, channel: str, url_index: int = 0) -> list[Ma
             marks.append(Mark(4, "Ayrıntı bağlantısı", f"__q({_kw(link)}, __q({_kw(item)})[0])", 1))
         return marks
     if ch["strategy"] == "link_pattern":
-        marks = [Mark(1, "Taranan bağlantı (href deseni)", f"__href({_kw(p.get('href_pattern', '.'))})", 4)]
+        scope = f"document.querySelector({_kw(p['scope'])})" if p.get("scope") else "document"
+        if p.get("link_selector"):
+            marks = [Mark(1, "Taranan bağlantı (kapsam + bağlantı seçicisi)", f"__q({_kw(p['link_selector'])}, {scope})", 4)]
+        else:
+            marks = [Mark(1, "Taranan bağlantı (href deseni)", f"__href({_kw(p.get('href_pattern', '.'))}, {scope})", 4)]
+        if p.get("date_regex"):
+            marks.append(Mark(3, "Tarih (başlığın içinden ayrıştırılır)", f"__rng({_kw(p['date_regex'])})", 1))
         if p.get("date_selector"):
             marks.append(Mark(3, "Tarih", f"__q({_kw(p['date_selector'])})", 1))
         if p.get("title_selector"):
@@ -267,8 +275,12 @@ def build_shots(cfg: dict) -> list[Shot]:
     S.append(Shot("rekabet-kararlar", "REKABET", "kurul_kararlari", "Kurul Kararları", "https://www.rekabet.gov.tr/tr/Kararlar", marks=marks_from_config(rek, "kurul_kararlari")))
 
     # ---- GIB (Next.js ön yüz; liste uçları yalnız POST + JSON gövde kabul eder, tarayıcıdan GET ile görüntülenemez)
-    S.append(Shot("gib-anasayfa", "GIB", "ozelgeler", "GİB portalı (ön yüz; içerik /api/gibportal/ POST uçlarından gelir)", "https://www.gib.gov.tr/", wait_ms=5000,
-                  note="Görüntü işaretsizdir: crawler ön yüzün çağırdığı JSON uç noktalarını (özelge, sirküler, tebliğ, CBK, iç genelge, yönetmelik, taslak, duyuru) okur."))
+    S.append(Shot("gib-mevzuat", "GIB", "ozelgeler", "Mevzuat › Vergi Mevzuatına Yeni Eklenenler", "https://www.gib.gov.tr/mevzuat", wait_ms=5000,
+                  marks=[Mark(1, "Mevzuat satırı (özelge, tebliğ, CBK…)", "__q(\"a[href*='/mevzuat/kanun/']\")"),
+                         Mark(2, "Başlık", "__q(\"a[href*='/mevzuat/kanun/']\").map(a => { const d = [...a.querySelectorAll('*')].filter(e => !e.children.length && e.textContent.trim().length > 20); return d[d.length - 1]; }).filter(Boolean)"),
+                         Mark(3, "Yayım tarihi", "__rng('\\\\d{2}\\\\.\\\\d{2}\\\\.\\\\d{4}')")],
+                  note="Crawler bu ön yüzün kullandığı /api/gibportal/ POST uç noktalarını okur (özelge, sirküler, tebliğ, CBK, iç genelge, yönetmelik, taslak, duyuru); "
+                       "görüntü aynı içeriğin ekrandaki karşılığıdır."))
 
     # ---- KGK
     kgk = src["KGK"]
@@ -338,6 +350,8 @@ def main() -> int:
     ap.add_argument("sources", nargs="*", help="kaynak kodları (boşsa hepsi)")
     ap.add_argument("--only", help="tek çekim kimliği")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--emit-js", metavar="DIR", help="tarayıcı yerine, işaretleri gerçek bir tarayıcıda (konsol / uzantı) çalıştırılacak "
+                    "JS parçalarını DIR/<çekim-kimliği>.js olarak yaz; sayfa açıldıktan sonra çalıştırıp ekran görüntüsünü elle alın")
     args = ap.parse_args()
     cfg = yaml.safe_load(SOURCES.read_text(encoding="utf-8"))
     shots = build_shots(cfg)
@@ -348,6 +362,21 @@ def main() -> int:
     if args.list:
         for s in shots:
             print(f"{s.id:34} {s.source:13} {s.url}")
+        return 0
+    if args.emit_js:
+        d = Path(args.emit_js)
+        d.mkdir(parents=True, exist_ok=True)
+        for s in shots:
+            stamp = f"{s.source} · {s.title} · {s.url} · çekim: {datetime.now(ZoneInfo('Europe/Istanbul')):%d.%m.%Y %H:%M}"
+            marks = [{"num": m.num, "label": m.label, "find": m.find, "max": m.max, "color": COLORS[m.num]} for m in s.marks]
+            prep = f"await (async () => {{ {s.prep} }})(); await new Promise(r => setTimeout(r, 1200));" if s.prep and s.kind == "page" else ""
+            parts = ["(async () => { " + HELPERS, prep,
+                     "const res = (" + OVERLAY.strip() + ")(" + json.dumps([marks, stamp], ensure_ascii=False) + ");",
+                     "window.scrollTo(0, res.first === null ? 0 : Math.max(0, res.first - 150));",
+                     "return JSON.stringify(res.found); })()"]
+            js = chr(10).join(parts)
+            (d / f"{s.id}.js").write_text(js, encoding="utf-8")
+            print(f"{s.id:34} -> {d / (s.id + '.js')}")
         return 0
     from playwright.sync_api import sync_playwright
 
