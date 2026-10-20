@@ -30,6 +30,7 @@ Mevcut operasyon belgelerinin yerine geçmez, onlara giden yolu açar:
 | 7 | [07 — Sunum rehberi](07-sunum-rehberi.md) | 1 saat | Projeyi teknik ve teknik olmayan dinleyiciye sunmak, soruları cevaplamak |
 | 8 | [08 — İyileştirme planı ve uygulama durumu](08-iyilestirme-plani.md) | 45 dk | 06'daki riskler ve kod taramasının hangilerinin uygulandığını, hangilerinin neden ertelendiğini görmek |
 | 9 | [09 — API kılavuzu](09-api-kilavuzu.md) | 1–1,5 saat | Portalın hangi ekranının hangi uç noktayı nasıl çağırdığını, istek/yanıt biçimlerini ve hata davranışını anlatmak |
+| ek | [Kaynak tarama kılavuzu](../kaynak-tarama-kilavuzu/README.md) | 45 dk | Crawler'ın hangi kurum sayfalarını okuduğunu ekran görüntüleriyle göstermek; Başkanlıkla kaynak kapsamı mutabakatı yapmak |
 
 ## Önerilen 5 günlük plan (ekip için)
 
