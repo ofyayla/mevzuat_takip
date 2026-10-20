@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excel Karşılaştırma · Mevzuat Takip Portalı</title>
+<!-- Dış yazı tipi (Google Fonts) yok: kurum ağında dışarı çıkılmaz; Inter/JetBrains Mono yoksa sistem yazı tipine düşülür -->
+<style>
+  /* Portal (Mevzuat Takip Portali.dc.html) ve Arşiv ile aynı tasarım belirteçleri */
+  :root {
+    --background: oklch(1 0 0); --foreground: oklch(0.145 0 0); --card: oklch(1 0 0);
+    --primary: oklch(0.511 0.096 186.391); --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0); --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+    --destructive: oklch(0.577 0.245 27.325); --success: oklch(0.62 0.13 152); --warning: oklch(0.78 0.14 75);
+    --info: oklch(0.62 0.14 240); --border: oklch(0.92 0 0);
+    --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-pill: 9999px;
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sidebar-bg: color-mix(in oklch, var(--primary) 38%, black);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-sans); background: var(--background); color: var(--foreground);
+         font-size: 15px; line-height: 1.5; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 20px; padding: 14px 32px;
+           border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background) 88%, transparent);
+           backdrop-filter: blur(12px); flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .logo { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--sidebar-bg); display: flex;
+          align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .brand b { display: block; font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .brand small { font-size: 11px; color: var(--muted-foreground); }
+  .crumb { font-size: 13px; color: var(--muted-foreground); }
+  .crumb a { color: var(--muted-foreground); text-decoration: none; } .crumb a:hover { color: var(--foreground); }
+  .grow { flex: 1; }
+  a.pill { display: flex; align-items: center; padding: 5px 12px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+           color: var(--foreground); text-decoration: none; font-size: 12.5px; white-space: nowrap; }
+  a.pill:hover { background: var(--secondary); }
+  input, select, button { font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--card);
+                          color: var(--foreground); border-radius: var(--radius-sm); padding: 7px 10px; }
+  select, button { cursor: pointer; }
+  button:hover:not(:disabled), select:hover { background: var(--secondary); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  button.primary:hover:not(:disabled) { background: color-mix(in oklch, var(--primary) 88%, black); }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+  main { padding: 24px 32px 48px; max-width: 1560px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; font-weight: 600; margin: 22px 0 10px; }
+  .lead { color: var(--muted-foreground); font-size: 14px; margin: 0 0 18px; max-width: 920px; }
+  .upload { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 14px 16px; margin-bottom: 18px; }
+  .upload label { font-size: 12.5px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+  .upload input[type=number] { width: 72px; }
+  .upload input[type=file] { max-width: 100%; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 8px; }
+  .stat { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; background: var(--card); }
+  .stat .k { font-size: 12px; color: var(--muted-foreground); }
+  .stat .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 11.5px; color: var(--muted-foreground); }
+  .stat.relevant .v { color: var(--success); } .stat.irrelevant .v { color: var(--destructive); }
+  .stat.missing .v { color: oklch(0.6 0.14 60); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 14px; }
+  .tab { display: flex; align-items: baseline; gap: 8px; padding: 9px 16px; border-radius: var(--radius-md); background: var(--card);
+         border: 1px solid var(--border); cursor: pointer; font-size: 14px; }
+  .tab:hover { background: var(--secondary); }
+  .tab.on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+  .tab .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .filters .q { flex: 1 1 280px; min-width: 200px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-xs);
+          overflow: hidden; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+       color: var(--muted-foreground); padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--muted);
+       white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.row { cursor: pointer; } tr.row:hover td { background: var(--secondary); }
+  tr.row.open td { background: var(--secondary); border-bottom-color: transparent; }
+  td.title { max-width: 480px; font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.nowrap { white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+         background: var(--muted); color: var(--muted-foreground); white-space: nowrap; margin: 1px 2px 1px 0; }
+  .tag.relevant { color: var(--success); border-color: color-mix(in oklch, var(--success) 35%, white);
+                  background: color-mix(in oklch, var(--success) 8%, white); }
+  .tag.irrelevant { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 35%, white);
+                    background: color-mix(in oklch, var(--destructive) 7%, white); }
+  .tag.missing { color: oklch(0.5 0.12 60); border-color: color-mix(in oklch, var(--warning) 60%, white);
+                 background: color-mix(in oklch, var(--warning) 14%, white); }
+  .muted { color: var(--muted-foreground); font-size: 12.5px; }
+  tr.detail td { padding: 0 14px 14px; background: var(--secondary); }
+  .dbox { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; font-size: 13.5px; }
+  .dbox h3 { font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground);
+             margin: 14px 0 6px; } .dbox h3:first-child { margin-top: 0; }
+  .dbox p { margin: 0; white-space: pre-wrap; }
+  .empty { padding: 48px 20px; text-align: center; color: var(--muted-foreground); font-size: 14px; }
+  .warn { border: 1px solid color-mix(in oklch, var(--warning) 60%, white); background: color-mix(in oklch, var(--warning) 14%, white);
+          border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; margin-bottom: 14px; }
+  .err { border-color: color-mix(in oklch, var(--destructive) 40%, white); background: color-mix(in oklch, var(--destructive) 8%, white); }
+  .loading { opacity: 0.55; transition: opacity 0.15s; }
+  @media (max-width: 760px) {
+    header, main { padding-left: 16px; padding-right: 16px; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><div class="logo">M</div><div><b>Mevzuat Takip Portalı</b><small>Mevzuat ve Uyum Başkanlığı</small></div></a>
+  <div class="crumb"><a href="./admin">Yönetim</a> › Excel karşılaştırma</div>
+  <div class="grow"></div>
+  <a class="pill" href="./arsiv" title="İlgisiz ve ilk tarama kayıtları">Arşiv</a>
+</header>
+<main>
+  <h1>Excel karşılaştırma</h1>
+  <p class="lead">Başkanlığın mevzuat listesini (Referans No, Konu, Gönderen/Düzenleyici Kurum, Risk Seviyesi, Oluşturulma Tarihi,
+    Metin…) yükleyin. Her satır sistem kayıtlarıyla eşleştirilir: önce bağlantı ve karar numarası, sonra başlık benzerliği, o da
+    tutmazsa metin benzerliği. Ters yönde, aynı dönemde portalda görünüp listede olmayan kayıtlar da listelenir.
+    Karşılaştırma <b>hiçbir şey kaydetmez</b>.</p>
+
+  <div class="card upload">
+    <input type="file" id="file" accept=".xlsx,.xlsm,.csv" aria-label="Excel dosyası">
+    <label title="Başlık benzerliği (token_set) eşiği">Başlık eşiği <input type="number" id="tt" min="50" max="100" step="1" value="85"></label>
+    <label title="Metin benzerliği (partial) eşiği">Metin eşiği <input type="number" id="xt" min="50" max="100" step="1" value="80"></label>
+    <button class="primary" id="run" disabled>Karşılaştır</button>
+    <button id="download" disabled title="Sonucu Excel olarak indir">Excel indir</button>
+    <span class="muted" id="status"></span>
+  </div>
+
+  <div id="alerts"></div>
+  <div id="result" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="stats" id="stats2"></div>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="filters" id="filters">
+      <input class="q" id="q" type="search" placeholder="Konu, referans veya kurum ara…" aria-label="Ara" autocomplete="off">
+      <select id="reason" aria-label="Ayrıntı"><option value="">Tüm ayrıntılar</option></select>
+    </div>
+    <div class="card" id="card"><div class="scroll"><table id="table"></table></div><div id="empty" class="empty" hidden></div></div>
+  </div>
+</main>
+<script>
+// Veri: POST /api/v1/evaluation/excel-compare (multipart). Sunucu durum tutmaz; "Excel indir" aynı dosyayı ?format=xlsx ile yeniden gönderir.
+const API_BASE = window.MTP_API_BASE || '/api/v1';
+const NUM = new Intl.NumberFormat('tr-TR');
+const DATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => iso ? DATE.format(new Date(iso + 'T00:00:00')) : '—';
+const pct = (v) => v == null ? '—' : '%' + (v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+const GROUP_TAG = { relevant: 'Relevant', irrelevant: 'Irrelevant', missing: 'Bulunamadı' };
+const TABS = [
+  { key: 'all', label: 'Tüm satırlar' }, { key: 'relevant', label: 'Relevant' }, { key: 'irrelevant', label: 'Irrelevant' },
+  { key: 'missing', label: 'Bulunamadı' }, { key: 'extra', label: 'Fazla uyarılar' },
+];
+
+let result = null, tab = 'all', openKey = null;
+
+function params(format) {
+  const p = new URLSearchParams({ title_threshold: $('tt').value || 85, text_threshold: $('xt').value || 80 });
+  if (format) p.set('format', format);
+  return p;
+}
+async function post(format) {
+  const fd = new FormData();
+  fd.append('file', $('file').files[0]);
+  const res = await fetch(API_BASE + '/evaluation/excel-compare?' + params(format), { method: 'POST', body: fd,
+    headers: { Accept: format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/json' } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
+  }
+  return res;
+}
+
+async function run() {
+  $('run').disabled = $('download').disabled = true;
+  $('status').textContent = 'Karşılaştırılıyor…';
+  $('result').classList.add('loading');
+  try {
+    result = await (await post()).json();
+    $('alerts').innerHTML = '';
+    tab = 'all'; openKey = null; $('q').value = ''; $('reason').value = '';
+    render();
+    $('status').textContent = `${NUM.format(result.summary.total)} satır karşılaştırıldı.`;
+  } catch (e) {
+    $('alerts').innerHTML = `<div class="warn err">Karşılaştırma yapılamadı: ${esc(e.message)}</div>`;
+    $('status').textContent = '';
+  } finally {
+    $('result').classList.remove('loading');
+    $('run').disabled = !$('file').files.length;
+    $('download').disabled = !result || !$('file').files.length;
+  }
+}
+
+async function download() {
+  $('download').disabled = true;
+  $('status').textContent = 'Excel hazırlanıyor…';
+  try {
+    const res = await post('xlsx');
+    const blob = await res.blob();
+    const name = ((res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || 'karsilastirma.xlsx';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('status').textContent = '';
+  } catch (e) {
+    $('alerts').innerHTML = `<div class="warn err">Excel indirilemedi: ${esc(e.message)}</div>`;
+  } finally {
+    $('download').disabled = false;
+  }
+}
+
+function stat(cls, k, v, s) {
+  return `<div class="stat ${cls}"><div class="k">${esc(k)}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
+}
+
+function render() {
+  const s = result.summary, p = result.precision, sev = result.severityAgreement;
+  $('result').hidden = false;
+  const reasons = Object.entries(s.missingByReason).map(([k, n]) => `${esc(labelOf(k))}: ${NUM.format(n)}`).join(' · ');
+  $('stats').innerHTML = stat('', 'Excel satırı', NUM.format(s.total))
+    + stat('relevant', 'Relevant', NUM.format(s.relevant), 'Sistem buldu, YZ ilgili dedi')
+    + stat('irrelevant', 'Irrelevant', NUM.format(s.irrelevant), 'Sistem buldu, YZ eledi')
+    + stat('missing', 'Bulunamadı', NUM.format(s.missing), reasons)
+    + stat('', 'Recall', pct(s.recall), 'Relevant / toplam')
+    + stat('', 'Bulunma oranı', pct(s.foundRate), 'Relevant + irrelevant');
+  $('stats2').innerHTML = stat('', 'Portalda görünen', NUM.format(p.shown), `${fmtDate(p.period.from)} – ${fmtDate(p.period.to)}`)
+    + stat('', 'Fazla uyarı', NUM.format(p.extra), 'Portalda var, listede yok')
+    + stat('', 'Precision', pct(p.precision), 'Listede olan / görünen')
+    + stat('', 'Risk seviyesi uyumu', pct(sev.exact), `${NUM.format(sev.n)} kayıtta`);
+  const reasonKeys = [...new Set(result.items.map(i => i.category))];
+  $('reason').innerHTML = '<option value="">Tüm ayrıntılar</option>' + reasonKeys.map(k => `<option value="${esc(k)}">${esc(labelOf(k))}</option>`).join('');
+  renderTabs();
+  renderTable();
+}
+
+function labelOf(cat) {
+  const it = result.items.find(i => i.category === cat);
+  return it ? it.categoryLabel : cat;
+}
+
+function count(key) {
+  if (key === 'extra') return result.extra.length;
+  if (key === 'all') return result.items.length;
+  return result.items.filter(i => i.group === key).length;
+}
+
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(t => `<div class="tab${tab === t.key ? ' on' : ''}" role="tab" tabindex="0" data-k="${t.key}"
+      aria-selected="${tab === t.key}"><span>${t.label}</span><span class="n">${NUM.format(count(t.key))}</span></div>`).join('');
+  document.querySelectorAll('.tab').forEach(el => {
+    const go = () => { tab = el.dataset.k; openKey = null; renderTabs(); renderTable(); };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
+  });
+  $('reason').hidden = tab === 'extra';
+}
+
+function fold(s) { return String(s ?? '').toLocaleLowerCase('tr-TR'); }
+
+function renderTable() {
+  const q = fold($('q').value.trim()), reason = $('reason').value;
+  let html, n;
+  if (tab === 'extra') {
+    const rows = result.extra.filter(r => !q || fold(r.title + ' ' + r.issuer).includes(q));
+    n = rows.length;
+    html = `<thead><tr><th>Başlık</th><th class="hide-sm">Kurum</th><th class="num">Yayım</th><th class="num hide-sm">Skor</th><th>Önem</th></tr></thead><tbody>`
+      + rows.map(r => {
+        const key = 'x' + r.id, open = openKey === key;
+        return `<tr class="row${open ? ' open' : ''}" data-key="${key}" tabindex="0" aria-expanded="${open}">
+          <td class="title">${esc(r.title)}</td><td class="hide-sm">${esc(r.issuer || '—')}</td>
+          <td class="num">${fmtDate(r.publishDate)}</td><td class="num hide-sm">${r.relevanceScore == null ? '—' : r.relevanceScore.toFixed(2)}</td>
+          <td class="nowrap">${esc(r.severity || '—')}</td></tr>
+          ${open ? `<tr class="detail"><td colspan="5"><div class="dbox"><h3>YZ gerekçesi</h3><p>${esc(r.rationale || 'Gerekçe kaydı yok.')}</p>
+            <h3>Kayıt</h3><p class="muted">#${r.id} · ${esc(r.status)}</p></div></td></tr>` : ''}`;
+      }).join('') + '</tbody>';
+  } else {
+    const rows = result.items.filter(i => (tab === 'all' || i.group === tab) && (!reason || i.category === reason)
+      && (!q || fold([i.title, i.ref, i.issuer, i.regulation && i.regulation.title].join(' ')).includes(q)));
+    n = rows.length;
+    html = `<thead><tr><th class="num">#</th><th>Konu</th><th class="hide-sm">Kurum</th><th class="num">Oluşturulma</th><th>Sonuç</th>
+        <th class="hide-sm">Eşleşen sistem kaydı</th><th class="num hide-sm">Skor</th></tr></thead><tbody>`
+      + rows.map(i => {
+        const key = 'i' + i.no, open = openKey === key, reg = i.regulation;
+        return `<tr class="row${open ? ' open' : ''}" data-key="${key}" tabindex="0" aria-expanded="${open}">
+          <td class="num muted">${i.no}</td>
+          <td class="title">${esc(i.title)}${i.ref ? `<div class="muted">${esc(i.ref)}</div>` : ''}</td>
+          <td class="hide-sm">${esc(i.issuer || '—')}</td>
+          <td class="num">${fmtDate(i.createdAt)}</td>
+          <td class="nowrap"><span class="tag ${i.group}">${GROUP_TAG[i.group]}</span><div class="muted">${esc(i.categoryLabel)}</div></td>
+          <td class="hide-sm">${reg ? `${esc(reg.title)}<div class="muted">#${reg.id} · ${fmtDate(reg.publishDate)}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num hide-sm">${i.score == null ? '—' : i.score.toFixed(2)}${i.methodLabel ? `<div class="muted">${esc(i.methodLabel)}</div>` : ''}</td></tr>
+          ${open ? `<tr class="detail"><td colspan="7"><div class="dbox">${detail(i)}</div></td></tr>` : ''}`;
+      }).join('') + '</tbody>';
+  }
+  $('table').innerHTML = html;
+  $('empty').hidden = n > 0;
+  $('empty').textContent = 'Bu süzgeçle eşleşen satır yok.';
+  document.querySelectorAll('tr.row').forEach(tr => {
+    const toggle = () => { openKey = openKey === tr.dataset.key ? null : tr.dataset.key; renderTable(); };
+    tr.addEventListener('click', toggle);
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
+  });
+}
+
+function detail(i) {
+  const reg = i.regulation;
+  const excel = `<h3>Excel satırı</h3><p>${esc(i.requestType || '—')} · risk ${esc(i.severity || '—')}${i.recipients ? ' · ' + esc(i.recipients) : ''}</p>`;
+  if (!reg) {
+    return excel + `<h3>Sonuç</h3><p>${esc(i.categoryLabel)}${i.rawDocumentId ? ` — ham belge #${i.rawDocumentId} toplandı ama düzenleme kaydına bağlanmadı.` : ' — sistemde bu satıra benzeyen kayıt bulunamadı.'}</p>`;
+  }
+  return excel + `<h3>Sistem kaydı</h3><p>#${reg.id} · ${esc(reg.issuer || '—')} · ${fmtDate(reg.publishDate)} · durum ${esc(reg.status)}
+      · önem ${esc(reg.severity || '—')}</p>
+    <h3>YZ kararı${reg.relevanceScore != null ? ' · skor ' + reg.relevanceScore.toFixed(2) : ''}</h3>
+    <p>${esc(reg.rationale || 'Gerekçe kaydı yok.')}</p>`;
+}
+
+$('file').addEventListener('change', () => { $('run').disabled = !$('file').files.length; $('download').disabled = true; });
+$('run').addEventListener('click', run);
+$('download').addEventListener('click', download);
+$('q').addEventListener('input', () => { if (result) renderTable(); });
+$('reason').addEventListener('change', () => { if (result) renderTable(); });
+</script>
+</body>
+</html>
