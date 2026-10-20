@@ -21,7 +21,7 @@ DMZ'den LAN'a yalnızca MongoDB (27017) açıktır; crawler taradığını Mongo
 |---|---|
 | `mevzuat-core/` | Dockerfile, pip.conf, gunicorn_config.py, Jenkinsfile, README, `API_REFERENCE.md`, `deploy/` (Secret, ArgoCD, Mongo rolleri) |
 | `mevzuat-core/app/` | Kod (`app/`), yapılandırma (`config/`), migrasyonlar, testler, `requirements.txt` — ayrıntı: `mevzuat-core/app/README.md` |
-| `mevzuat-core/portal/` | Portal arayüzü (`Mevzuat Takip Portali.dc.html`, `support.js`) , süreç haritası (`surec-haritasi.html`, `/surec`) ve arşiv (`arsiv.html`, `/arsiv`: ilgisiz ve ilk tarama kayıtlarının sayfalı sorgusu) |
+| `mevzuat-core/portal/` | Portal arayüzü (`Mevzuat Takip Portali.dc.html`, `support.js`) , süreç haritası (`surec-haritasi.html`, `/surec`) , arşiv (`arsiv.html`, `/arsiv`: ilgisiz ve ilk tarama kayıtlarının sayfalı sorgusu) ve Excel karşılaştırma (`karsilastirma.html`, `/karsilastirma`: Başkanlık listesi ↔ sistem kayıtları, relevant/irrelevant/bulunamadı) |
 | `mevzuat-core/docs/` | Devreye alma, işletim (runbook), mimari plan, kaynak keşif raporu ve kaynak listesi analizi |
 | `mevzuat-crawler/` | Dockerfile, pip.conf, Jenkinsfile, README, `API_REFERENCE.md`, `deploy/dmz` (podman) |
 | `mevzuat-crawler/app/` | Yalnızca toplama + crawler kodu ve testleri (LLM/OCR/API/Celery yok) |

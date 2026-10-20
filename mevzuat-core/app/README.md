@@ -392,6 +392,28 @@ GET  /api/v1/evaluation/filtered-out?from&to       YZ'nin ilgisiz bulduğu kayı
 Dosya sütunları: `Başlık`, `Kurum` (kısaltma da olur: "BDDK", "Hazine ve Maliye Bak."), `Yayım Tarihi`
 (gg.aa.yyyy veya ISO), `Bağlantı`, `Önem`, `Birimler`, `Not`.
 
+**Excel karşılaştırma (`/karsilastirma`, Yönetim → Karşılaştırma).** Başkanlığın dağıtım listesi (`Referans No`, `Konu`,
+`Talep Tipi`, `Gönderen/Düzenleyici Kurum`, `Risk Seviyesi`, `Alıcılar`, `Oluşturulma Tarihi`, `Metin`) yüklenir ve
+**veritabanına yazılmadan** karşılaştırılır (`app/evaluation/excel_compare.py`):
+
+```
+POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=80[&from&to][&format=xlsx]   multipart file
+```
+
+- Her satır yukarıdaki eşleştiriciden geçer. Tek fark tarih penceresi: **14 gün geriye, 2 gün ileriye**. Bunun nedeni,
+  "Oluşturulma Tarihi"nin yayım tarihi değil listeye giriş tarihi olması.
+- Başlık tutmazsa `Metin` sütunu kullanılır. Önce HTML ve `&nbsp;` temizlenir; "*****" ayracından sonraki asıl duyuru
+  alınır. Bu metin, pencere içindeki ham belge metinlerinde (ekler dahil) `partial_ratio` ile aranır.
+- "Basın Duyurusu" gibi en fazla 4 sözcüklü genel başlıklarla eşleşen satırlar da metinle doğrulanır.
+- Sonuçlar üç gruba ayrılır:
+  - **Relevant:** sistem kaydı buldu ve YZ ilgili dedi.
+  - **Irrelevant:** sistem kaydı buldu ama YZ eledi (`below_threshold`).
+  - **Bulunamadı:** nedeni de gösterilir.
+- Bunlardan **recall** hesaplanır.
+- Ters yönde, dönem içinde portalda görünüp listede olmayan kayıtlar **fazla uyarı** sayılır ve **precision**
+  hesaplanır. Dönem, ilk Oluşturulma Tarihi − 3 gün ile son tarih arasıdır; `from` ve `to` ile değiştirilebilir.
+- `format=xlsx` aynı sonucu indirir: Özet / Excel satırları / Fazla uyarılar.
+
 Rapor: **kaçırma oranı** ve nedenleri — `not_collected` (hiç toplanmadı, İK-1), `not_processed` (toplandı, işlenmedi,
 İK-2), `baseline` (ilk taramada zaten sitedeydi), `below_threshold` (YZ ilgisiz buldu, İK-3), `dedupe_lost` (portalda
 olmayan bir kayda birleştirildi); **gereksiz bildirim oranı** (reddedilen / karar verilen), önem derecesi uyumu,
