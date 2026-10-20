@@ -8,16 +8,28 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 
 | Yöntem | Yol | Parametreler | Gövde | Açıklama |
 |---|---|---|---|---|
-| `GET` | `/api/v1/admin/settings` |  |  | Admin Settings |
-| `PUT` | `/api/v1/admin/settings` |  | evet | Admin Settings Put |
+| `GET` | `/api/v1/admin/settings` | `detail` |  | Admin Settings |
+| `PUT` | `/api/v1/admin/settings` | `detail` | evet | Admin Settings Put |
+| `GET` | `/api/v1/admin/metrics` |  |  | Admin Metrics |
+| `GET` | `/api/v1/admin/scans` | `source`, `status`, `limit` |  | Admin Scans |
 | `POST` | `/api/v1/admin/regulations/{reg_id}/split` | `reg_id` | evet | Admin Split |
 | `POST` | `/api/v1/admin/regulations/{reg_id}/regenerate` | `reg_id` |  | Admin Regenerate |
+| `POST` | `/api/v1/admin/retry-failed` |  | evet | Admin Retry Failed |
+| `GET` | `/api/v1/admin/rebaseline` | `cutoff` |  | Admin Rebaseline Preview |
+| `POST` | `/api/v1/admin/rebaseline` |  | evet | Admin Rebaseline |
 | `GET` | `/api/v1/admin/alerts` | `status`, `limit` |  | Admin Alerts |
 | `GET` | `/api/v1/admin/audit/verify` | `regulation_id` |  | Admin Audit Verify |
 | `POST` | `/api/v1/admin/monitor/run` |  |  | Admin Monitor Run |
 | `POST` | `/api/v1/admin/reprocess` |  | evet | Admin Reprocess |
 | `POST` | `/api/v1/admin/sources/{code}/backfill` | `code` | evet | Admin Backfill |
 | `POST` | `/api/v1/admin/sources/{code}/run` | `code` |  | Admin Run Source |
+
+## archive
+
+| Yöntem | Yol | Parametreler | Gövde | Açıklama |
+|---|---|---|---|---|
+| `GET` | `/api/v1/archive/regulations` | `kind`, `source`, `q`, `from`, `to`, `page`, `page_size`, `sort`, `direction` |  | Archive Regulations |
+| `GET` | `/api/v1/archive/regulations/{reg_id}` | `reg_id` |  | Archive Regulation Detail |
 
 ## evaluation
 
@@ -26,6 +38,7 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 | `POST` | `/api/v1/evaluation/manual-detections` |  | evet | Manual Detection |
 | `GET` | `/api/v1/evaluation/manual-detections` | `from`, `to` |  | Manual Detections |
 | `POST` | `/api/v1/evaluation/manual-detections/upload` |  | evet | Manual Detection Upload |
+| `POST` | `/api/v1/evaluation/excel-compare` | `format`, `title_threshold`, `text_threshold`, `from`, `to` | evet | Excel Compare |
 | `GET` | `/api/v1/evaluation/report` | `from`, `to` |  | Evaluation Report |
 | `GET` | `/api/v1/evaluation/filtered-out` | `from`, `to` |  | Evaluation Filtered Out |
 
@@ -46,9 +59,11 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 
 | Yöntem | Yol | Parametreler | Gövde | Açıklama |
 |---|---|---|---|---|
-| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size` |  | Regulations |
+| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction` |  | Regulations |
 | `GET` | `/api/v1/regulations/stats` |  |  | Regulation Stats |
+| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction` |  | Regulations Export |
 | `GET` | `/api/v1/regulations/{reg_id}` | `reg_id` |  | Regulation Detail |
+| `PATCH` | `/api/v1/regulations/{reg_id}/content` | `reg_id` | evet | Regulation Content |
 | `POST` | `/api/v1/regulations/{reg_id}/views` | `reg_id` |  | Regulation Viewed |
 | `POST` | `/api/v1/regulations/{reg_id}/decision` | `reg_id` | evet | Regulation Decision |
 | `PUT` | `/api/v1/regulations/{reg_id}/units` | `reg_id` | evet | Regulation Units |
