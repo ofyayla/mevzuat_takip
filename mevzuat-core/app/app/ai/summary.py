@@ -35,6 +35,7 @@ from app.settings import Settings
 log = logging.getLogger(__name__)
 PROMPT = "v1"
 AI_MAX_ATTEMPTS = 3
+UNAVAILABLE_STRIKES = 3   # aynı kayıtta art arda LLM kullanılamıyor hatası: kayıt sorunlu sayılır, kuyruk tıkanmaz
 MIN_SOURCE_CHARS = 200   # altında özet üretilmez: kayıt "metin bekliyor" (OCR bekleyen taranmış belge vb.)
 _EFFECTIVE_WORDS = re.compile(r"yürürlü|uygulan")
 SOURCE_NAMES = {"RESMI_GAZETE": "Resmî Gazete", **{k: k for k in ISSUERS}}
@@ -301,7 +302,7 @@ def summarize_regulation(session: Session, llm: LLM, reg: Regulation, settings: 
     reg.effective_date, reg.effective_date_text = res.effective_date, res.effective_text
     reg.processing_status = "SUMMARIZED"
     reg.extra = {k: v for k, v in (reg.extra or {}).items()
-                 if k not in ("ai_attempts", "ai_error", "ai_stage", "summary_blocked")}
+                 if k not in ("ai_attempts", "ai_error", "ai_stage", "summary_blocked", "ai_unavailable_strikes")}
     session.flush()
     return row
 
@@ -385,6 +386,23 @@ def summarize_pending(session_factory: sessionmaker[Session], llm: LLM, settings
                 # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
                 session.rollback()
                 rep.processed -= 1
+                # Aynı kayıt art arda zaman aşımına uğruyorsa sorun sunucuda değil kayıttadır (çok uzun metin vb.):
+                # en düşük id'li kayıt olduğu için her turda başa gelip tüm kuyruğu tıkamasın
+                extra = dict(reg.extra or {})
+                strikes = extra.get("ai_unavailable_strikes", 0) + 1
+                if strikes >= UNAVAILABLE_STRIKES:
+                    extra.pop("ai_unavailable_strikes", None)
+                    extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_stage="summary",
+                                 ai_error=f"art arda {strikes} kez LLM zaman aşımı/hata: {e}"[:500])
+                    reg.extra, reg.processing_status = extra, "AI_FAILED"
+                    session.commit()
+                    rep.failed += 1
+                    rep.errors.append(f"#{reg_id}: art arda LLM hatası, kayıt AI_FAILED yapıldı: {e}")
+                    log.warning("düzenleme %s art arda LLM hatası verdi; AI_FAILED yapıldı, sıradakine geçiliyor", reg_id)
+                    continue
+                extra["ai_unavailable_strikes"] = strikes
+                reg.extra = extra
+                session.commit()
                 rep.unavailable = True
                 rep.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
                 log.warning("LLM kullanılamıyor; özetleme durduruldu (düzenleme %s): %s", reg_id, e)
