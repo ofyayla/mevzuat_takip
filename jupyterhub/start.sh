@@ -80,6 +80,8 @@ LLM_BASE_URL='https://qwen36-35b-a3b-nvfp4.llm.alb.albarakatech.com/v1'
 LLM_MODEL='qwen36-35b-a3b-nvfp4'
 LLM_API_KEY='EMPTY'
 LLM_MAX_CONCURRENCY='2'
+# Tek LLM çağrısının zaman aşımı (sn). Uzun belgelerde parça çağrıları 40-90 sn sürüyor; 120 sn sınırı aşılıyordu
+LLM_TIMEOUT_S='300'
 # Qwen thinking: 'false' önerilir (açıkken uzun belgelerde özet çıktısı JSON'a varmadan kesiliyordu)
 LLM_ENABLE_THINKING='false'
 # 'false': LLM sunucusunun TLS sertifikası doğrulanmaz (kurum CA'sı pakete eklenene kadar; YALNIZCA geliştirme)
@@ -226,7 +228,7 @@ LLM_BASE_URL=$LLM_BASE_URL
 LLM_MODEL=$LLM_MODEL
 LLM_API_KEY=$LLM_API_KEY
 LLM_VERIFY_TLS=${LLM_VERIFY_TLS:-true}
-LLM_TIMEOUT_S=120
+LLM_TIMEOUT_S=${LLM_TIMEOUT_S:-300}
 LLM_MAX_CONCURRENCY=${LLM_MAX_CONCURRENCY:-2}
 LLM_ENABLE_THINKING=${LLM_ENABLE_THINKING:-false}
 LLM_JSON_MODE=json_schema
