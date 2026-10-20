@@ -29,7 +29,13 @@ from sqlalchemy.orm import Session
 
 from app.collectors.dates import parse_tr_date, tr_lower
 from app.db import ManualDetection, RawDocument, Regulation
-from app.evaluation.parallel import TITLE_THRESHOLD, classify_detection, issuer_code, match_detection, read_records
+from app.evaluation.parallel import (
+    TITLE_THRESHOLD,
+    classify_detection,
+    issuer_code,
+    match_detection,
+    read_records,
+)
 from app.processing.normalize import ISSUERS, issuers_compatible, match_issuer, normalize_text, title_key
 from app.services.export import _cell
 from app.services.regulations import VISIBLE_STATUSES
