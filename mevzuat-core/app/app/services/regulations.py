@@ -149,9 +149,7 @@ def _viewed_ids(session: Session, reg_ids: list[int], actor_id: str | None) -> s
         AuditEvent.regulation_id.in_(reg_ids), AuditEvent.event_type == "viewed", AuditEvent.actor_id == actor_id)))
 
 
-def list_regulations(session: Session, query: ListQuery, settings: Settings, actor_id: str | None = None) -> dict:
-    conds = _filters(query, settings)
-    total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
+def _order(query: ListQuery) -> tuple:
     sev_rank = case(SEVERITY_ORDER, value=Regulation.severity, else_=0)
     default_order = (sev_rank.desc(), Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
     top_unit = (select(Unit.name).join(UnitSuggestion, UnitSuggestion.unit_code == Unit.code)
@@ -164,15 +162,27 @@ def list_regulations(session: Session, query: ListQuery, settings: Settings, act
     if query.sort in sort_cols:
         col = sort_cols[query.sort]
         primary = col.asc().nulls_last() if query.direction == "asc" else col.desc().nulls_last()
-        order = (primary, Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
-    else:
-        order = default_order
+        return (primary, Regulation.publish_date.desc().nulls_last(), Regulation.id.desc())
+    return default_order
+
+
+def list_regulations(session: Session, query: ListQuery, settings: Settings, actor_id: str | None = None) -> dict:
+    conds = _filters(query, settings)
+    total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
     rows = session.scalars(select(Regulation).where(*conds)
-                           .order_by(*order)
+                           .order_by(*_order(query))
                            .offset((query.page - 1) * query.page_size).limit(query.page_size)).all()
     viewed = _viewed_ids(session, [r.id for r in rows], actor_id)
     items = [{**serialize(session, r, settings), "viewed": r.id in viewed} for r in rows]
     return {"items": items, "total": total, "page": query.page, "pageSize": query.page_size}
+
+
+def export_regulations(session: Session, query: ListQuery, settings: Settings, limit: int) -> tuple[list[dict], int]:
+    """Süzgeçe uyan tüm kayıtlar (sayfalamasız, en fazla ``limit``) ve süzgeçteki toplam sayı."""
+    conds = _filters(query, settings)
+    total = session.scalar(select(func.count()).select_from(Regulation).where(*conds))
+    rows = session.scalars(select(Regulation).where(*conds).order_by(*_order(query)).limit(limit)).all()
+    return [serialize(session, r, settings) for r in rows], total
 
 
 def stats(session: Session, settings: Settings) -> dict:
