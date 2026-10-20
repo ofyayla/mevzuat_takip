@@ -47,26 +47,30 @@ COLUMNS = {"başlık": "title", "baslik": "title", "title": "title", "kurum": "i
 # ------------------------------------------------------------------------------------------------ giriş
 
 
-def parse_rows(filename: str, content: bytes) -> list[dict]:
-    """CSV (virgül/noktalı virgül, UTF-8/UTF-8-BOM/Windows-1254) veya Excel (.xlsx) → satır sözlükleri."""
+def read_records(filename: str, content: bytes) -> list[dict]:
+    """CSV (virgül/noktalı virgül, UTF-8/UTF-8-BOM/Windows-1254) veya Excel (.xlsx) → ham başlık → değer sözlükleri."""
     if filename.lower().endswith((".xlsx", ".xlsm")):
         import openpyxl
 
         ws = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True).active
         rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return []
         header = [str(h or "").strip() for h in rows[0]]
-        records = [dict(zip(header, r)) for r in rows[1:] if any(v not in (None, "") for v in r)]
-    else:
-        for enc in ("utf-8-sig", "cp1254"):
-            try:
-                text = content.decode(enc)
-                break
-            except UnicodeDecodeError:
-                continue
-        dialect = csv.Sniffer().sniff(text.splitlines()[0], delimiters=",;\t")
-        records = list(csv.DictReader(io.StringIO(text), dialect=dialect))
+        return [dict(zip(header, r)) for r in rows[1:] if any(v not in (None, "") for v in r)]
+    for enc in ("utf-8-sig", "cp1254"):
+        try:
+            text = content.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    dialect = csv.Sniffer().sniff(text.splitlines()[0], delimiters=",;\t")
+    return list(csv.DictReader(io.StringIO(text), dialect=dialect))
+
+
+def parse_rows(filename: str, content: bytes) -> list[dict]:
     out = []
-    for r in records:
+    for r in read_records(filename, content):
         row = {}
         for k, v in r.items():
             key = COLUMNS.get(tr_lower(str(k or "").strip()))
@@ -125,8 +129,13 @@ def issuer_code(text: str | None) -> str | None:
     return match_issuer(t)
 
 
-def match_detection(session: Session, md: ManualDetection) -> None:
+def match_detection(session: Session, md: ManualDetection, *,
+                    window: tuple[timedelta, timedelta] = (DATE_WINDOW, DATE_WINDOW),
+                    title_threshold: float = TITLE_THRESHOLD) -> None:
+    """``window``: (geriye, ileriye) yayım tarihi toleransı. Excel karşılaştırması (``excel_compare``) tarih
+    sütunu yayım değil kayıt tarihi olduğu için geriye daha geniş pencere verir."""
     md.matched_regulation_id = md.matched_raw_document_id = md.match_method = md.match_score = None
+    before, after = window
     if md.url:
         cu = canonical_url(md.url)
         row = session.get(RegulationKey, "url:" + cu)       # İK-2 her belge için URL anahtarı tutar
@@ -153,7 +162,7 @@ def match_detection(session: Session, md: ManualDetection) -> None:
             return
     q = select(Regulation)
     if md.publish_date:
-        q = q.where(Regulation.publish_date.between(md.publish_date - DATE_WINDOW, md.publish_date + DATE_WINDOW))
+        q = q.where(Regulation.publish_date.between(md.publish_date - before, md.publish_date + after))
     best, best_score = None, 0.0
     key = title_key(md.title)
     for reg in session.scalars(q):
@@ -162,15 +171,15 @@ def match_detection(session: Session, md: ManualDetection) -> None:
         sc = fuzz.token_set_ratio(key, title_key(reg.title))
         if sc > best_score:
             best, best_score = reg, sc
-    if best is not None and best_score >= TITLE_THRESHOLD:
+    if best is not None and best_score >= title_threshold:
         md.matched_regulation_id, md.match_method, md.match_score = best.id, "fuzzy_title", round(best_score / 100, 3)
         return
     # düzenlemeye bağlanmamış ham belge (işlenmemiş) başlıkla aranır
     rq = select(RawDocument).where(RawDocument.regulation_id.is_(None), RawDocument.role != "attachment")
     if md.publish_date:
-        rq = rq.where(RawDocument.published_at.between(md.publish_date - DATE_WINDOW, md.publish_date + DATE_WINDOW))
+        rq = rq.where(RawDocument.published_at.between(md.publish_date - before, md.publish_date + after))
     for raw in session.scalars(rq):
-        if fuzz.token_set_ratio(key, title_key(raw.title or "")) >= TITLE_THRESHOLD:
+        if fuzz.token_set_ratio(key, title_key(raw.title or "")) >= title_threshold:
             md.matched_raw_document_id, md.match_method = raw.id, "fuzzy_title_raw"
             return
 
