@@ -6,7 +6,7 @@ const VIEWS = { gelen: viewGelen, arsiv: viewArsiv, yonetim: viewYonetim };
 function renderAll() {
   closePop();
   const keep = document.activeElement && document.activeElement.dataset ? { id: document.activeElement.id, set: document.activeElement.dataset.set, txt: document.activeElement.classList.contains('input') } : null;
-  $('#app').innerHTML = appbar() + `<main id="main">${VIEWS[S.view]()}</main><footer class="foot gut">Mevzuat ve Uyum Başkanlığı · Mevzuat Takip Portalı · Tarihler gg.aa.yyyy ya da “21 Eki 2026” biçimindedir.</footer>`;
+  $('#app').innerHTML = appbar() + `<main id="main">${VIEWS[S.view]()}</main>`;
   if (keep && (keep.id || keep.set)) { const el = keep.id ? document.getElementById(keep.id) : document.querySelector(`input.input[data-set="${keep.set}"]`); if (el && el.focus) { el.focus(); if (el.setSelectionRange && el.type !== 'range') { try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) { /* tür desteklemiyor */ } } } }
 }
 function refreshInbox(opts = {}) {
