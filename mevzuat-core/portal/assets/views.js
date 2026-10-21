@@ -5,7 +5,7 @@
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
 S.xl = { file: null, tTitle: 85, tText: 80, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null };
-S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.auto = true; S.refreshed = null;
+S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
 const openAlarms = () => (S.alerts || []).length;
 const initials = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toLocaleUpperCase('tr');
@@ -180,15 +180,14 @@ function admGenel() {
 }
 
 /* ---------- işleme hattı: /pipeline düğümleri; "bekleyen" sayısı düğümün kayıt sayısıdır */
-const HAT_COLS = [
-  { id: 'raw:FETCHED', stage: 'Toplama', sub: 'metin çıkarma bekleyen belge', exits: ['raw:EXTRACT_FAILED'] },
-  { id: 'raw:EXTRACTED', stage: 'Kayıt eşleme', sub: 'tekilleştirme bekleyen belge', exits: ['reg:MERGED', 'reg:BASELINE'] },
-  { id: 'reg:NEW', stage: 'İlgililik analizi', sub: 'analiz bekleyen kayıt', exits: ['reg:IRRELEVANT'] },
-  { id: 'reg:RELEVANT', stage: 'Özetleme', sub: 'özet bekleyen kayıt', exits: ['reg:AI_FAILED'] },
-  { id: 'reg:SUMMARIZED', stage: 'Birim eşleme', sub: 'birim önerisi bekleyen kayıt', exits: [] },
-  { gate: true },
-  { id: 'review:Bekliyor', stage: 'Uzman kararı', sub: 'onay ya da ret bekliyor', exits: ['review:Onaylandı', 'review:Reddedildi'] },
-];
+const HAT_POS = {
+  sources: [0, 1], fetch: [0, 2],
+  'raw:FETCHED': [1, 0], 'raw:EXTRACTED': [1, 1], 'raw:LINKED': [1, 2], 'raw:EXTRACT_FAILED': [1, 3],
+  'reg:BASELINE': [2, 1], 'reg:NEW': [2, 2], 'reg:MERGED': [2, 3],
+  'reg:IRRELEVANT': [3, 0], 'reg:RELEVANT': [3, 1], 'reg:SUMMARIZED': [3, 2], 'reg:READY': [3, 3], 'reg:AI_FAILED': [3, 4],
+  'review:Onaylandı': [4, 2], 'review:Bekliyor': [4, 3], 'review:Reddedildi': [4, 4],
+};
+const HAT_KINDS = { flow: 'Toplama', wait: 'Sırada / işleniyor', ok: 'Tamamlandı', fail: 'Hata (yeniden denenir)', terminal: 'Son durum (hat dışı)' };
 // Arayüz eşiği (sunucu verisi değil): bekleyen en eski kayıt bu kadar günü geçtiyse düğüm "dikkat" / "darboğaz" renginde çizilir
 const HAT_WARN_DAYS = 3, HAT_CRIT_DAYS = 7;
 const hatNode = id => ((S.adm.hat && S.adm.hat.nodes) || []).find(n => n.id === id) || { id, label: id, count: 0, metrics: {}, description: '' };
@@ -197,25 +196,59 @@ function hatStatus(n) {
   const d = n.metrics.oldestDays || 0;
   return d >= HAT_CRIT_DAYS ? ['crit', `Bekleme uzun · en eski ${d} gün`] : d >= HAT_WARN_DAYS ? ['warn', `Bekleme var · en eski ${d} gün`] : ['ok', 'Normal'];
 }
+function hatBox(n, layers) {
+  const col = layers.findIndex(l => l.id === n.layer);
+  const row = HAT_POS[n.id] ? HAT_POS[n.id][1] : 5;
+  return { x: 59 + col * 222, y: 64 + row * 92, w: 164, h: 60, col, row };
+}
+function hatEdgePath(a, b, retry) {
+  const ay = a.y + a.h / 2, by = b.y + b.h / 2;
+  if (a.col !== b.col) {
+    const x1 = a.x + a.w, x2 = b.x, dx = (x2 - x1) / 2;
+    return { d: `M${x1},${ay} C${x1 + dx},${ay} ${x2 - dx},${by} ${x2},${by}`, x: (x1 + x2) / 2, y: (ay + by) / 2, anchor: 'middle' };
+  }
+  const down = b.row > a.row, x = a.x + a.w / 2;
+  if (Math.abs(b.row - a.row) === 1 && !retry) {
+    const y1 = down ? a.y + a.h : a.y, y2 = down ? b.y : b.y + b.h;
+    return { d: `M${x},${y1} L${x},${y2}`, x: x + 6, y: (y1 + y2) / 2, anchor: 'start' };
+  }
+  const side = retry ? a.x : a.x + a.w, bulge = (retry ? -1 : 1) * (26 + 8 * Math.abs(b.row - a.row));
+  const y1 = ay + (down ? 8 : -8), y2 = by + (down ? -8 : 8);
+  return { d: `M${side},${y1} C${side + bulge},${y1} ${side + bulge},${y2} ${side},${y2}`, x: side + bulge * .8, y: (y1 + y2) / 2, anchor: retry ? 'end' : 'start' };
+}
+function hatGraph(p) {
+  const boxes = new Map(p.nodes.map(n => [n.id, hatBox(n, p.layers)]));
+  const height = 68 + 92 * Math.max(5, ...Array.from(boxes.values(), b => b.row + 1));
+  const lanes = p.layers.map((l, i) => `<g class="hat-lane"><rect x="${36 + i * 222}" y="8" width="210" height="${height - 12}" rx="14"/><text x="${141 + i * 222}" y="32" text-anchor="middle">${esc(l.label)}</text></g>`).join('');
+  const edges = p.edges.map(e => {
+    const a = boxes.get(e.source), b = boxes.get(e.target);
+    if (!a || !b) throw new Error(`İşleme hattında geçiş düğümü eksik: ${e.source} → ${e.target}`);
+    const retry = /yeniden/.test(e.label), pos = hatEdgePath(a, b, retry);
+    const label = esc(e.label + (e.queue ? ' · ' + e.queue : ''));
+    return `<g class="hat-edge${retry ? ' is-retry' : ''}${e.target.endsWith('FAILED') ? ' is-fail' : ''}${S.node === e.source || S.node === e.target ? ' hi' : ''}" data-source="${esc(e.source)}" data-target="${esc(e.target)}"><path d="${pos.d}" marker-end="url(#hat-arrow)"><title>${label}</title></path><text x="${pos.x}" y="${pos.y - 4}" text-anchor="${pos.anchor}">${label}</text></g>`;
+  }).join('');
+  const nodes = p.nodes.map(n => {
+    const b = boxes.get(n.id), [st, stx] = hatStatus(n);
+    const technical = n.id.includes(':') ? n.id.split(':')[1] : n.id === 'fetch' ? 'fetch_run' : 'sources.yaml';
+    return `<g class="hat-node kind-${esc(n.kind)} st-${st}${!n.count ? ' zero' : ''}${S.node === n.id ? ' sel' : ''}" data-act="node" data-n="${esc(n.id)}" tabindex="0" role="button" aria-pressed="${S.node === n.id}" aria-label="${esc(n.label)}: ${N(n.count)} · ${esc(stx)}">
+      <title>${esc(n.description)} · ${esc(stx)}${n.metrics && n.metrics.completed24h != null ? ` · 24 sa: ${N(n.metrics.completed24h)} çıktı` : ''}</title>
+      <rect class="hat-box" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="12"/>
+      <rect class="hat-kind" x="${b.x}" y="${b.y + 10}" width="4" height="${b.h - 20}" rx="2"/>
+      <text class="hat-label" x="${b.x + 14}" y="${b.y + 23}">${esc(n.label)}</text>
+      ${S.tech ? `<text class="hat-tech" x="${b.x + 14}" y="${b.y + 43}">${esc(technical)}</text>` : ''}
+      <text class="hat-count" x="${b.x + b.w - 12}" y="${b.y + 44}" text-anchor="end">${N(n.count)}</text></g>`;
+  }).join('');
+  return `<svg class="hat-graph${S.hatLabels ? ' labels' : ''}${S.node ? ' has-selection' : ''}" viewBox="0 0 ${60 + p.layers.length * 222} ${height}" role="group" aria-label="İşleme hattı durum grafiği"><defs><marker id="hat-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>${lanes}${edges}${nodes}</svg>`;
+}
 function admHat() {
-  const p = S.adm.hat; const sel = S.node; const rf = p.reviewFlow || {};
-  const node = c => { const n = hatNode(c.id); const [st, stx] = hatStatus(n); const m = n.metrics || {};
-    return `<button class="node st-${st} ${!n.count ? 'zero' : ''} ${sel === c.id ? 'sel' : ''}" data-act="node" data-n="${esc(c.id)}"><span class="node-stage">${c.stage}</span><span class="node-n num">${N(n.count)}</span><span class="node-sub">${c.sub}</span><span class="node-meta">${m.completed24h != null ? `24 sa: ${m.completed24h} çıktı` : '&nbsp;'}</span><span class="hstat h-${st}">${stx}</span>${S.tech ? `<span class="tech">${esc(n.id)} · ${esc(n.module || '')}</span>` : ''}</button>`; };
-  const exit = id => { const n = hatNode(id); const m = n.metrics || {}; const err = n.kind === 'fail';
-    const sub = id === 'reg:AI_FAILED' ? `${N(m.retryable)} yeniden denenecek · ${N(m.exhausted)} müdahale gerekli` : id === 'review:Onaylandı' ? `${N(rf.approvedWithChange)} tanesinde birim değiştirildi` : '';
-    return `<button class="exit ${err ? 'err' : ''} ${!n.count ? 'zero' : ''} ${sel === id ? 'sel' : ''}" data-act="node" data-n="${esc(id)}"><span>${esc(n.label)}</span><b class="num">${N(n.count)}</b>${sub ? `<small>${sub}</small>` : ''}</button>`; };
-  const col = c => `<div class="col">${node(c)}${c.exits.map(exit).join('')}</div>`;
-  const ai = HAT_COLS.slice(0, 5), ex = HAT_COLS.slice(6);
+  const p = S.adm.hat; const rf = p.reviewFlow || {};
   const failed = hatNode('reg:AI_FAILED');
-  return `<div class="sec-h"><div class="hat-tools"><label class="switch"><input type="checkbox" id="techT" ${S.tech ? 'checked' : ''}>Teknik adlar</label></div>
+  return `<div class="sec-h"><div class="hat-tools"><label class="switch"><input type="checkbox" id="techT" ${S.tech ? 'checked' : ''}>Teknik adlar</label><label class="switch"><input type="checkbox" id="hatLabelsT" ${S.hatLabels ? 'checked' : ''}>Geçiş etiketleri</label></div>
     <div class="hat-tools"><span class="muted" style="font-size:12.5px">Anlık durum · güncellendi ${S.refreshed ? fT(S.refreshed) : '—'}</span><label class="switch"><input type="checkbox" id="autoT" ${S.auto ? 'checked' : ''}>30 sn'de bir</label><button class="btn btn-sm" data-act="refresh">${ic('refresh')}Yenile</button><button class="btn btn-sm btn-ghost icon-btn" data-act="pop-hat" aria-label="Diğer işlemler">${ic('more')}</button></div></div>
   <div class="callouts">${rf.waiting ? `<div class="banner banner-crit">${ic('alert')}<div><b>Uzman kararı bekleyen: ${N(rf.waiting)} kayıt</b><p>Son 24 saatte ${N(rf.decided24h)}, son 7 günde ${N(rf.decided7d)} karar verildi. Birikimi toplu işlemle eritebilirsiniz.</p><div class="b-act"><a class="btn btn-sm" href="#gelen">Gelen kutusu</a></div></div></div>` : ''}
     ${failed.count ? `<div class="banner banner-warn">${ic('clock')}<div><b>${N(failed.count)} kayıt YZ hatasında</b><p>${N((failed.metrics || {}).retryable)} kayıt otomatik yeniden denenecek, ${N((failed.metrics || {}).exhausted)} kayıt deneme hakkını tüketti ve elle müdahale bekliyor.</p><div class="b-act"><button class="btn btn-sm" data-act="node" data-n="reg:AI_FAILED">Hataları gör</button></div></div></div>` : ''}</div>
-  <div class="hat-wrap"><div class="card flow-card"><div class="flow-scroll"><div class="lanes">
-    <div><div class="lane-h">YZ İŞLEME HATTI</div><div class="flow">${ai.map(col).join('')}</div></div>
-    <div class="gate" aria-label="Yalnızca hazır kayıtlar geçer"><span class="ln"></span><span>Yalnızca hazır kayıtlar geçer</span><span class="ln"></span></div>
-    <div><div class="lane-h">UZMAN VE BİRİM</div><div class="flow">${ex.map(col).join('')}</div></div></div></div>
-    <div class="legend"><span class="hstat h-ok">Normal</span><span class="hstat h-warn">En eski bekleyen ≥ ${HAT_WARN_DAYS} gün</span><span class="hstat h-crit">≥ ${HAT_CRIT_DAYS} gün / hata</span><span>Kesikli kutu: hattan çıkan kayıtlar</span></div>
+  <div class="hat-wrap"><div class="card flow-card"><div class="flow-scroll" tabindex="0" role="region" aria-label="Süreç haritası, yatay kaydırılabilir">${hatGraph(p)}</div>
+    <div class="legend">${Object.entries(HAT_KINDS).map(([k, l]) => `<span class="hat-key kind-${k}"><i></i>${l}</span>`).join('')}<span>┄ yeniden deneme / işleme</span><span class="hstat h-warn">En eski bekleyen ≥ ${HAT_WARN_DAYS} gün</span><span class="hstat h-crit">≥ ${HAT_CRIT_DAYS} gün / hata</span></div>
     <div class="hat-sum">${flowSummary(p)}</div></div>
   <aside class="card hat-panel" aria-live="polite">${hatPanel()}</aside></div>`;
 }
@@ -229,6 +262,8 @@ function hatPanel() {
   const id = S.node;
   if (!id) return `<div class="empty" style="padding:28px 8px">${ic('info')}<b>Bir adım seçin</b><span>Diyagramdaki bir kutuya tıklayınca adımın açıklaması, ölçümleri ve en yeni kayıtları burada görünür.</span></div>`;
   const n = hatNode(id); const m = n.metrics || {}; const items = S.adm.nodeItems && S.adm.nodeItems.node === id ? S.adm.nodeItems.items : null;
+  const error = S.adm.nodeItems && S.adm.nodeItems.node === id ? S.adm.nodeItems.error : null;
+  const transitions = S.adm.hat.edges.filter(e => e.source === id || e.target === id);
   const acts = [];
   if (id === 'reg:AI_FAILED' && isAdmin()) acts.push(`<button class="btn btn-sm" data-act="retry-all">Yeniden denenecekleri şimdi dene</button>`);
   if (id === 'review:Bekliyor') acts.push('<a class="btn btn-sm" href="#gelen">Gelen kutusuna git</a>');
@@ -240,8 +275,12 @@ function hatPanel() {
     <div class="mgrid"><div><span>Kayıt sayısı</span><b class="num">${N(n.count)}</b></div><div><span>En eski</span><b style="font-size:13px">${m.oldestDays != null ? m.oldestDays + ' gün' : '—'}</b></div></div>
     ${m.completed24h != null ? `<p class="muted" style="font-size:12.5px">Son 24 saatte ${m.completed24h} kayıt bu adımı geçti.</p>` : ''}
     ${S.tech ? `<p class="mono">${esc(n.id)} · ${esc(n.module || '')}</p>` : ''}
+    ${transitions.length ? `<h3 style="margin-top:16px;font-size:13px">Geçişler</h3><ul class="rlist">${transitions.map(e => {
+      const other = e.source === id ? e.target : e.source;
+      return `<li><button class="linkbtn" data-act="node" data-n="${esc(other)}">${e.source === id ? '→' : '←'} ${esc(hatNode(other).label)}</button><small>${esc(e.label)}${S.tech && e.queue ? ` · ${esc(e.queue)}` : ''}</small></li>`;
+    }).join('')}</ul>` : ''}
     ${acts.length ? `<div class="b-act" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${acts.join('')}</div>` : ''}
-    <h3 style="margin-top:16px;font-size:13px">En yeni kayıtlar</h3>${items === null ? '<p class="hint">Yükleniyor…</p>' : items.length ? `<ul class="rlist">${items.slice(0, 8).map(r => `<li>${esc(trunc(r.title || r.url || '—', 80))}<small>${esc(srcOf(r.source).a)}${r.at ? ' · ' + fDT(pdt(r.at)) : ''}${r.error ? ' · ' + esc(trunc(r.error, 60)) : ''}</small></li>`).join('')}</ul>` : '<p class="hint">Bu adımda kayıt yok.</p>'}`;
+    <h3 style="margin-top:16px;font-size:13px">En yeni kayıtlar</h3>${error ? `<p class="crit" role="alert">${esc(error)}</p><button class="btn btn-sm" data-act="node" data-n="${esc(id)}">Yeniden dene</button>` : items === null ? '<p class="hint">Yükleniyor…</p>' : items.length ? `<ul class="rlist">${items.slice(0, 8).map(r => `<li>${esc(trunc(r.title || r.url || '—', 80))}<small>${esc(srcOf(r.source).a)}${r.at ? ' · ' + fDT(pdt(r.at)) : ''}${r.error ? ' · ' + esc(trunc(r.error, 60)) : ''}</small></li>`).join('')}</ul>` : '<p class="hint">Bu adımda kayıt yok.</p>'}`;
 }
 
 /* ---------- kaynaklar */

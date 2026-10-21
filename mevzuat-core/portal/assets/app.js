@@ -5,9 +5,13 @@
 const VIEWS = { gelen: viewGelen, arsiv: viewArsiv, yonetim: viewYonetim };
 function renderAll() {
   closePop();
+  const graph = $('.flow-scroll'); const graphScroll = graph ? graph.scrollLeft : 0;
+  const focusedNode = document.activeElement && document.activeElement.matches('.hat-node') ? document.activeElement.dataset.n : null;
   const keep = document.activeElement && document.activeElement.dataset ? { id: document.activeElement.id, set: document.activeElement.dataset.set, txt: document.activeElement.classList.contains('input') } : null;
   $('#app').innerHTML = appbar() + `<main id="main">${VIEWS[S.view]()}</main>`;
   if (keep && (keep.id || keep.set)) { const el = keep.id ? document.getElementById(keep.id) : document.querySelector(`input.input[data-set="${keep.set}"]`); if (el && el.focus) { el.focus(); if (el.setSelectionRange && el.type !== 'range') { try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) { /* tür desteklemiyor */ } } } }
+  if (focusedNode) { const el = Array.from(document.querySelectorAll('.hat-node')).find(n => n.dataset.n === focusedNode); if (el) el.focus({ preventScroll: true }); }
+  if (graph && $('.flow-scroll')) $('.flow-scroll').scrollLeft = graphScroll;
 }
 function refreshInbox(opts = {}) {
   if (S.meta && S.meta.id !== S.openId) S.meta = null;
@@ -299,7 +303,11 @@ async function loadAdmin(tab) {
 }
 async function loadNodeItems(id) {
   S.adm.nodeItems = null;
-  try { S.adm.nodeItems = await GET('/pipeline/nodes/' + encodeURIComponent(id), { limit: 20 }); } catch (_) { S.adm.nodeItems = { node: id, items: [] }; }
+  let result;
+  try { result = await GET('/pipeline/nodes/' + encodeURIComponent(id), { limit: 20 }); }
+  catch (e) { result = { node: id, items: [], error: errMsg(e) }; }
+  if (S.node !== id) return;
+  S.adm.nodeItems = result;
   if (S.view === 'yonetim' && S.adminTab === 'hat' && S.node === id) renderAll();
 }
 let previewT = null;
@@ -492,6 +500,7 @@ document.addEventListener('change', e => {
   if (t.id === 'sortDir') { changeSort(S.sort, t.value); return; }
   if (t.id === 'ps') { S.ps = +t.value; S.page = 1; refreshInbox(); listChanged(); return; }
   if (t.id === 'techT') { S.tech = t.checked; renderAll(); return; }
+  if (t.id === 'hatLabelsT') { S.hatLabels = t.checked; renderAll(); return; }
   if (t.id === 'autoT') { S.auto = t.checked; return; }
   if (t.name === 'rr') { S.rejReason = t.value; const n = $('#rejNote'); if (n) n.placeholder = t.value === 'other' ? 'Açıklama (zorunlu)' : 'Not (isteğe bağlı)'; return; }
   if (t.name === 'er') { S.edit.reason = t.value; const w = $('#editWhy'); if (w) S.edit.why = w.value; const n = $('#editNote'); if (n) S.edit.note = n.value; repaint(); return; }
@@ -528,6 +537,10 @@ function showShortcuts() {
   dialog({ title: 'Klavye kısayolları', cancel: 'Kapat', body: `<div class="kbd-list">${k.map(x => `<span class="kbd">${x[0]}</span><span>${x[1]}</span>`).join('')}</div>` });
 }
 document.addEventListener('keydown', e => {
+  const node = e.target.closest('.hat-node');
+  if (node && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault(); node.dispatchEvent(new MouseEvent('click', { bubbles: true })); return;
+  }
   if (e.target.id === 'm-topic' && e.key === 'Enter') {
     e.preventDefault(); const v = e.target.value.trim().replace(/\s+/g, ' ');
     if (v && !S.meta.draft.topics.some(x => lower(x) === lower(v))) { syncDraft(); S.meta.draft.topics.push(v); refreshInbox(); }
