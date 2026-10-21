@@ -414,10 +414,11 @@ document.addEventListener('click', e => {
       api('POST', '/admin/reprocess', { query: { dry_run: true }, body: { stage: S.rp.stage, from: fISO(a1), to: fISO(b1), source: S.rp.source || null } }).then(x => { S.rp.est = x.data; }).catch(err => { S.rp.err = errMsg(err); }).then(() => renderAll()); break; }
     case 'rp-start': { const rp = S.rp; dialog({ title: 'Yeniden işlemeyi başlat', ok: 'Başlat', body: `<p><b>${N(rp.est.count)} kayıt</b> yeniden işlenecek. Tahmini süre ${rp.est.estimatedMinutes} dk, yaklaşık ${N(rp.est.llmCalls)} YZ çağrısı. İşlem sürerken bu kayıtlar Gelen kutusunda “YZ hazırlıyor” olarak görünür.</p>`,
       onOk: async f => { dlgBusy(f, true); try { await api('POST', '/admin/reprocess', { body: { stage: rp.stage, from: fISO(parseTR(rp.from)), to: fISO(parseTR(rp.to)), source: rp.source || null } }); S.rp = null; closeDialog(); renderAll(); toast('Yeniden işleme kuyruğa alındı.'); } catch (err) { dlgBusy(f, false); return errMsg(err); } return 'wait'; } }); break; }
-    case 'bl-preview': { S.bl = $('#blIn').value; const d = parseTR(S.bl); S.blPlan = null; S.blErr = null;
-      if (!d) { S.blErr = 'Tarihi gg.aa.yyyy biçiminde yazın.'; renderAll(); break; }
-      GET('/admin/rebaseline', { cutoff: fISO(d) }).then(p => { S.blPlan = p; }).catch(err => { S.blErr = errMsg(err); }).then(() => renderAll()); break; }
-    case 'bl-apply': { const pl = S.blPlan; dialog({ title: 'Baseline sınırını uygula', ok: 'Uygula', body: `<p>Yeni sınır <b>${esc(fTR(pd(pl.cutoff)))}</b>. ${N(pl.converted)} kayıt YZ hattına alınacak${pl.crawl.length ? `; ${pl.crawl.length} kaynak sınıra kadar taranacak` : ''}. Bu işlem YZ maliyeti doğurabilir.</p>`,
+    case 'bl-preview': { S.bl = $('#blIn').value; const d = pd(S.bl); S.blPlan = null; S.blErr = null;
+      if (!d || fISO(d) !== S.bl || !$('#blIn').checkValidity()) { S.blErr = 'Geçerli bir tarih seçin veya tarih alanına yazın.'; renderAll(); break; }
+      const cutoff = S.bl;
+      GET('/admin/rebaseline', { cutoff }).then(p => { if (S.bl === cutoff) S.blPlan = p; }).catch(err => { if (S.bl === cutoff) S.blErr = errMsg(err); }).then(() => { if (S.bl === cutoff) renderAll(); }); break; }
+    case 'bl-apply': { const pl = S.blPlan; if (!pl || pl.cutoff !== $('#blIn').value) { toast('Önce yeni sınırın etkisini önizleyin.', { err: true }); break; } dialog({ title: 'Baseline sınırını uygula', ok: 'Uygula', body: `<p>Yeni sınır <b>${esc(fTR(pd(pl.cutoff)))}</b>. ${N(pl.converted)} kayıt YZ hattına alınacak${pl.crawl.length ? `; ${pl.crawl.length} kaynak sınıra kadar taranacak` : ''}. Bu işlem YZ maliyeti doğurabilir.</p>`,
       onOk: async f => { dlgBusy(f, true); try { await api('POST', '/admin/rebaseline', { body: { cutoff: pl.cutoff } }); S.blPlan = null; closeDialog(); toast('Baseline sınırı güncelleniyor; iş kuyruğa alındı.'); loadAdmin('bakim'); } catch (err) { dlgBusy(f, false); return errMsg(err); } return 'wait'; } }); break; }
     case 'chain': t.disabled = true; GET('/admin/audit/verify').then(d => { S.chain = { ok: d.ok, problems: d.problems || [], text: d.ok ? 'Zincir doğrulandı · kopukluk yok' : `${d.problems.length} sorun bulundu` }; }).catch(err => { S.chain = { ok: false, problems: [], text: errMsg(err) }; }).then(() => renderAll()); break;
     case 'dlg-close': closeDialog(); break;
@@ -508,6 +509,11 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.id === 'blIn') {
+    S.bl = t.value; S.blPlan = null; S.blErr = null;
+    const card = t.closest('.mcard'); card.querySelector('[data-act="bl-apply"]').disabled = true;
+    card.querySelectorAll('.result, .field-err').forEach(el => el.remove()); return;
+  }
   if (t.id === 'q') { S.q = t.value; S.page = 1; clearTimeout(t._tm); t._tm = setTimeout(() => { S.selected.clear(); loadList().then(() => paintAll()); }, 300); return; }
   if (S.meta && /^m-(title|summary|pub|eff|due|why)$/.test(t.id)) { syncDraft(); t.classList.remove('err'); return; }
   if (t.id === 'xlQ') { S.xl.q = t.value; const pos = t.selectionStart; renderAll(); const n = $('#xlQ'); n.focus(); n.setSelectionRange(pos, pos); return; }
