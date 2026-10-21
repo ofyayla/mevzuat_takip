@@ -9,7 +9,7 @@ S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilte
 
 const openAlarms = () => (S.alerts || []).length;
 const initials = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toLocaleUpperCase('tr');
-const healthBad = () => ((Boot.health && Boot.health.sources) || []).filter(s => s.status !== 'healthy').length;
+const healthBad = () => ((Boot.health && Boot.health.sources) || []).filter(s => s.status !== 'ok').length;
 
 function appbar() {
   const c = counts(); const me = Boot.me || { name: '—', title: '' };
@@ -161,10 +161,10 @@ function viewYonetim() {
 }
 const SEV_TAG = { critical: 'tag-crit', high: 'tag-crit', warning: 'tag-warn', medium: 'tag-warn', info: 'tag-plain', low: 'tag-plain', Yüksek: 'tag-crit', Orta: 'tag-warn', Düşük: 'tag-plain' };
 const SEV_TXT = { critical: 'Kritik', high: 'Yüksek', warning: 'Uyarı', medium: 'Orta', info: 'Bilgi', low: 'Düşük' };
-const H_ST = { healthy: ['h-ok', 'Sağlıklı'], delayed: ['h-warn', 'Gecikmeli'], down: ['h-crit', 'Sorunlu'] };
+const H_ST = { ok: ['h-ok', 'Sağlıklı'], delayed: ['h-warn', 'Gecikmeli'], down: ['h-crit', 'Sorunlu'] };
 function admGenel() {
   const a = S.adm.genel; const al = S.alerts || []; const m = a.metrics; const llm = m.llm || {}; const pr = (Boot.stats || {}).preparing || {};
-  const hs = (Boot.health && Boot.health.sources) || []; const bad = hs.filter(s => s.status !== 'healthy');
+  const hs = (Boot.health && Boot.health.sources) || []; const bad = hs.filter(s => s.status !== 'ok');
   const sec = ms => ms == null ? '—' : dec(ms / 1000, 1) + ' sn';
   return `<div class="stack"><section><div class="sec-h"><h2>Açık alarmlar <span class="muted num">${al.length}</span></h2><p>Kapatılan alarmlar adınızla denetim izine yazılır.</p></div>
     <div class="card alarms">${al.length ? al.map(x => `<div class="alarm-row"><span class="tag ${SEV_TAG[x.severity] || 'tag-plain'}">${esc(SEV_TXT[x.severity] || x.severity)}</span><div class="msg">${esc(x.message)}<small>${esc(x.type)}${x.source ? ' · ' + esc(srcOf(x.source).a) : ''} · ${fDT(pdt(x.openedAt))}</small></div>
@@ -175,7 +175,7 @@ function admGenel() {
       <div class="card tile"><div class="tl-h">YZ kuyruğu<span class="hstat ${pr.failed ? 'h-warn' : 'h-ok'}">${pr.failed ? 'Hata var' : 'Normal'}</span></div><span class="v num">${N(pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span></div>
       <div class="card tile"><div class="tl-h">Bekleyen aktarım<span class="hstat h-ok">${m.pendingIngest == null ? 'Uygulanmaz' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span></div></div></section>
     <section><div class="sec-h"><h2>Kaynaklar</h2><a class="btn btn-sm" href="#kaynaklar">Tümünü gör</a></div>
-      <div class="card alarms"><div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'healthy').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
+      <div class="card alarms"><div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'ok').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
       ${bad.map(s => `<div class="alarm-row"><span class="hstat ${(H_ST[s.status] || H_ST.down)[0]}">${(H_ST[s.status] || H_ST.down)[1]}</span><div class="msg"><b>${esc(s.name)}</b><small>${esc(s.message || '')}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</small></div><div class="acts"><button class="btn btn-sm" data-act="scan" data-k="${esc(s.code)}">Şimdi tara</button></div></div>`).join('')}</div></section></div>`;
 }
 
