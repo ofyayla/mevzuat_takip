@@ -241,6 +241,8 @@ button.kpi:hover{background:var(--surface-2)}
 tr.unread .ttl{color:var(--fg);font-weight:600}
 .meta{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:4px;font-size:12px;color:var(--fg-3);align-items:center}
 .src{font-weight:600;color:var(--fg-2);text-decoration:none;border-bottom:1px dotted var(--line-strong);cursor:help}
+.c-pub{width:130px;white-space:nowrap}
+.pub-mobile{display:none}
 .c-eff{width:150px;white-space:nowrap}
 .eff{display:grid;gap:3px;justify-items:start;font-size:12.5px}
 .eff-in{color:var(--warn);font-size:12px;font-weight:500}
@@ -253,7 +255,7 @@ tr.unread .ttl{color:var(--fg);font-weight:600}
 .need svg.i{width:14px;height:14px}
 .m-only{display:none}
 @container list (max-width:900px){.c-unit{display:none}.m-unit{display:inline-flex}}
-@container list (max-width:640px){.c-eff,.c-sev{display:none}.m-only{display:inline-flex}.c-go{display:none}}
+@container list (max-width:640px){.c-pub,.c-eff,.c-sev{display:none}.m-only{display:inline-flex}.pub-mobile{display:inline}.c-go{display:none}}
 .stage{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500}
 .steps{display:inline-flex;gap:3px}
 .steps i{width:14px;height:4px;border-radius:2px;background:var(--line-strong)}
