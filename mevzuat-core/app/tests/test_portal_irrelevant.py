@@ -1,4 +1,4 @@
-"""Yeni portal (Faz 4): ilgisiz kayıtların kontrol örneklemi (doğrula / ilgili say)."""
+"""Yeni portal (Faz 4): ilgisiz kayıtların kontrolü (doğrula / ilgili say)."""
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -21,30 +21,38 @@ def _irr(sf, title, score, *, uncertain=False, reviewed=False):
         return r.id
 
 
-def test_sample_picks_near_threshold_unreviewed_and_orders_by_score(settings, env, client):  # noqa: F811
+def test_list_includes_all_unreviewed_and_orders_by_score(settings, env, client):  # noqa: F811
     c, sf = client
-    far = _irr(sf, "Çok ilgisiz", 0.02)                    # eşiğe uzak: örnekleme girmez
+    far = _irr(sf, "Çok ilgisiz", 0.02)                    # eşiğe uzak, yine de listede (örnekleme yapılmaz)
     near1 = _irr(sf, "Eşiğe yakın", 0.28)
     near2 = _irr(sf, "Biraz yakın", 0.18)
-    unsure = _irr(sf, "Belirsiz", 0.05, uncertain=True)     # düşük skor ama model belirsiz dedi
+    unsure = _irr(sf, "Belirsiz", 0.05, uncertain=True)
     _irr(sf, "İncelenmiş", 0.29, reviewed=True)
     body = c.get(f"{API}/irrelevant-sample").json()
-    assert [i["id"] for i in body["items"]] == [near1, near2, unsure] and body["total"] == 3
-    assert far not in {i["id"] for i in body["items"]}
+    assert [i["id"] for i in body["items"]] == [near1, near2, unsure, far] and body["total"] == 4
     assert body["threshold"] == settings.relevance_threshold and body["items"][0]["rationale"].endswith("ilgisiz.")
-    assert c.get(f"{API}/stats").json()["queues"]["ilgisizOrneklem"] == 3
+    assert c.get(f"{API}/stats").json()["queues"]["ilgisizOrneklem"] == 4
     page2 = c.get(f"{API}/irrelevant-sample", params={"page": 2, "page_size": 2}).json()
-    assert [i["id"] for i in page2["items"]] == [unsure] and page2["total"] == 3
+    assert [i["id"] for i in page2["items"]] == [unsure, far] and page2["total"] == 4
 
 
-def test_sample_size_is_capped_by_runtime_setting(settings, env, client):  # noqa: F811
+def test_irrelevant_sample_search_matches_title_and_rationale(settings, env, client):  # noqa: F811
     c, sf = client
-    for i in range(5):
-        _irr(sf, f"Aday {i}", 0.2 + i / 100)
-    assert c.put("/api/v1/admin/settings", json={"values": {"irrelevant_sample_size": "2"}}).status_code == 200
-    body = c.get(f"{API}/irrelevant-sample").json()
-    assert body["total"] == 2 and len(body["items"]) == 2
-    assert c.get(f"{API}/stats").json()["queues"]["ilgisizOrneklem"] == 2
+    title_match = _irr(sf, "İzin Yönetmeliği", 0.22)
+    rationale_match = _irr(sf, "Bilgi Notu", 0.20)
+    with sf() as s:
+        reg = s.get(Regulation, rationale_match)
+        reg.classification = {"relevance": {"rationale": "Bankacılık işlemlerine ilişkin açıklama."}}
+        s.commit()
+
+    title_result = c.get(f"{API}/irrelevant-sample", params={"q": "IZIN"}).json()
+    assert [item["id"] for item in title_result["items"]] == [title_match]
+    assert title_result["total"] == 1
+
+    rationale_result = c.get(f"{API}/irrelevant-sample", params={"q": "bankacılık"}).json()
+    assert [item["id"] for item in rationale_result["items"]] == [rationale_match]
+    assert rationale_result["total"] == 1
+    assert c.get(f"{API}/irrelevant-sample", params={"q": "eşleşmeyen"}).json()["total"] == 0
 
 
 def test_confirm_marks_reviewed_and_keeps_record_irrelevant(settings, env, client):  # noqa: F811
