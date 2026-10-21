@@ -247,9 +247,9 @@ def _still_eligible(reg: Regulation, *, force: bool) -> bool:
         return True
     if reg.processing_status == "AI_FAILED":
         return extra.get("ai_stage") == "unit_match" and extra.get("ai_attempts", 0) < AI_MAX_ATTEMPTS
-    return "unit_match" not in extra and (
-        reg.processing_status == "SUMMARIZED"
-        or (reg.processing_status == "RELEVANT" and bool(extra.get("summary_blocked"))))
+    # Metin beklerken üretilen öneri, sonradan gelen özetle yeniden değerlendirilmelidir.
+    return reg.processing_status == "SUMMARIZED" or (
+        reg.processing_status == "RELEVANT" and bool(extra.get("summary_blocked")) and "unit_match" not in extra)
 
 
 def match_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Settings, *,

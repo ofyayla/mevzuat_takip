@@ -9,7 +9,7 @@ import yaml
 from sqlalchemy import select
 
 from app.ai.llm_client import FakeLLM, LLMUnavailable
-from app.ai.summary import summarize_pending
+from app.ai.summary import sources_for, summarize_pending
 from app.ai.unit_matching import (
     _stem_match,
     keyword_candidates,
@@ -19,7 +19,7 @@ from app.ai.unit_matching import (
     sync_units,
     validate_suggestions,
 )
-from app.db import FewshotExample, Regulation, Unit, UnitSuggestion
+from app.db import FewshotExample, RawDocument, Regulation, Unit, UnitSuggestion
 from app.settings import BACKEND_DIR
 from tests.test_ai import LockSpy
 from tests.test_processing import env  # noqa: F401
@@ -178,6 +178,32 @@ def test_no_suggestion_and_unknown_code(settings, env):  # noqa: F811
         reg = s.get(Regulation, reg_id)
         assert reg.processing_status == "READY" and reg.extra["unit_match"]["status"] == "önerilemedi"
         assert s.scalars(select(UnitSuggestion)).first() is None
+
+
+@pytest.mark.parametrize("targeted", [False, True])
+def test_text_arriving_after_unit_match_reaches_ready(settings, env, targeted):  # noqa: F811
+    sf, _ = env
+    reg_id = _relevant_bank_mellat(settings, env)
+    with sf() as s:
+        texts = {src.raw_document_id: src.text for src in sources_for(s, s.get(Regulation, reg_id))}
+        for doc_id in texts:
+            s.get(RawDocument, doc_id).text = ""
+        s.commit()
+    assert summarize_pending(sf, _summary_llm(settings), settings).awaiting_text == 1
+    empty = FakeLLM(settings, lambda t, m, n: [{"suggestions": []}])
+    assert match_pending(sf, empty, settings).no_suggestion == 1
+    assert match_pending(sf, empty, settings).processed == 0
+    with sf() as s:
+        assert s.get(Regulation, reg_id).processing_status == "RELEVANT"
+        for doc_id, text in texts.items():
+            s.get(RawDocument, doc_id).text = text
+        s.commit()
+    assert summarize_pending(sf, _summary_llm(settings), settings).ids == [reg_id]
+    rep = match_pending(sf, empty, settings, ids=[reg_id] if targeted else None)
+    assert (rep.processed, rep.no_suggestion) == (1, 1)
+    with sf() as s:
+        assert s.get(Regulation, reg_id).processing_status == "READY"
+    assert match_pending(sf, empty, settings).processed == 0
 
 
 def test_unexpected_error_fails_one_regulation_not_the_batch(settings, env, monkeypatch):  # noqa: F811

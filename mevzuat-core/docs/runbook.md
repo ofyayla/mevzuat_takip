@@ -156,6 +156,17 @@ API: `POST /api/v1/admin/reprocess {stage, from, to, source?}`. Karar verilmiş 
 uzmanın seçtiği birimler değişmez (yalnızca YZ önerileri yenilenir); yeniden işleme denetim izine "Yeniden işlendi" olarak yazılır. Birim tanımları değiştiyse önce
 `mevzuat-ai units-load`, sonra `reprocess match`.
 
+#### YZ işlemi bekleyen kayıtlar
+
+- `SUMMARIZED`: özet hazırdır, birim eşleştirmesi beklenir. Metin/OCR beklerken daha önce birim önerisi üretilmiş
+  olsa da metin ve özet geldikten sonra öneri yeniden değerlendirilir ve kayıt `READY` olur. Bu durumda takılmış
+  eski kayıtlar da güncel worker ile bir sonraki birim eşleştirme turunda (saatin 27. ve 57. dakikası) alınır;
+  topluca zorla yeniden sınıflandırma gerekmez.
+- `RELEVANT` + `extra.summary_blocked=metin_yok`: yeterli kaynak metni yoktur; LLM'yi tekrar çağırmak çözmez.
+  Önce OCR/metin çıkarma hatasını giderin (§4.6), ardından özet ve birim adımları normal zamanlamayla ilerler.
+- Kayıtlar hiç ilerlemiyorsa worker'ın `ai` kuyruğunu dinlediğini, tek Beat örneğinin çalıştığını ve
+  `mevzuat-ai llm-check` sonucunu kontrol edin. `AI_FAILED` olanlar için aşağıdaki hedefli yeniden denemeyi kullanın.
+
 #### Başarısız (`AI_FAILED`) kayıtları yeniden deneme
 
 YZ adımı üç denemede de hata veren kayıt `AI_FAILED`'da kalır ve Beat artık denemez (YZ hattı alarmı açılır). Bunları tarih
