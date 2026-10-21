@@ -18,6 +18,16 @@ Eski adresler yeni sayfaya yönlenir: `/surec → /#hat`, `/arsiv → /#arsiv`, 
 
 Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç noktalar için `API_REFERENCE.md`.
 
+## Baseline sınırı
+
+- **Yönetim → Bakım ve denetim → Baseline sınırı → Yeni sınır** alanında tarih, takvim simgesinden
+  seçilebilir veya klavyeyle girilebilir. Görünen tarih biçimi tarayıcının dil ayarını izler.
+- **Önizle** seçilen tarihin etkisini hesaplar; **Uygula** mevcut onay penceresinden sonra işlemi kuyruğa alır.
+  Tarih değiştirilir veya temizlenirse eski önizleme kaldırılır; uygulamadan önce yeniden önizleme gerekir.
+
+Baseline tarih alanı regresyon testleri (depo kökünden, ek paket gerektirmez):
+`node --test mevzuat-core/portal/tests/baseline-date.test.cjs`
+
 ## Bildirimler
 
 - Sağ üstteki zil menüsünde bir bildirime tıklamak, açık alarmların listelendiği **Yönetim → Genel bakış**
