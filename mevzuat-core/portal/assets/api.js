@@ -141,17 +141,20 @@ function upsert(it, { resetSel = false } = {}) {
   if (resetSel || !r.sel) r.sel = r.status === 'Bekliyor' ? (r.needsUnit ? [] : r.units.map(x => x.code)) : r.units.map(x => x.code);
   return r;
 }
-/** İlgisiz arşivi / örneklem öğesi (kayıt henüz portalda görünmez; ayrı ayrıntı uç noktası). */
-function upsertIrr(it) {
+/** Arşiv öğesi (kayıt henüz portalda görünmez; ayrı ayrıntı uç noktası). */
+function upsertArchive(it) {
   const r = REC.get(String(it.id)) || { id: String(it.id), num: it.id };
   REC.set(r.id, r);
-  Object.assign(r, { kind: 'irr', src: it.issuerCode || (it.sources || [])[0], sources: it.sources || [], type: it.type || '—', title: it.title, pub: pd(it.publishDate), det: pdt(it.detectedAt),
+  const kind = it.kind === 'baseline' ? 'baseline' : 'irr';
+  Object.assign(r, { kind, src: it.issuerCode || (it.sources || [])[0], sources: it.sources || [], type: it.type || '—', title: it.title, pub: pd(it.publishDate), det: pdt(it.detectedAt),
     relScore: it.relevanceScore, why: it.rationale, uncertain: it.uncertain, threshold: it.threshold ?? r.threshold, review: it.irrelevantReview || null, url: it.sourceUrl,
-    units: [], sel: [], sug: [], topics: [], summary: '', status: 'İlgisiz' });
+    units: [], sel: [], sug: [], topics: [], summary: '', status: kind === 'baseline' ? 'İlk tarama' : 'İlgisiz' });
   if (it.unread !== undefined) r.unread = it.unread;
   if (it.documents) { r.detail = true; r.docs = it.documents; r.criteria = it.criteria || []; r.note = it.note; }
   return r;
 }
+/** İlgisiz arşivi / örneklem öğesi (geriye dönük çağıranlar için). */
+function upsertIrr(it) { return upsertArchive(it); }
 
 /* ---------- önyükleme */
 const Boot = { me: null, stats: null, sources: [], health: null };
