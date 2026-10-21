@@ -115,8 +115,6 @@ class Settings(BaseSettings):
     # İK-3: ilgililik / güven (başlangıç değerleri; çalışma zamanında app_setting tablosundan ezilir)
     relevance_threshold: float = 0.30
     relevance_samples: int = 3               # self-consistency örnek sayısı
-    irrelevant_sample_size: int = 100        # uzmana kontrol için sunulan "ilgisiz" kayıt üst sınırı (incelenmemişler)
-    irrelevant_sample_min_score: float = 0.15  # ilgililik skoru bu değerin üstünde kalan ilgisizler eşiğe yakındır
     relevance_sample_temperature: float = 0.7
     relevance_weight_model: float = 0.6
     relevance_weight_votes: float = 0.3

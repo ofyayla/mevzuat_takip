@@ -27,7 +27,20 @@ REG_TYPES = ["Kanun", "Cumhurbaşkanı Kararı", "Cumhurbaşkanlığı Kararname
              "Rehber", "Kurul Kararı", "İlke Kararı", "Usul ve Esaslar", "Düzenleme Taslağı", "Duyuru",
              "Basın Duyurusu", "Bülten", "İlan", "Resmi Yazı", "Diğer"]
 SEVERITIES = ["Kritik", "Yüksek", "Orta", "Düşük"]
+UNAVAILABLE_STRIKES = 3
 _SOURCE_TAG = re.compile(r"<(\s*/?\s*kaynak_metin\b[^<>]*)>", re.I)
+
+
+def record_unavailable(reg: Regulation) -> int:
+    """Aynı kaydın kuyruğu sürekli durdurmasını önlemek için ardışık erişim hatalarını sayar."""
+    extra = dict(reg.extra or {})
+    strikes = extra.get("ai_unavailable_strikes", 0) + 1
+    if strikes >= UNAVAILABLE_STRIKES:
+        extra.pop("ai_unavailable_strikes", None)
+    else:
+        extra["ai_unavailable_strikes"] = strikes
+    reg.extra = extra
+    return strikes
 
 
 def neutralize_source_tags(value):
@@ -153,8 +166,6 @@ RUNTIME_SPECS: dict[str, RuntimeSpec] = {
     "confidence_high": RuntimeSpec(float, 0, 1, "Bu skor ve üstü 'Yüksek' güven bandı"),
     "confidence_medium": RuntimeSpec(float, 0, 1, "Bu skor ve üstü 'Orta' güven bandı (altı 'Düşük')"),
     "relevance_samples": RuntimeSpec(int, 1, 9, "İlgililikte self-consistency örnek sayısı"),
-    "irrelevant_sample_size": RuntimeSpec(int, 0, 1000, "Uzmana kontrol için sunulan 'ilgisiz' kayıt üst sınırı"),
-    "irrelevant_sample_min_score": RuntimeSpec(float, 0, 1, "Bu skor ve üstündeki ilgisizler (eşiğe yakın) örnekleme girer"),
     "dedupe_auto_threshold": RuntimeSpec(float, 0, 1, "Bu skor ve üstü otomatik birleştirilir"),
     "dedupe_review_threshold": RuntimeSpec(float, 0, 1, "Bu skor ile otomatik eşik arası LLM/insan onayına gider"),
 }

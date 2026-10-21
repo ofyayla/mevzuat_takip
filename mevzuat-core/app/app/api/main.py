@@ -269,13 +269,14 @@ def archive_regulations(session: SessionDep, actor: ActorDep,
 
 @api.get("/regulations/irrelevant-sample")
 def irrelevant_sample_list(session: SessionDep, settings: SettingsDep, actor: ActorDep,
-                           page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 25):
-    """Kontrol örneklemi: YZ'nin eşiğe yakın skorla ilgisiz bulduğu, uzmanca henüz incelenmemiş kayıtlar."""
+                           page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+                           q: str | None = None):
+    """Kontrol listesi: YZ'nin ilgisiz bulduğu, uzmanca henüz incelenmemiş tüm kayıtlar."""
     from app.ai.common import effective_settings
     from app.services.archive import irrelevant_sample
 
     require(actor, ROLE_VIEWER)
-    return irrelevant_sample(session, effective_settings(session, settings), page, page_size)
+    return irrelevant_sample(session, effective_settings(session, settings), page, page_size, q)
 
 
 @api.post("/regulations/{reg_id}/irrelevant-review")

@@ -168,29 +168,33 @@ def archive_detail(session: Session, reg_id: int) -> dict:
     return item
 
 
-# ------------------------------------------------------------------------------------------------ ilgisiz örneklemi
+# ------------------------------------------------------------------------------------------------ ilgisizler (kontrol)
 
 
-def _sample_conds(settings) -> list:
-    """YZ'nin ilgisiz bulduğu, eşiğe yakın (ya da belirsiz işaretli) ve uzmanca henüz incelenmemiş kayıtlar."""
-    return [Regulation.processing_status == "IRRELEVANT",
-            Regulation.extra["irrelevant_review"].as_string().is_(None),
-            or_(Regulation.relevance_score >= settings.irrelevant_sample_min_score,
-                Regulation.classification["relevance"]["uncertain"].as_boolean().is_(True))]
+def _unreviewed_conds(q: str | None = None) -> list:
+    """YZ'nin ilgisiz bulduğu ve uzmanca henüz incelenmemiş tüm kayıtlar."""
+    conds = [Regulation.processing_status == "IRRELEVANT",
+             Regulation.extra["irrelevant_review"].as_string().is_(None)]
+    if q and q.strip():
+        like = "%" + _like_escape(search_fold(q.strip())) + "%"
+        rationale = Regulation.classification["relevance"]["rationale"].as_string()
+        conds.append(or_(_fold_sql(Regulation.title).like(like, escape="\\"),
+                         _fold_sql(rationale).like(like, escape="\\")))
+    return conds
 
 
-def sample_count(session: Session, settings) -> int:
-    n = session.scalar(select(func.count()).select_from(Regulation).where(*_sample_conds(settings))) or 0
-    return min(n, settings.irrelevant_sample_size)
+def sample_count(session: Session, settings, q: str | None = None) -> int:
+    return session.scalar(select(func.count()).select_from(Regulation).where(*_unreviewed_conds(q))) or 0
 
 
-def irrelevant_sample(session: Session, settings, page: int = 1, page_size: int = 25) -> dict:
-    """Örneklem: eşiğe en yakın (skoru en yüksek) ilgisizler önce; ``irrelevant_sample_size`` ile sınırlı. İncelenen kayıt
-    örneklemden çıkar, sıradaki girer."""
-    total = sample_count(session, settings)
+def irrelevant_sample(session: Session, settings, page: int = 1, page_size: int = 25, q: str | None = None) -> dict:
+    """İncelenmemiş tüm ilgisiz kayıtlar (skora göre örnekleme yapılmaz); skoru en yüksek (eşiğe en yakın) önce.
+    İncelenen kayıt listeden çıkar, sıradaki girer."""
+    conds = _unreviewed_conds(q)
+    total = sample_count(session, settings, q)
     offset = (page - 1) * page_size
     limit = max(0, min(page_size, total - offset))
-    rows = session.scalars(select(Regulation).where(*_sample_conds(settings))
+    rows = session.scalars(select(Regulation).where(*conds)
                            .order_by(Regulation.relevance_score.desc().nulls_last(), Regulation.id.desc())
                            .offset(offset).limit(limit)).all() if limit else []
     src = _source_info(session, [r.id for r in rows])
@@ -200,8 +204,7 @@ def irrelevant_sample(session: Session, settings, page: int = 1, page_size: int 
         it["rationale"] = _relevance(r).get("rationale") or None      # önizleme değil, tam gerekçe
         it["threshold"] = settings.relevance_threshold
         items.append(it)
-    return {"items": items, "total": total, "page": page, "pageSize": page_size, "threshold": settings.relevance_threshold,
-            "minScore": settings.irrelevant_sample_min_score}
+    return {"items": items, "total": total, "page": page, "pageSize": page_size, "threshold": settings.relevance_threshold}
 
 
 def review_irrelevant(session: Session, reg_id: int, verdict: str, note: str | None, actor) -> Regulation:
