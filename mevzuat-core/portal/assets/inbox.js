@@ -3,7 +3,7 @@
    Gelen kutusu: durum, sunucudan liste/KPI yükleme ve liste/ayrıntı çizimi.
    ============================================================================================================ */
 const S = {
-  view: 'gelen', adminTab: 'genel', queue: 'yeni', q: '', sort: 'oncelik', page: 1, ps: 25,
+  view: 'gelen', adminTab: 'genel', queue: 'yeni', q: '', sort: 'oncelik', sortDir: 'desc', page: 1, ps: 25,
   f: { src: new Set(), sev: new Set(), eff: new Set(), unit: new Set(), needUnit: false },
   selected: new Set(), openId: null, focusId: null, dTab: 'ozet', cite: null, rejecting: false, rejReason: 'not_banking_related',
   list: { ids: [], total: 0, loading: true, err: null }, kpi: null, busy: false,
@@ -39,7 +39,7 @@ const canDecide = () => !!(Boot.me && Boot.me.canDecide);
 /* ---------- sunucudan yükleme */
 function listParams(extra = {}) {
   const hz = S.queue === 'hazirlaniyor';
-  const so = hz ? { sort: 'detected_at', direction: 'asc' } : SORTS[S.sort] || SORTS.oncelik;
+  const so = hz ? { sort: 'detected_at', direction: 'asc' } : { sort: SORTS[S.sort].sort, direction: S.sortDir };
   return { queue: S.queue, page: S.page, page_size: S.ps, ...so, q: S.q.trim(), source: [...S.f.src], severity: [...S.f.sev],
     effective: [...S.f.eff].map(v => EFF_API[v]), unit: [...S.f.unit], needs_unit: S.f.needUnit, ...extra };
 }
@@ -161,7 +161,8 @@ function chipsRow(total, start, n) {
   return `<div class="chiprow">${chips.map(c => `<span class="chip">${esc(c[2])}<button data-act="unchip" data-k="${c[0]}" data-v="${esc(c[1])}" aria-label="${esc(c[2])} filtresini kaldır">${ic('x')}</button></span>`).join('')}
     ${chips.length ? '<button class="linkbtn" data-act="clear-filters">Filtreleri temizle</button>' : ''}
     <div class="chiprow-r"><span class="num">${total ? `${N(start + 1)}–${N(start + n)} / ${N(total)}` : '0 kayıt'}</span>
-    ${sortable ? `<label>Sırala <select class="select" id="sort" aria-label="Sıralama">${[['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit (yeniden eskiye)'], ['yururluk', 'Yürürlük (yakın önce)'], ['onem', 'Önem']].map(o => `<option value="${o[0]}" ${S.sort === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>` : ''}</div></div>`;
+    ${sortable ? `<label>Sırala <select class="select" id="sort" aria-label="Sıralama">${[['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit tarihi'], ['yururluk', 'Yürürlük tarihi'], ['onem', 'Önem']].map(o => `<option value="${o[0]}" ${S.sort === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
+    <label>Yön <select class="select" id="sortDir" aria-label="Sıralama yönü">${[['asc', 'Küçükten büyüğe'], ['desc', 'Büyükten küçüğe']].map(o => `<option value="${o[0]}" ${S.sortDir === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>` : ''}</div></div>`;
 }
 function listRegion() {
   const { total, loading, err } = S.list; const rows = currentList();
@@ -177,7 +178,11 @@ function emptyState() {
   if (S.queue === 'yeni') return `<div class="empty card">${ic('check')}<b>Yeni kuyruk boş</b><span>Birikimde ${N(c.birikim)} kayıt bekliyor.</span><button class="btn" data-act="queue" data-q="birikim">Birikime geç</button></div>`;
   return `<div class="empty card"><b>Bu kuyrukta kayıt yok</b></div>`;
 }
-function sortTh(k, l) { const on = S.sort === k; return `<button class="th-sort ${on ? 'on' : ''}" data-act="sort" data-s="${k}" aria-label="${l} sütununa göre sırala">${l}${on ? ic('chev-d') : ''}</button>`; }
+function sortTh(k, l, cls) {
+  const on = S.sort === k;
+  const next = on ? (S.sortDir === 'asc' ? 'desc' : 'asc') : SORTS[k].direction;
+  return `<th class="${cls}" aria-sort="${on ? (S.sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}"><button class="th-sort ${on ? 'on' : ''}" data-act="sort" data-s="${k}" aria-label="${l} sütununa göre ${next === 'asc' ? 'küçükten büyüğe' : 'büyükten küçüğe'} sırala">${l}${on ? ic(S.sortDir === 'asc' ? 'chev-u' : 'chev-d') : ''}</button></th>`;
+}
 function table(rows) {
   const q = S.queue; const pageIds = rows.map(r => r.id);
   const allSel = pageIds.length && pageIds.every(id => S.selected.has(id));
@@ -193,7 +198,7 @@ function table(rows) {
     ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}"><td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r)}</td>
       <td class="c-sev"><span class="tag ${r.relScore != null && r.threshold != null && r.threshold - r.relScore < .05 ? 'tag-warn' : 'tag-plain'}">${dec(r.relScore)} / eşik ${dec(r.threshold)}</span></td><td class="c-unit"><span class="u-s">${esc(trunc(r.why || 'Gerekçe kaydedilmemiş.', 180))}</span></td>
       <td><div class="row-acts"><button class="btn btn-sm" data-act="irr-ok" data-id="${r.id}">İlgisiz, doğru</button><button class="btn btn-sm" data-act="irr-back" data-id="${r.id}">İlgili</button></div></td></tr>`).join('')}</tbody></table>`;
-  return `<table class="tbl"><thead><tr><th class="c-cb"><input type="checkbox" data-act="selall" ${allSel ? 'checked' : ''} aria-label="Bu sayfadaki tüm kayıtları seç"></th><th class="c-main">Düzenleme</th><th class="c-eff">${sortTh('yururluk', 'Yürürlük')}</th><th class="c-sev">${sortTh('onem', 'Önem')}</th><th class="c-unit">Önerilen birim</th><th class="c-go"></th></tr></thead><tbody>
+  return `<table class="tbl"><thead><tr><th class="c-cb"><input type="checkbox" data-act="selall" ${allSel ? 'checked' : ''} aria-label="Bu sayfadaki tüm kayıtları seç"></th><th class="c-main">Düzenleme</th>${sortTh('yururluk', 'Yürürlük', 'c-eff')}${sortTh('onem', 'Önem', 'c-sev')}<th class="c-unit">Önerilen birim</th><th class="c-go"></th></tr></thead><tbody>
     ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}">${cb(r)}<td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r,
       (r.dup ? '<span class="tag tag-warn">Olası mükerrer</span>' : '') + (r.draftDue ? `<span class="tag tag-brand">Görüş son günü ${fDs(r.draftDue)}</span>` : '') + (r.conflict ? '<span class="tag tag-warn">Tarih çelişkisi</span>' : '') +
       `<span class="m-only">${sevPill(curSev(r))}</span>` + (needsUnit(r) ? `<span class="m-only m-unit need">${ic('alert')}Birim atanmalı</span>` : ''))}</td>

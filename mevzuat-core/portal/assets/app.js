@@ -87,6 +87,10 @@ function filterPopHtml(k) {
 
 /* ---------- süzgeç / sayfa değişince listeyi yeniden yükle */
 function listChanged() { S.selected.clear(); loadList().then(() => paintAll()); if (DECISION_Q.includes(S.queue)) loadKpi().then(() => paintAll()); }
+function changeSort(key, direction) {
+  S.sortDir = direction || (S.sort === key ? (S.sortDir === 'asc' ? 'desc' : 'asc') : SORTS[key].direction);
+  S.sort = key; S.page = 1; refreshInbox(); listChanged();
+}
 
 /* ---------- kayıt açma ve gezinme */
 const blockedByMeta = id => { if (S.meta && S.meta.id !== id) { toast('Önce düzenlemeyi kaydedin ya da vazgeçin.', { err: true }); return true; } return false; };
@@ -337,7 +341,7 @@ document.addEventListener('click', e => {
     case 'fclear': S.f[t.dataset.f].clear(); S.page = 1; refreshInbox(); closePop(); listChanged(); break;
     case 'unchip': { const k = t.dataset.k; if (k === 'q') { S.q = ''; $('#q').value = ''; } else if (k === 'needUnit') S.f.needUnit = false; else S.f[k].delete(t.dataset.v); S.page = 1; refreshInbox(); listChanged(); break; }
     case 'clear-filters': S.q = ''; if ($('#q')) $('#q').value = ''; Object.values(S.f).forEach(v => v instanceof Set && v.clear()); S.f.needUnit = false; S.page = 1; refreshInbox(); listChanged(); break;
-    case 'sort': S.sort = S.sort === t.dataset.s ? 'oncelik' : t.dataset.s; S.page = 1; refreshInbox(); listChanged(); break;
+    case 'sort': changeSort(t.dataset.s); break;
     case 'page': S.page = +t.dataset.p; refreshInbox(); loadList(); $('#listRegion').scrollIntoView({ block: 'start' }); break;
     case 'apage': S.arsivPage = +t.dataset.p; loadArchive(); break;
     case 'approve': approve(S.openId); break;
@@ -484,7 +488,8 @@ document.addEventListener('change', e => {
   if (t.id === 'm-type') { syncDraft(); S.meta.draft.type = t.value; refreshInbox(); const el = $('#m-type'); if (el) el.focus(); return; }
   if (t.dataset.change === 'unit') { const r = byId(S.openId); const u = t.dataset.u; r.sel = t.checked ? [...r.sel, u] : r.sel.filter(x => x !== u); r.touched = true; repaint(); return; }
   if (t.id === 'addUnit' && t.value) { const r = byId(S.openId); r.sel = [...r.sel, t.value]; r.touched = true; repaint(); return; }
-  if (t.id === 'sort') { S.sort = t.value; S.page = 1; refreshInbox(); listChanged(); return; }
+  if (t.id === 'sort') { changeSort(t.value, SORTS[t.value].direction); return; }
+  if (t.id === 'sortDir') { changeSort(S.sort, t.value); return; }
   if (t.id === 'ps') { S.ps = +t.value; S.page = 1; refreshInbox(); listChanged(); return; }
   if (t.id === 'techT') { S.tech = t.checked; renderAll(); return; }
   if (t.id === 'autoT') { S.auto = t.checked; return; }

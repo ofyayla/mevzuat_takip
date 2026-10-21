@@ -36,6 +36,19 @@ Bildirim arayüzü regresyon testleri (depo kökünden, Node.js ile, ek paket ge
 - Onayda birim seçimi değiştiyse önce `PUT /units`, sonra `POST /decision` çağrılır (ikisi de güncel sürümle).
 - Toplu işlem en fazla 100 kayıt alır; sonuçta `done`/`skipped` nedenleriyle özetlenir.
 
+## Sıralama
+
+- Gelen kutusunun Yeni, Birikim ve Tümü kuyruklarında öncelik, tespit tarihi, yürürlük tarihi ve önem için
+  **Küçükten büyüğe / Büyükten küçüğe** yönü seçilebilir. Tarihlerde küçükten büyüğe eskiden yeniye sıralar.
+- Yürürlük veya Önem sütun başlığına tekrar tıklamak aynı sütunun sıralama yönünü tersine çevirir;
+  ok ve erişilebilir sütun bilgisi geçerli yönü gösterir.
+- Ölçüt değiştiğinde mevcut varsayılanlar korunur: yürürlük tarihi artan, diğer ölçütler azalan.
+  Sıralama değişince ilk sayfaya dönülür; Excel'e aktarım aynı ölçüt ve yönü kullanır.
+- YZ hazırlıyor kuyruğunun sabit bekleme sırası ve ilgisiz örnekleminin sunucu sırası değişmez.
+
+Sıralama arayüzü regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
+`node --test mevzuat-core/portal/tests/sorting.test.cjs`
+
 ## Prototipte olup API'de karşılığı olmayan alanlar (arayüzden çıkarıldı ya da sadeleştirildi)
 
 Uydurma veri bırakılmadı; aşağıdakiler ya hiç gösterilmez ya da API'nin verdiği kadarıyla gösterilir.
