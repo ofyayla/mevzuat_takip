@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, object_session, sessionmaker
 
 from app.collectors.config import ChannelConfig, SourcesFile, load_sources
 from app.db import RawDocument, Regulation, RegulationSourceLink, utcnow
@@ -63,13 +63,27 @@ class DocumentProcessor:
         except KeyError:
             return None
 
+    def _ocr_allowed(self, raw: RawDocument, session: Session | None = None) -> bool:
+        """İlk taramada toplanan (``is_baseline``) belge yalnızca ``ocr_baseline`` açıksa OCR'a gider; ancak baseline
+        sınırı (rebaseline) bağlı düzenlemeyi YZ hattına aldıysa (BASELINE/MERGED dışı) özet için metin gerekir:
+        ``raw_document.is_baseline`` "ilk taramada toplandı" bilgisi olarak kalır, bu yüzden düzenlemenin durumuna bakılır."""
+        if not raw.is_baseline or self.settings.ocr_baseline:
+            return True
+        session = session or object_session(raw)
+        if session is None or raw.id is None:
+            return False
+        return session.scalar(select(func.count()).select_from(RegulationSourceLink).join(
+            Regulation, Regulation.id == RegulationSourceLink.regulation_id).where(
+            RegulationSourceLink.raw_document_id == raw.id,
+            Regulation.processing_status.not_in(("BASELINE", "MERGED")))) > 0
+
     # ------------------------------------------------------------------ tek belge
 
     def extract_document(self, raw: RawDocument) -> bool:
         """Metni çıkarır; başarılıysa True. OCR hatası belgeyi düşürmez (sayfalar ``ocr_pending_pages``ta kalır,
         deneme sayılır); depolama okuma hatasında EXTRACT_FAILED + deneme sayısı."""
         ch = self._channel(raw)
-        allow_ocr = not raw.is_baseline or self.settings.ocr_baseline
+        allow_ocr = self._ocr_allowed(raw)
         extra = dict(raw.extra or {})
         try:
             res = extract(self.storage.get(raw.storage_key), raw.content_type, raw.role, self.settings, self.ocr,
@@ -198,7 +212,7 @@ class DocumentProcessor:
                                           RawDocument.extra["ocr_pending_pages"].is_not(None)
                                           ).order_by(RawDocument.id.desc())
             pending =[d for d in session.scalars(q) if (d.extra or {}).get("ocr_pending_pages")]
-            baseline = [d for d in pending if d.is_baseline and not self.settings.ocr_baseline]
+            baseline = [d for d in pending if not self._ocr_allowed(d, session)]
             exhausted = [d for d in pending if d not in baseline
                          and (d.extra or {}).get("extract_attempts", 0) >= self.settings.process_max_attempts]
             ids = [d.id for d in pending if d not in baseline and d not in exhausted][:limit]
