@@ -101,6 +101,9 @@ Arşiv arayüz regresyon testi (depo kökünden, Node.js ile):
 
 Yayım tarihi arayüz testleri: `node --test mevzuat-core/portal/tests/publication-date.test.cjs`
 
+Sayfalama, aynı tarihli kayıtlar, eksik tarihler ve Excel sırası için API regresyon testleri
+([app dizininden](../app)): `python -m pytest tests/test_portal_publication.py -q`.
+
 ## Excel'e aktarma
 
 - **Excel'e aktar** penceresinde varsayılan **Filtrelenmiş liste** veya **Yalnızca seçilenler** kapsamı seçilir.
