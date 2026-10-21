@@ -9,7 +9,5 @@ mevzuat-*/app/data/
 .DS_Store
 .claude/
 tools/log_ozet*.txt
-# graphify: yalnızca GRAPH_REPORT.md ve graph.html izlenir; önbellek ve ara dosyalar yerel yolları içerir ve her
-# çalıştırmada değişir
-graphify-out/cache/
-graphify-out/.graphify_*
+# Graphify çıktıları yerel olarak tutulur; repoya eklenmez.
+**/graphify-out/
