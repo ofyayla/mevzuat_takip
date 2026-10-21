@@ -77,7 +77,7 @@ MONGO_DB='mevzuat_crawl'
 
 # LLM (vLLM, OpenAI uyumlu)
 LLM_BASE_URL='https://doc-parser-dev.artinttest.albarakaturk.local/v1'
-LLM_MODEL='qwen36-35b-a3b-nvfp4'
+LLM_MODEL='Qwen/Qwen3.6-35B-A3B-FP8'
 LLM_API_KEY='EMPTY'
 LLM_MAX_CONCURRENCY='2'
 # Tek LLM çağrısının zaman aşımı (sn). Uzun belgelerde parça çağrıları 40-90 sn sürüyor; 120 sn sınırı aşılıyordu
