@@ -387,6 +387,18 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class HealthSample(Base):
+    """İzleme görevinin kuyruk/aktarım ölçümleri; son 14 gün saklanır."""
+
+    __tablename__ = "health_sample"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    ai_queue: Mapped[int] = mapped_column(Integer)
+    pending_ingest: Mapped[int | None] = mapped_column(Integer)
+    crawl_mode: Mapped[str] = mapped_column(String(16))
+
+
 class AppSetting(Base):
     """Çalışma zamanında değiştirilebilen eşikler (paralel çalışmada kod dağıtımı gerekmeden ayarlanır)."""
 

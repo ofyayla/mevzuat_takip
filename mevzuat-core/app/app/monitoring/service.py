@@ -34,12 +34,14 @@ def evaluate(session: Session, settings: Settings, now: datetime | None = None) 
 
 
 def run_monitor(session: Session, settings: Settings, now: datetime | None = None) -> MonitorResult:
+    from app.services.admin_metrics import record_health_sample
     from app.services.jobs import sweep_stale
 
     now = now or datetime.now(timezone.utc)
     sweep_stale(session, settings, now)   # ölü işleri / sahipsiz tarama kayıtlarını kapat (alarmlar buna göre hesaplanır)
     res = evaluate(session, settings, now)
     res.sync = sync_alerts(session, res.findings, settings, now)
+    record_health_sample(session, settings, now)
     return res
 
 
