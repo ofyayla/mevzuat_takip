@@ -153,6 +153,8 @@ RUNTIME_SPECS: dict[str, RuntimeSpec] = {
     "confidence_high": RuntimeSpec(float, 0, 1, "Bu skor ve üstü 'Yüksek' güven bandı"),
     "confidence_medium": RuntimeSpec(float, 0, 1, "Bu skor ve üstü 'Orta' güven bandı (altı 'Düşük')"),
     "relevance_samples": RuntimeSpec(int, 1, 9, "İlgililikte self-consistency örnek sayısı"),
+    "irrelevant_sample_size": RuntimeSpec(int, 0, 1000, "Uzmana kontrol için sunulan 'ilgisiz' kayıt üst sınırı"),
+    "irrelevant_sample_min_score": RuntimeSpec(float, 0, 1, "Bu skor ve üstündeki ilgisizler (eşiğe yakın) örnekleme girer"),
     "dedupe_auto_threshold": RuntimeSpec(float, 0, 1, "Bu skor ve üstü otomatik birleştirilir"),
     "dedupe_review_threshold": RuntimeSpec(float, 0, 1, "Bu skor ile otomatik eşik arası LLM/insan onayına gider"),
 }
@@ -189,7 +191,10 @@ def effective_settings(session: Session, settings: Settings) -> Settings:
 
 def check_runtime_settings(session: Session, settings: Settings) -> None:
     """Birbirine bağlı ayarların tutarlılığı (tek tek aralık denetimi yetmez); ihlalde ``ValueError``."""
-    eff = effective_settings(session, settings)
+    check_consistency(effective_settings(session, settings))
+
+
+def check_consistency(eff: Settings) -> None:
     if not eff.dedupe_review_threshold < eff.dedupe_auto_threshold:
         raise ValueError("dedupe_review_threshold, dedupe_auto_threshold'tan küçük olmalı "
                          f"({eff.dedupe_review_threshold:g} / {eff.dedupe_auto_threshold:g})")
@@ -198,12 +203,20 @@ def check_runtime_settings(session: Session, settings: Settings) -> None:
                          f"({eff.confidence_medium:g} / {eff.confidence_high:g})")
 
 
-def set_runtime_setting(session: Session, key: str, value: str, by: str | None = None) -> None:
+def set_runtime_setting(session: Session, key: str, value: str, by: str | None = None, *, reason: str | None = None,
+                        old: str | None = None) -> None:
+    """``old``: kayıt yokken (varsayılan değer geçerliyken) geçmişe yazılacak önceki değer."""
+    from app.db import AppSettingHistory
+
     if key not in RUNTIME_KEYS:
         raise KeyError(f"değiştirilebilir ayarlar: {', '.join(sorted(RUNTIME_KEYS))}")
     value = str(parse_runtime_value(key, value))    # doğrulanmış ve kanonik biçim ("0.50" → "0.5", int → "3")
     row = session.get(AppSetting, key)
+    before = row.value if row is not None else old
     if row is None:
         session.add(AppSetting(key=key, value=value, updated_by=by))
     else:
         row.value, row.updated_by = value, by
+    if before != value:
+        session.add(AppSettingHistory(key=key, old_value=before, new_value=value, reason=(reason or "").strip() or None,
+                                      changed_by=by))

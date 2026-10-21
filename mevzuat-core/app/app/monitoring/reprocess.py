@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.collectors.config import SourceConfig, load_sources
@@ -234,3 +234,29 @@ def retry_failed(session_factory: sessionmaker[Session], settings: Settings, *, 
     result["recovered"] = len(todo) - result["still_failed"]
     result["llm_unavailable"] = unavailable
     return result
+
+
+# aşama başına kayıt başı tahmini LLM çağrısı (ilgililik n örnek tek çağrı; önem + özet birden çok parça olabilir)
+_CALLS_PER_REG = {"extract": 0, "classify": 2, "summarize": 2, "match": 1}
+_DEFAULT_LATENCY_S = 20.0
+
+
+def estimate(session: Session, settings: Settings, stage: str, date_from: date, date_to: date, source: str | None) -> dict:
+    """Yeniden işleme etkisi (kuyruğa almadan): kayıt sayısı, tahmini LLM çağrısı ve süre, kararı verilmiş (korunacak)
+    kayıt sayısı. Süre, son LLM çağrılarının ortanca gecikmesinden ve tek işçiden hesaplanır; tahmindir."""
+    import statistics
+
+    from app.db import LlmCall
+
+    if stage not in STAGES:
+        raise ValueError(f"stage: {', '.join(STAGES)}")
+    ids = _regulation_ids(session, date_from, date_to, source)
+    kept = session.scalar(select(func.count()).select_from(Regulation).where(
+        Regulation.id.in_(ids), Regulation.review_status != "Bekliyor")) if ids else 0
+    lat = [x for x in session.scalars(select(LlmCall.latency_ms).where(LlmCall.latency_ms.is_not(None))
+                                      .order_by(LlmCall.id.desc()).limit(500))]
+    per_call = statistics.median(lat) / 1000 if lat else _DEFAULT_LATENCY_S
+    calls = len(ids) * _CALLS_PER_REG[stage]
+    seconds = calls * per_call if stage != "extract" else len(ids) * 2.0
+    return {"count": len(ids), "llmCalls": calls, "estimatedMinutes": max(1, round(seconds / 60)) if ids else 0,
+            "decidedKept": kept or 0, "estimate": True}

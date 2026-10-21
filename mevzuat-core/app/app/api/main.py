@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -44,10 +44,13 @@ from app.settings import Settings, get_settings
 
 log = logging.getLogger(__name__)
 PORTAL_FILE = "Mevzuat Takip Portali.dc.html"
-PIPELINE_FILE = "surec-haritasi.html"
-ARCHIVE_FILE = "arsiv.html"
-COMPARE_FILE = "karsilastirma.html"
+# Eski arayüz (React, ``portal/eski/``): bir sürüm yedekte tutulur, ``/eski`` altından açılır
+LEGACY_DIR = "eski"
+LEGACY_PAGES = {"": PORTAL_FILE, "surec": "surec-haritasi.html", "arsiv": "arsiv.html", "karsilastirma": "karsilastirma.html"}
+# Eski adresler yeni sayfanın ilgili sekmesine yönlenir
+OLD_ROUTES = {"/surec": "/#hat", "/arsiv": "/#arsiv", "/karsilastirma": "/#karsilastirma", "/admin": "/#yonetim"}
 VENDOR_TYPES = {".js": "application/javascript", ".css": "text/css", ".map": "application/json"}
+ASSET_TYPES = {".js": "application/javascript", ".css": "text/css; charset=utf-8"}
 # Tam bir CSP (script-src vb.) bilinçli yok: portal satır içi betik ve stil kullanıyor. Yalnızca çerçeveye gömülmeyi
 # (clickjacking) ve içerik türü koklamayı kapatır.
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
@@ -102,13 +105,78 @@ class UnitsIn(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class EffectiveIn(BaseModel):
+    mode: Literal["date", "on_publish", "none"]
+    on: date | None = Field(default=None, alias="date")
+
+    @model_validator(mode="after")
+    def check(self) -> "EffectiveIn":
+        if self.mode == "date" and self.on is None:
+            raise ValueError("mode=date için date gerekli")
+        return self
+
+
 class ContentIn(BaseModel):
+    """Yalnızca gönderilen alanlar değişir (``draft_deadline: null`` görüş tarihini temizler)."""
     title: str | None = Field(default=None, min_length=1, max_length=1000)
     summary: str | None = Field(default=None, min_length=1, max_length=20000)
+    reg_type: str | None = Field(default=None, min_length=1, max_length=64)
+    publish_date: date | None = None
+    effective: EffectiveIn | None = None
+    draft_deadline: date | None = None
+    topics: list[str] | None = Field(default=None, max_length=20)
+    note: str | None = Field(default=None, max_length=2000)
+    confirm_effective: bool = False
 
 
 class SettingsIn(BaseModel):
     values: dict[str, str]
+    reason: str | None = Field(default=None, max_length=1000)    # değişiklik gerekçesi (geçmişe yazılır)
+
+
+class SettingsPreviewIn(BaseModel):
+    values: dict[str, str]
+
+
+class AlertResolveIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class BulkDecisionIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=100)
+    decision: Literal["approve", "reject"]
+    unit_codes: list[str] | None = Field(default=None, max_length=10)
+    note: str | None = Field(default=None, max_length=2000)
+    rejection_reason: Literal["not_banking_related", "outdated", "duplicate", "other"] | None = None
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> "BulkDecisionIn":
+        if self.decision == "reject":
+            if self.rejection_reason is None:
+                raise ValueError("reddetme nedeni zorunludur")
+            if self.rejection_reason == "other" and not (self.note or "").strip():
+                raise ValueError("diğer nedeni için açıklama zorunludur")
+        elif self.rejection_reason is not None or self.unit_codes == []:
+            raise ValueError("onay kararında reddetme nedeni kullanılamaz; unit_codes boş olamaz")
+        return self
+
+
+class ReviseIn(BaseModel):
+    """Arşivde kararı değiştirme: yeni karar + zorunlu gerekçe. Onayda ``unit_codes`` verilmezse mevcut birimler korunur."""
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=5, max_length=2000)
+    unit_codes: list[str] | None = Field(default=None, min_length=1, max_length=10)
+    note: str | None = Field(default=None, max_length=2000)
+    rejection_reason: Literal["not_banking_related", "outdated", "duplicate", "other"] | None = None
+
+
+class IrrelevantReviewIn(BaseModel):
+    verdict: Literal["confirm", "relevant"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class ReopenIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=2000)
 
 
 class SplitIn(BaseModel):
@@ -126,13 +194,19 @@ def regulations(session: SessionDep, settings: SettingsDep, actor: ActorDep,
                 unit: str | None = None, date_range: Literal["7", "30"] | None = None, q: str | None = None,
                 metric: Literal["pending", "critical_high", "criticalHigh", "today", "upcoming"] | None = None,
                 page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 10,
-                sort: Literal["issuer", "unit", "title","publish_date", "effective_date", "severity", "status"] | None = None,
-                direction: Literal["asc", "desc"] = "desc"):
+                sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status",
+                              "priority", "detected_at", "decided_at"] | None = None,
+                direction: Literal["asc", "desc"] = "desc",
+                queue: Literal["yeni", "birikim", "tum", "hazirlaniyor"] | None = None,
+                effective: str | None = None, needs_unit: bool = False, unit_changed: bool = False,
+                edited: bool = False):
+    """``source``/``severity``/``unit``/``effective`` virgülle çoklu değer alır (VEYA). ``queue``: portal kuyruğu."""
     require(actor, ROLE_VIEWER)
     if status and status not in REVIEW_STATUSES:
         raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
     return list_regulations(session, ListQuery(source, severity, status, unit, int(date_range) if date_range else None,
-                                               q, metric, page, page_size, sort, direction), settings, actor.id)
+                                               q, metric, page, page_size, sort, direction, queue, effective,
+                                               needs_unit, unit_changed, edited), settings, actor.id)
 
 
 @api.get("/regulations/stats")
@@ -149,15 +223,18 @@ def regulations_export(session: SessionDep, settings: SettingsDep, actor: ActorD
                        source: str | None = None, severity: str | None = None, status: str | None = None,
                        unit: str | None = None, date_range: Literal["7", "30"] | None = None, q: str | None = None,
                        metric: Literal["pending", "critical_high", "criticalHigh", "today", "upcoming"] | None = None,
-                       sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status"] | None = None,
-                       direction: Literal["asc", "desc"] = "desc"):
+                       sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status",
+                                     "priority", "detected_at", "decided_at"] | None = None,
+                       direction: Literal["asc", "desc"] = "desc",
+                       queue: Literal["yeni", "birikim", "tum", "hazirlaniyor"] | None = None,
+                       effective: str | None = None, needs_unit: bool = False):
     """Liste süzgeçlerine uyan kayıtları Excel (.xlsx) olarak indirir (sayfalamasız, en fazla ``MAX_EXPORT_ROWS``;
     fazlası varsa ``X-Export-Truncated: true`` başlığı döner)."""
     require(actor, ROLE_VIEWER)
     if status and status not in REVIEW_STATUSES:
         raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
     query = ListQuery(source, severity, status, unit, int(date_range) if date_range else None, q, metric,
-                      sort=sort, direction=direction)
+                      sort=sort, direction=direction, queue=queue, effective=effective, needs_unit=needs_unit)
     items, total = export_regulations(session, query, settings, MAX_EXPORT_ROWS)
     headers = {"Content-Disposition": f'attachment; filename="{export_filename(today(settings))}"',
                "X-Export-Total": str(total), "X-Export-Truncated": str(total > len(items)).lower(),
@@ -180,10 +257,53 @@ def archive_regulations(session: SessionDep, actor: ActorDep,
     return list_archive(session, ArchiveQuery(kind, source, q, date_from, date_to, page, page_size, sort, direction))
 
 
+@api.get("/regulations/irrelevant-sample")
+def irrelevant_sample_list(session: SessionDep, settings: SettingsDep, actor: ActorDep,
+                           page: Annotated[int, Query(ge=1)] = 1, page_size: Annotated[int, Query(ge=1, le=100)] = 25):
+    """Kontrol örneklemi: YZ'nin eşiğe yakın skorla ilgisiz bulduğu, uzmanca henüz incelenmemiş kayıtlar."""
+    from app.ai.common import effective_settings
+    from app.services.archive import irrelevant_sample
+
+    require(actor, ROLE_VIEWER)
+    return irrelevant_sample(session, effective_settings(session, settings), page, page_size)
+
+
+@api.post("/regulations/{reg_id}/irrelevant-review")
+def irrelevant_review(reg_id: int, body: IrrelevantReviewIn, session: SessionDep, actor: ActorDep):
+    """``confirm`` ya da ``relevant`` (kayıt YZ hattına geri alınır). Karar öğrenme havuzuna ve denetim izine yazılır."""
+    from app.services.archive import review_irrelevant
+
+    require(actor, ROLE_EXPERT)
+    reg = review_irrelevant(session, reg_id, body.verdict, body.note, actor)
+    session.commit()
+    return {"id": reg.id, "processingStatus": reg.processing_status, "verdict": body.verdict}
+
+
 @api.get("/archive/regulations/{reg_id}")
 def archive_regulation_detail(reg_id: int, session: SessionDep, actor: ActorDep):
     require(actor, ROLE_VIEWER)
     return archive_detail(session, reg_id)
+
+
+@api.post("/regulations/bulk-decision")
+def regulation_bulk_decision(body: BulkDecisionIn, session: SessionDep, actor: ActorDep):
+    """Birden çok kayda tek karar (en fazla 100). Kısmi başarı: ``done`` işlenenler, ``skipped`` her biri için neden
+    (``not_ready``, ``already_decided``, ``units_required``…). İyimser kilit kullanılmaz; kararı satır kilidi sıralar."""
+    from app.services.regulations import bulk_decide
+
+    require(actor, ROLE_EXPERT)
+    result = bulk_decide(session, body.ids, body.decision, body.unit_codes, body.rejection_reason, body.note, actor)
+    session.commit()
+    return result
+
+
+@api.get("/regulations/decision-stats")
+def regulation_decision_stats(session: SessionDep, actor: ActorDep):
+    """Karar özeti ve birim önerisi isabeti (aynen onaylanan / onaylanan)."""
+    from app.services.regulations import decision_stats
+
+    require(actor, ROLE_VIEWER)
+    return decision_stats(session)
 
 
 @api.get("/regulations/{reg_id}")
@@ -199,10 +319,28 @@ def regulation_content(reg_id: int, body: ContentIn, session: SessionDep, settin
                        actor: ActorDep, response: Response, if_match: Annotated[str | None, Header()] = None):
     require(actor, ROLE_EXPERT)
     reg = get_visible(session, reg_id, for_update=True)
-    edit_content(session, reg, body.title, body.summary, actor, if_match)
+    sent = body.model_fields_set
+    changes = {k: (v.model_dump(by_alias=True) if k == "effective" and v else v) for k, v in
+               ((k, getattr(body, k)) for k in sent if k not in ("title", "summary"))}
+    changes = {k: v for k, v in changes.items() if v is not None or k == "draft_deadline"}
+    edit_content(session, reg, body.title, body.summary, actor, if_match, changes)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
     return serialize(session, reg, settings, detail=True)
+
+
+@api.get("/regulations/{reg_id}/document")
+def regulation_document(reg_id: int, session: SessionDep, actor: ActorDep):
+    """Belge sekmesi: ana belgenin çıkarılmış metni; ``summaryCitations`` aralıkları bu metne göre okunur."""
+    from app.ai.unit_matching import current_summary
+    from app.services.regulations import primary_document
+
+    require(actor, ROLE_VIEWER)
+    reg = get_visible(session, reg_id)
+    doc = primary_document(session, reg, current_summary(session, reg.id))
+    if doc is None:
+        raise ApiError(404, "not_found", "kayda bağlı belge bulunamadı")
+    return doc
 
 
 @api.post("/regulations/{reg_id}/views")
@@ -219,6 +357,36 @@ def regulation_decision(reg_id: int, body: DecisionIn, session: SessionDep, sett
     require(actor, ROLE_EXPERT)
     reg = get_visible(session, reg_id, for_update=True)
     decide(session, reg, body.decision, body.note, actor, if_match, body.rejection_reason)
+    session.commit()
+    response.headers["ETag"] = f'"{reg.row_version}"'
+    return serialize(session, reg, settings, detail=True)
+
+
+@api.post("/regulations/{reg_id}/decision/revise")
+def regulation_decision_revise(reg_id: int, body: ReviseIn, session: SessionDep, settings: SettingsDep, actor: ActorDep,
+                               response: Response, if_match: Annotated[str | None, Header()] = None):
+    """Verilmiş kararı değiştirir (onay↔ret, birim ekleme/çıkarma, ret nedeni). Gerekçe zorunlu; önceki karar denetim
+    izinde kalır."""
+    from app.services.regulations import revise_decision
+
+    require(actor, ROLE_EXPERT)
+    reg = get_visible(session, reg_id, for_update=True)
+    revise_decision(session, reg, body.decision, body.unit_codes, body.rejection_reason, body.note, body.reason, actor,
+                    if_match)
+    session.commit()
+    response.headers["ETag"] = f'"{reg.row_version}"'
+    return serialize(session, reg, settings, detail=True)
+
+
+@api.post("/regulations/{reg_id}/decision/reopen")
+def regulation_decision_reopen(reg_id: int, body: ReopenIn, session: SessionDep, settings: SettingsDep, actor: ActorDep,
+                               response: Response, if_match: Annotated[str | None, Header()] = None):
+    """Kararı kaldırır; kayıt yeniden karar bekler."""
+    from app.services.regulations import reopen_decision
+
+    require(actor, ROLE_EXPERT)
+    reg = get_visible(session, reg_id, for_update=True)
+    reopen_decision(session, reg, body.reason, actor, if_match)
     session.commit()
     response.headers["ETag"] = f'"{reg.row_version}"'
     return serialize(session, reg, settings, detail=True)
@@ -317,13 +485,18 @@ def admin_settings_put(body: SettingsIn, session: SessionDep, settings: Settings
     """Hata gövdesi ``details.fields``: alan bazlı iletiler ({anahtar: ileti}); tutarlılık hatası ilgili alana bağlanır."""
     import re
 
-    from app.ai.common import RUNTIME_KEYS, check_runtime_settings, set_runtime_setting
+    from app.ai.common import RUNTIME_KEYS, check_runtime_settings, effective_settings, set_runtime_setting
 
     require(actor, ROLE_ADMIN)
+    reason = (body.reason or "").strip()
+    if settings.require_setting_reason and len(reason) < 5:
+        raise ApiError(400, "reason_required", "değişiklik gerekçesi zorunludur (en az 5 karakter)")
+    before = effective_settings(session, settings)
     fields: dict[str, str] = {}
     for key, value in body.values.items():
         try:
-            set_runtime_setting(session, key, value, by=actor.name)
+            set_runtime_setting(session, key, value, by=actor.name, reason=reason,
+                                old=str(getattr(before, key)) if key in RUNTIME_KEYS else None)
         except (KeyError, ValueError) as e:
             fields[key] = str(e.args[0]) if e.args else str(e)   # KeyError str()'i iletiyi tırnaklar
     general = ""
@@ -341,6 +514,30 @@ def admin_settings_put(body: SettingsIn, session: SessionDep, settings: Settings
         raise ApiError(400, "invalid_setting", "; ".join(fields.values()) or general, {"fields": fields})
     session.commit()
     return admin_settings(session, settings, actor, detail)
+
+
+@admin.get("/settings/history")
+def admin_settings_history(session: SessionDep, actor: ActorDep, key: str | None = None,
+                           limit: Annotated[int, Query(ge=1, le=200)] = 20):
+    """Ayar değişiklikleri (en yeni önce): kim, ne zaman, eski → yeni değer, gerekçe."""
+    from app.db import AppSettingHistory
+
+    require(actor, ROLE_ADMIN)
+    q = select(AppSettingHistory).order_by(AppSettingHistory.id.desc()).limit(limit)
+    if key:
+        q = q.where(AppSettingHistory.key == key)
+    return [{"id": h.id, "key": h.key, "oldValue": h.old_value, "newValue": h.new_value, "reason": h.reason,
+             "changedBy": h.changed_by, "changedAt": _iso_dt(h.changed_at)} for h in session.scalars(q)]
+
+
+@admin.post("/settings/preview")
+def admin_settings_preview(body: SettingsPreviewIn, session: SessionDep, settings: SettingsDep, actor: ActorDep):
+    """Kaydetmeden önce etki: son 30 günün kayıtları yeni ağırlık/eşiklerle yeniden değerlendirilseydi kaç ilgili↔ilgisiz
+    değişirdi, kaç mükerrer adayı otomatik birleşirdi, LLM çağrı sayısı nasıl değişirdi. LLM çağrısı yapmaz, yazmaz."""
+    from app.services.settings_preview import preview
+
+    require(actor, ROLE_ADMIN)
+    return preview(session, settings, body.values)
 
 
 @admin.get("/metrics")
@@ -421,6 +618,7 @@ class ReprocessIn(BaseModel):
 class RetryFailedIn(BaseModel):
     stage: Literal["classify", "summarize", "match"] | None = None
     source: str | None = None
+    ids: list[int] | None = Field(default=None, min_length=1, max_length=500)   # yalnızca bu kayıtlar
 
 
 @admin.post("/retry-failed", status_code=202)
@@ -434,12 +632,14 @@ def admin_retry_failed(session: SessionDep, background: BackgroundTasks, setting
     if settings.llm_provider in ("", "none", None):
         raise ApiError(400, "llm_required", "bu işlem için LLM yapılandırılmalı")
     body = body or RetryFailedIn()
-    count = len(failed_regulations(session, stages=[body.stage] if body.stage else None, source=body.source))
+    count = len(failed_regulations(session, stages=[body.stage] if body.stage else None, source=body.source,
+                                   ids=body.ids))
     out: dict = {"status": "queued" if count else "nothing_to_do", "count": count}
     if count:
         sf = request.app.state.session_factory
         out["jobId"] = create_job(session, "retry_failed", source=body.source, requested_by=actor.name,
-                                  params={"stage": body.stage, "source": body.source, "count": count})
+                                  params={"stage": body.stage, "source": body.source, "count": count,
+                                          "ids": body.ids})
         background.add_task(run_job, sf, out["jobId"], _retry_failed_bg, sf, settings, body, actor)
     return out
 
@@ -449,7 +649,7 @@ def _retry_failed_bg(sf, settings: Settings, body: "RetryFailedIn", actor: Actor
     from app.monitoring.reprocess import retry_failed
 
     result = retry_failed(sf, settings, llm=get_llm(settings), stages=[body.stage] if body.stage else None,
-                          source=body.source, actor=actor)
+                          source=body.source, ids=body.ids, actor=actor)
     log.info("retry-failed: %s", result)
     return result
 
@@ -524,9 +724,35 @@ def admin_alerts(session: SessionDep, actor: ActorDep, status: Literal["open", "
         q = q.where(Alert.resolved_at.is_(None))
     elif status == "closed":
         q = q.where(Alert.resolved_at.is_not(None))
+    from app.monitoring.alerts import alert_link
+
     return [{"id": a.id, "key": a.key, "type": a.alert_type, "severity": a.severity, "source": a.source_code,
              "message": a.message, "details": a.details, "openedAt": _iso_dt(a.opened_at),
-             "lastSeenAt": _iso_dt(a.last_seen_at), "resolvedAt": _iso_dt(a.resolved_at)} for a in session.scalars(q)]
+             "lastSeenAt": _iso_dt(a.last_seen_at), "resolvedAt": _iso_dt(a.resolved_at),
+             "link": alert_link(a.alert_type), "acknowledgedBy": (a.details or {}).get("acknowledged_by")}
+            for a in session.scalars(q)]
+
+
+@admin.post("/alerts/{alert_id}/resolve")
+def admin_alert_resolve(alert_id: int, body: AlertResolveIn, session: SessionDep, settings: SettingsDep,
+                        actor: ActorDep):
+    """Alarmı elle kapatır. Bulgu sürerse ``alert_snooze_hours`` boyunca yeniden açılmaz; kimin ne zaman kapattığı
+    ``details``'ta kalır."""
+    from app.db import Alert, utcnow
+
+    require(actor, ROLE_ADMIN)
+    a = session.get(Alert, alert_id)
+    if a is None:
+        raise ApiError(404, "not_found", "alarm bulunamadı")
+    if a.resolved_at is not None:
+        raise ApiError(409, "already_resolved", "alarm zaten kapalı")
+    now = utcnow()
+    a.resolved_at = now
+    a.details = {**(a.details or {}), "acknowledged_by": actor.name, "acknowledged_at": now.isoformat(),
+                 "note": (body.note or "").strip() or None}
+    session.commit()
+    log.info("alarm elle kapatıldı: %s (%s) — %s", a.key, a.id, actor.name)
+    return {"id": a.id, "resolvedAt": _iso_dt(a.resolved_at), "snoozeHours": settings.alert_snooze_hours}
 
 
 def _iso_dt(dt):
@@ -557,12 +783,18 @@ def admin_monitor_run(session: SessionDep, settings: SettingsDep, actor: ActorDe
 
 @admin.post("/reprocess", status_code=202)
 def admin_reprocess(body: ReprocessIn, background: BackgroundTasks, session: SessionDep, settings: SettingsDep,
-                    actor: ActorDep, request: Request):
+                    actor: ActorDep, request: Request, dry_run: bool = False):
+    """``dry_run=true``: kuyruğa almadan etki tahmini (kayıt sayısı, süre, LLM çağrısı, kararı korunacak kayıt)."""
     from app.services.jobs import create_job, run_job
 
     require(actor, ROLE_ADMIN)
     if body.date_to < body.date_from:
         raise ApiError(400, "invalid_range", "from ≤ to olmalı")
+    if dry_run:
+        from app.monitoring.reprocess import estimate
+
+        return {"dryRun": True, "stage": body.stage, **estimate(session, settings, body.stage, body.date_from,
+                                                                   body.date_to, body.source)}
     if body.stage != "extract" and settings.llm_provider in ("", "none", None):
         raise ApiError(400, "llm_required", "bu aşama için LLM yapılandırılmalı")
     sf = request.app.state.session_factory
@@ -849,21 +1081,22 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
     app.include_router(evaluation)
 
     @app.get("/", include_in_schema=False)
-    @app.get("/admin", include_in_schema=False)   # aynı sayfa; portal adresi görünce Yönetim görünümünü açar
     def portal():
         return FileResponse(settings.portal_dir / PORTAL_FILE, media_type="text/html; charset=utf-8")
 
-    @app.get("/surec", include_in_schema=False)
-    def pipeline_page():
-        return FileResponse(settings.portal_dir / PIPELINE_FILE, media_type="text/html; charset=utf-8")
+    def _redirect(target: str):
+        return lambda: RedirectResponse(target, status_code=307)
 
-    @app.get("/arsiv", include_in_schema=False)
-    def archive_page():
-        return FileResponse(settings.portal_dir / ARCHIVE_FILE, media_type="text/html; charset=utf-8")
+    for old, target in OLD_ROUTES.items():
+        app.get(old, include_in_schema=False)(_redirect(target))
 
-    @app.get("/karsilastirma", include_in_schema=False)
-    def compare_page():
-        return FileResponse(settings.portal_dir / COMPARE_FILE, media_type="text/html; charset=utf-8")
+    @app.get("/eski", include_in_schema=False)
+    @app.get("/eski/{page}", include_in_schema=False)
+    def legacy_page(page: str = ""):
+        """Yedekteki eski arayüz sayfaları (yalnızca bilinen dört sayfa)."""
+        if page not in LEGACY_PAGES:
+            raise ApiError(404, "not_found", "sayfa bulunamadı")
+        return FileResponse(settings.portal_dir / LEGACY_DIR / LEGACY_PAGES[page], media_type="text/html; charset=utf-8")
 
     @app.get("/support.js", include_in_schema=False)
     def support_js():
@@ -878,6 +1111,15 @@ def create_app(settings: Settings | None = None, session_factory: sessionmaker[S
             raise ApiError(404, "not_found", "dosya bulunamadı")
         return FileResponse(path, media_type=VENDOR_TYPES[path.suffix],
                             headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.get("/assets/{name}", include_in_schema=False)
+    def portal_asset(name: str):
+        """Portalın kendi CSS/JS dosyaları (``portal/assets/``). Dosya adları sürümsüz olduğundan önbellek her seferinde
+        doğrulanır (``no-cache``). Yalnızca düz dosya adı ve ``.css``/``.js`` kabul edilir (dizin gezinmesi yok)."""
+        path = settings.portal_dir / "assets" / name
+        if name != Path(name).name or path.suffix not in ASSET_TYPES or not path.is_file():
+            raise ApiError(404, "not_found", "dosya bulunamadı")
+        return FileResponse(path, media_type=ASSET_TYPES[path.suffix], headers={"Cache-Control": "no-cache"})
 
     return app
 

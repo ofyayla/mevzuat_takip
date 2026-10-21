@@ -152,13 +152,16 @@ def overview(session: Session, settings: Settings, days: int | None = None) -> d
     counts["sources"] = len(load_sources(settings.sources_file).enabled())
     alerts = dict(session.execute(select(Alert.severity, func.count()).where(Alert.resolved_at.is_(None))
                                   .group_by(Alert.severity)).all())
+    metrics = node_metrics(session)
     unknown = sorted(k for k in counts if k not in _NODE_IDS)   # grafikte olmayan bir durum (yeni eklenmiş olabilir)
     return {
         "generatedAt": _iso(datetime.now(timezone.utc)),
         "days": days,
         "layers": LAYERS,
         "nodes": [{"id": n.id, "label": n.label, "layer": n.layer, "kind": n.kind, "description": n.description,
-                   "module": n.module, "count": counts.get(n.id, 0)} for n in NODES],
+                   "module": n.module, "count": counts.get(n.id, 0), "metrics": metrics.get(n.id, {})}
+                  for n in NODES],
+        "reviewFlow": review_flow(session, settings),
         "edges": [{"source": e.source, "target": e.target, "label": e.label, "queue": e.queue} for e in EDGES],
         "fetchRuns": runs,
         "openAlerts": alerts,
@@ -224,3 +227,61 @@ def mermaid(data: dict | None = None) -> str:
               "  classDef fail fill:#fde8e6,stroke:#c4382b", "  classDef terminal fill:#f2f2f2,stroke:#9a9a9a",
               "  classDef flow fill:#e6f3f1,stroke:#1f7a6d"]
     return "\n".join(lines) + "\n"
+
+
+def _age_days(dt: datetime | None) -> int | None:
+    if dt is None:
+        return None
+    return (datetime.now(timezone.utc) - (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc))).days
+
+
+# Bir durumdan çıkışı tamamlanan YZ çağrısı: durum → görev (son 24 saatte başarıyla biten, kayıt başına bir)
+_LEAVES_BY_TASK = {"reg:NEW": "relevance", "reg:RELEVANT": "summary", "reg:SUMMARIZED": "unit_match"}
+
+
+def node_metrics(session: Session) -> dict[str, dict]:
+    """Düğüm başına ``oldestDays`` (durumdaki en eski kayıt) ve ``completed24h`` (son 24 saatte o adımı bitiren kayıt
+    sayısı; kaynak ``llm_call`` — durum geçmişi tutulmadığı için). ``reg:AI_FAILED`` için ``retryable``/``exhausted``."""
+    from app.ai.classify import AI_MAX_ATTEMPTS
+    from app.db import LlmCall
+
+    out: dict[str, dict] = {}
+    for status, oldest in session.execute(select(Regulation.processing_status, func.min(Regulation.detected_at))
+                                          .group_by(Regulation.processing_status)):
+        out[f"reg:{status}"] = {"oldestDays": _age_days(oldest)}
+    for status, oldest in session.execute(select(RawDocument.processing_status, func.min(RawDocument.fetched_at))
+                                          .where(RawDocument.is_latest.is_(True), RawDocument.role != "attachment")
+                                          .group_by(RawDocument.processing_status)):
+        out[f"raw:{status}"] = {"oldestDays": _age_days(oldest)}
+    oldest_wait = session.scalar(select(func.min(Regulation.detected_at)).where(
+        visible(), Regulation.review_status == "Bekliyor"))
+    out["review:Bekliyor"] = {"oldestDays": _age_days(oldest_wait)}
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    for node_id, task in _LEAVES_BY_TASK.items():
+        n = session.scalar(select(func.count(func.distinct(LlmCall.regulation_id))).where(
+            LlmCall.task == task, LlmCall.status == "ok", LlmCall.created_at >= since)) or 0
+        out.setdefault(node_id, {})["completed24h"] = n
+    attempts = func.coalesce(Regulation.extra["ai_attempts"].as_integer(), 0)
+    failed = session.scalar(select(func.count()).select_from(Regulation).where(
+        Regulation.processing_status == "AI_FAILED")) or 0
+    exhausted = session.scalar(select(func.count()).select_from(Regulation).where(
+        Regulation.processing_status == "AI_FAILED", attempts >= AI_MAX_ATTEMPTS)) or 0
+    out.setdefault("reg:AI_FAILED", {}).update(retryable=failed - exhausted, exhausted=exhausted)
+    return out
+
+
+def review_flow(session: Session, settings: Settings) -> dict:
+    """Uzman kararı adımı: hazır ve bekleyen, son 24 saat / 7 günde verilen karar sayısı ve aynen onay oranı."""
+    from app.db import AuditEvent
+    from app.services.regulations import decision_stats
+
+    now = datetime.now(timezone.utc)
+
+    def decided(since):
+        return session.scalar(select(func.count()).select_from(AuditEvent).where(
+            AuditEvent.event_type.in_(("approved", "rejected")), AuditEvent.created_at >= since)) or 0
+
+    waiting = session.scalar(select(func.count()).select_from(Regulation).where(
+        visible(), Regulation.review_status == "Bekliyor", Regulation.processing_status == "READY")) or 0
+    return {"waiting": waiting, "decided24h": decided(now - timedelta(hours=24)),
+            "decided7d": decided(now - timedelta(days=7)), **decision_stats(session)}

@@ -34,9 +34,9 @@ def test_pipeline_counts_and_node_items(settings, env, client):  # noqa: F811
 
 def test_pipeline_page_is_served(settings, env, client):  # noqa: F811
     c, _ = client
-    r = c.get("/surec")
-    assert r.status_code == 200 and "/pipeline" in r.text
-    assert "./surec" in c.get("/").text
+    r = c.get("/surec", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/#hat"
+    assert "/pipeline" in c.get("/assets/views.js").text or "/pipeline" in c.get("/assets/app.js").text
 
 
 def test_pipeline_graph_covers_all_statuses():

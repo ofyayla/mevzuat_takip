@@ -10,6 +10,8 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 |---|---|---|---|---|
 | `GET` | `/api/v1/admin/settings` | `detail` |  | Admin Settings |
 | `PUT` | `/api/v1/admin/settings` | `detail` | evet | Admin Settings Put |
+| `GET` | `/api/v1/admin/settings/history` | `key`, `limit` |  | Admin Settings History |
+| `POST` | `/api/v1/admin/settings/preview` |  | evet | Admin Settings Preview |
 | `GET` | `/api/v1/admin/metrics` |  |  | Admin Metrics |
 | `GET` | `/api/v1/admin/scans` | `source`, `status`, `limit` |  | Admin Scans |
 | `POST` | `/api/v1/admin/regulations/{reg_id}/split` | `reg_id` | evet | Admin Split |
@@ -18,9 +20,10 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 | `GET` | `/api/v1/admin/rebaseline` | `cutoff` |  | Admin Rebaseline Preview |
 | `POST` | `/api/v1/admin/rebaseline` |  | evet | Admin Rebaseline |
 | `GET` | `/api/v1/admin/alerts` | `status`, `limit` |  | Admin Alerts |
+| `POST` | `/api/v1/admin/alerts/{alert_id}/resolve` | `alert_id` | evet | Admin Alert Resolve |
 | `GET` | `/api/v1/admin/audit/verify` | `regulation_id` |  | Admin Audit Verify |
 | `POST` | `/api/v1/admin/monitor/run` |  |  | Admin Monitor Run |
-| `POST` | `/api/v1/admin/reprocess` |  | evet | Admin Reprocess |
+| `POST` | `/api/v1/admin/reprocess` | `dry_run` | evet | Admin Reprocess |
 | `POST` | `/api/v1/admin/sources/{code}/backfill` | `code` | evet | Admin Backfill |
 | `POST` | `/api/v1/admin/sources/{code}/run` | `code` |  | Admin Run Source |
 
@@ -59,13 +62,20 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 
 | Yöntem | Yol | Parametreler | Gövde | Açıklama |
 |---|---|---|---|---|
-| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction` |  | Regulations |
+| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction`, `queue`, `effective`, `needs_unit`, `unit_changed`, `edited` |  | Regulations |
 | `GET` | `/api/v1/regulations/stats` |  |  | Regulation Stats |
-| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction` |  | Regulations Export |
+| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction`, `queue`, `effective`, `needs_unit` |  | Regulations Export |
+| `GET` | `/api/v1/regulations/irrelevant-sample` | `page`, `page_size` |  | Irrelevant Sample List |
+| `POST` | `/api/v1/regulations/{reg_id}/irrelevant-review` | `reg_id` | evet | Irrelevant Review |
+| `POST` | `/api/v1/regulations/bulk-decision` |  | evet | Regulation Bulk Decision |
+| `GET` | `/api/v1/regulations/decision-stats` |  |  | Regulation Decision Stats |
 | `GET` | `/api/v1/regulations/{reg_id}` | `reg_id` |  | Regulation Detail |
 | `PATCH` | `/api/v1/regulations/{reg_id}/content` | `reg_id` | evet | Regulation Content |
+| `GET` | `/api/v1/regulations/{reg_id}/document` | `reg_id` |  | Regulation Document |
 | `POST` | `/api/v1/regulations/{reg_id}/views` | `reg_id` |  | Regulation Viewed |
 | `POST` | `/api/v1/regulations/{reg_id}/decision` | `reg_id` | evet | Regulation Decision |
+| `POST` | `/api/v1/regulations/{reg_id}/decision/revise` | `reg_id` | evet | Regulation Decision Revise |
+| `POST` | `/api/v1/regulations/{reg_id}/decision/reopen` | `reg_id` | evet | Regulation Decision Reopen |
 | `PUT` | `/api/v1/regulations/{reg_id}/units` | `reg_id` | evet | Regulation Units |
 
 ## sistem

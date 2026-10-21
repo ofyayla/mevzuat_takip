@@ -22,6 +22,10 @@ EVENT_META = {
     "content_edited": ("Kayıt bilgileri güncellendi", "pencil"),
     "summary_regenerated": ("Özet yeniden üretildi", "refresh-cw"),
     "reprocessed": ("Yeniden işlendi", "rotate-cw"),
+    "decision_revised": ("Karar değiştirildi", "git-compare"),
+    "decision_reopened": ("Karar kaldırıldı", "undo-2"),
+    "irrelevant_confirmed": ("İlgisiz kararı doğrulandı", "check"),
+    "irrelevant_overridden": ("İlgisiz kararı düzeltildi", "rotate-ccw"),
 }
 
 
@@ -90,6 +94,12 @@ def ensure_detected(session: Session, reg: Regulation) -> None:
             "relevance_score": reg.relevance_score, "confidence": reg.confidence_band, "severity": reg.severity})
 
 
+def _rejection_reason(payload: dict | None) -> str | None:
+    """Ret olayında ``rejection_reason``; karar düzeltmesinde (``decision_revised``) yeni durumun nedeni."""
+    payload = payload or {}
+    return payload.get("rejection_reason") or (payload.get("to") or {}).get("rejectionReason")
+
+
 def trail(session: Session, reg: Regulation) -> list[dict]:
     rows = session.scalars(select(AuditEvent).where(AuditEvent.regulation_id == reg.id)
                            .order_by(AuditEvent.created_at, AuditEvent.id)).all()
@@ -102,7 +112,7 @@ def trail(session: Session, reg: Regulation) -> list[dict]:
         label, icon = EVENT_META.get(r.event_type, (r.event_type, "circle"))
         actor = f"{r.actor_name} · {r.actor_title}" if r.actor_title else r.actor_name
         out.append({"action": label, "actor": actor, "timestamp": _iso(r.created_at), "icon": icon, "note": r.note,
-                    "eventType": r.event_type, "rejectionReason": (r.payload or {}).get("rejection_reason")})
+                    "eventType": r.event_type, "rejectionReason": _rejection_reason(r.payload)})
     return out
 
 

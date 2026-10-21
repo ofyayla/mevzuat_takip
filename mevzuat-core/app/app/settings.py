@@ -115,6 +115,8 @@ class Settings(BaseSettings):
     # İK-3: ilgililik / güven (başlangıç değerleri; çalışma zamanında app_setting tablosundan ezilir)
     relevance_threshold: float = 0.30
     relevance_samples: int = 3               # self-consistency örnek sayısı
+    irrelevant_sample_size: int = 100        # uzmana kontrol için sunulan "ilgisiz" kayıt üst sınırı (incelenmemişler)
+    irrelevant_sample_min_score: float = 0.15  # ilgililik skoru bu değerin üstünde kalan ilgisizler eşiğe yakındır
     relevance_sample_temperature: float = 0.7
     relevance_weight_model: float = 0.6
     relevance_weight_votes: float = 0.3
@@ -129,10 +131,12 @@ class Settings(BaseSettings):
     grounding_fuzzy_threshold: int = 90      # rapidfuzz partial_ratio alt sınırı
     summary_max_regenerations: int = 1
     effective_soon_days: int = 30
+    new_window_days: int = 7                 # portal "Yeni" kuyruğu: son N gün; daha eskisi "Birikim"
 
     # İK-5: birim eşleştirme
     units_file: Path = BACKEND_DIR / "config" / "units.yaml"
     unit_min_score: float = 0.30
+    unit_weak_score: float = 0.50            # portal: bu skorun altındaki tek öneri "birim atanmalı" sayılır
     unit_max_suggestions: int = 4
     unit_responsibility_threshold: int = 80   # matched_responsibility ↔ görev tanımı maddesi (rapidfuzz)
     unit_fewshot_count: int = 4
@@ -141,7 +145,7 @@ class Settings(BaseSettings):
     demo_user_name: str = "Demo Kullanıcı"
     demo_user_title: str = "Uyum Uzmanı"
     cors_origins: str = "http://localhost:8080"
-    # Mevzuat Takip Portali.dc.html + support.js: BACKEND_DIR.parent/portal'da (mevzuat-core/portal)
+    # Mevzuat Takip Portali.dc.html + assets/: BACKEND_DIR.parent/portal da (mevzuat-core/portal)
     # (imajda PORTAL_DIR=/app/portal ile ezilir)
     portal_dir: Path = (BACKEND_DIR.parent / "portal" if (BACKEND_DIR.parent / "portal").is_dir()
                         else BACKEND_DIR.parent)
@@ -158,6 +162,8 @@ class Settings(BaseSettings):
     # Çapraz kontrol yapılan kurumlar. Rekabet ve Ticaret'in RG yayınları (ör. ithalat tebliğleri) izlenen kanallarda
     # yer almadığı için varsayılan listede değil (sürekli yanlış alarm üretir).
     cross_check_issuers: str = "BDDK,SPK,KVKK,MASAK,TCMB"
+    alert_snooze_hours: int = 24             # elle kapatılan alarm, bulgu sürse de bu süre yeniden açılmaz
+    require_setting_reason: bool = False     # True: YZ ayarı değişikliğinde gerekçe zorunlu (eski portal kalkınca açılır)
     alert_webhook_url: str | None = None     # isteğe bağlı: kurum izleme sistemi (Zabbix/Alertmanager vb.)
 
     def resolved_ca_bundle(self) -> str | bool:

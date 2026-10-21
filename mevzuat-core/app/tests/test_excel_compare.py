@@ -154,4 +154,5 @@ def test_api_json_and_xlsx_do_not_write(settings, data):
     assert bad.json()["error"]["code"] == "unsupported_file"
     empty = c.post("/api/v1/evaluation/excel-compare", files={"file": ("bos.xlsx", _xlsx([]), "application/xlsx")})
     assert empty.json()["error"]["code"] == "empty_file"
-    assert "Excel karşılaştırma" in c.get("/karsilastirma").text
+    assert c.get("/karsilastirma", follow_redirects=False).headers["location"] == "/#karsilastirma"
+    assert "Excel karşılaştırma" in c.get("/assets/views.js").text   # ekran yeni portalın betiğinde

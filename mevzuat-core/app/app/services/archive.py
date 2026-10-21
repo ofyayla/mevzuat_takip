@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import RawDocument, Regulation, RegulationSourceLink
@@ -122,6 +122,7 @@ def _item(reg: Regulation, src: dict) -> dict:
         "publishDate": reg.publish_date.isoformat() if reg.publish_date else None,
         "detectedAt": _iso(reg.detected_at), "classifiedAt": _iso(reg.classified_at),
         "relevanceScore": reg.relevance_score, "rationale": rationale, "uncertain": rel.get("uncertain"),
+        "irrelevantReview": (reg.extra or {}).get("irrelevant_review"),
     }
 
 
@@ -165,3 +166,74 @@ def archive_detail(session: Session, reg_id: int) -> dict:
                  if reg.processing_status == "BASELINE" else None),
     })
     return item
+
+
+# ------------------------------------------------------------------------------------------------ ilgisiz örneklemi
+
+
+def _sample_conds(settings) -> list:
+    """YZ'nin ilgisiz bulduğu, eşiğe yakın (ya da belirsiz işaretli) ve uzmanca henüz incelenmemiş kayıtlar."""
+    return [Regulation.processing_status == "IRRELEVANT",
+            Regulation.extra["irrelevant_review"].as_string().is_(None),
+            or_(Regulation.relevance_score >= settings.irrelevant_sample_min_score,
+                Regulation.classification["relevance"]["uncertain"].as_boolean().is_(True))]
+
+
+def sample_count(session: Session, settings) -> int:
+    n = session.scalar(select(func.count()).select_from(Regulation).where(*_sample_conds(settings))) or 0
+    return min(n, settings.irrelevant_sample_size)
+
+
+def irrelevant_sample(session: Session, settings, page: int = 1, page_size: int = 25) -> dict:
+    """Örneklem: eşiğe en yakın (skoru en yüksek) ilgisizler önce; ``irrelevant_sample_size`` ile sınırlı. İncelenen kayıt
+    örneklemden çıkar, sıradaki girer."""
+    total = sample_count(session, settings)
+    offset = (page - 1) * page_size
+    limit = max(0, min(page_size, total - offset))
+    rows = session.scalars(select(Regulation).where(*_sample_conds(settings))
+                           .order_by(Regulation.relevance_score.desc().nulls_last(), Regulation.id.desc())
+                           .offset(offset).limit(limit)).all() if limit else []
+    src = _source_info(session, [r.id for r in rows])
+    items = []
+    for r in rows:
+        it = _item(r, src[r.id])
+        it["rationale"] = _relevance(r).get("rationale") or None      # önizleme değil, tam gerekçe
+        it["threshold"] = settings.relevance_threshold
+        items.append(it)
+    return {"items": items, "total": total, "page": page, "pageSize": page_size, "threshold": settings.relevance_threshold,
+            "minScore": settings.irrelevant_sample_min_score}
+
+
+def review_irrelevant(session: Session, reg_id: int, verdict: str, note: str | None, actor) -> Regulation:
+    """``confirm``: YZ'nin ilgisiz kararı doğrulandı (kayıt arşivde kalır). ``relevant``: kayıt ilgili sayılır ve YZ
+    hattına (özet, birim) geri alınır; ``detected_at`` bugüne çekilir ki Yeni kuyruğuna düşsün (ilki ``extra``'da)."""
+    from app.db import FewshotExample, utcnow
+    from app.services.audit import add_event
+
+    if verdict not in ("confirm", "relevant"):
+        raise ApiError(400, "invalid_verdict", "verdict: confirm | relevant")
+    reg = session.get(Regulation, reg_id, with_for_update=True)
+    if reg is None or reg.processing_status != "IRRELEVANT":
+        raise ApiError(404, "not_found", "ilgisiz arşivinde böyle bir kayıt yok")
+    if (reg.extra or {}).get("irrelevant_review"):
+        raise ApiError(409, "already_reviewed", "bu kayıt zaten incelendi")
+    note = (note or "").strip() or None
+    review = {"verdict": verdict, "by": actor.name, "at": utcnow().isoformat(), "note": note}
+    extra = {**(reg.extra or {})}
+    text = f"{reg.title} | {(_relevance(reg).get('rationale') or '')[:300]}"
+    if verdict == "relevant":
+        review["original_detected_at"] = _iso(reg.detected_at)
+        reg.is_relevant, reg.processing_status, reg.detected_at = True, "RELEVANT", utcnow()
+        extra = {k: v for k, v in extra.items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
+    extra["irrelevant_review"] = review
+    reg.extra = extra
+    reg.row_version += 1
+    session.add(FewshotExample(task="relevance", regulation_id=reg.id, input_text=text,
+                               expected_output={"is_relevant": verdict == "relevant"},
+                               origin="user_decision" if verdict == "confirm" else "user_correction",
+                               weight=1.0 if verdict == "confirm" else 2.0))
+    add_event(session, reg.id, "irrelevant_confirmed" if verdict == "confirm" else "irrelevant_overridden", actor=actor,
+              note=("YZ'nin ilgisiz kararı uzmanca doğrulandı." if verdict == "confirm"
+                    else "Kayıt uzmanca ilgili sayıldı; özet ve birim önerisi için YZ hattına alındı.")
+              + (f" Not: {note}" if note else ""), payload={"verdict": verdict, "score": reg.relevance_score})
+    return reg

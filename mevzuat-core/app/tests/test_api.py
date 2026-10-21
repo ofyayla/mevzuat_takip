@@ -54,8 +54,9 @@ def test_list_detail_and_stats(settings, env, client):  # noqa: F811
     assert c.get("/api/v1/regulations", params={"unit": "RISK_YONETIMI"}).json()["total"] == 1
     assert c.get("/api/v1/regulations", params={"q": "Mellat"}).json()["total"] == 1
     assert c.get("/api/v1/regulations", params={"metric": "critical_high"}).json()["total"] == 0   # önem Orta
-    assert c.get("/api/v1/regulations/stats").json() == {"pending": 1, "criticalHighPending": 0, "today": 1,
-                                                         "upcoming": 0}
+    st = c.get("/api/v1/regulations/stats").json()
+    assert {k: st[k] for k in ("pending", "criticalHighPending", "today", "upcoming")} == {
+        "pending": 1, "criticalHighPending": 0, "today": 1, "upcoming": 0}
     r = c.get(f"/api/v1/regulations/{reg_id}")
     assert r.headers["etag"] == '"1"'
     d = r.json()
@@ -270,7 +271,7 @@ def test_admin_settings_and_health_endpoints(settings, env, client):  # noqa: F8
     assert c.get("/healthz").json() == {"status": "ok"} and c.get("/readyz").json()["checks"]["db"] == "ok"
     assert len(c.get("/api/v1/units").json()) == 0 or True
     assert c.get("/").status_code == 200 and "Mevzuat" in c.get("/").text
-    assert c.get("/admin").status_code == 200 and c.get("/admin").text == c.get("/").text   # aynı sayfa, /admin Yönetim'i açar
+    assert c.get("/admin", follow_redirects=False).headers["location"] == "/#yonetim"   # yeni portalda Yönetim sekmesi
 
 
 def test_runtime_settings_validate_type_range_and_consistency(settings, env, client):  # noqa: F811
@@ -465,18 +466,37 @@ def test_security_headers_and_readyz_does_not_leak_db_error(settings, env, clien
     assert r.headers["x-frame-options"] == "DENY"
 
 
-def test_portal_pages_do_not_load_external_cdn_assets(settings, env, client):  # noqa: F811
+def test_portal_page_loads_only_local_assets_with_security_headers(settings, env, client):  # noqa: F811
+    import re
+
     c, _ = client
-    for page in ("/", "/surec"):
-        html = c.get(page).text
-        assert "fonts.googleapis.com" not in html and "fonts.gstatic.com" not in html, page
-        assert "unpkg.com/lucide" not in html and "cdn.jsdelivr" not in html, page
-    portal = c.get("/").text
-    assert '<html lang="tr">' in portal and 'src="/vendor/lucide.min.js"' in portal
-    # support.js'in React için kullandığı unpkg adresleri sunucudan sunulan kopyalara yönlendirilir
-    for name in ("react", "react-dom"):
-        assert f'"https://unpkg.com/{name}@18.3.1/umd/{name}.production.min.js": "/vendor/{name}.production.min.js"' \
-            in portal
+    r = c.get("/")
+    html = r.text
+    assert r.status_code == 200 and '<html lang="tr">' in html
+    # dış CDN / yazı tipi / betik yok: tüm src ve href değerleri sunucudan (/assets/) gelir
+    for url in re.findall(r'(?:src|href)="([^"#][^"]*)"', html):
+        assert url.startswith("/assets/"), url
+    for host in ("fonts.googleapis.com", "fonts.gstatic.com", "unpkg.com", "cdn.jsdelivr", "cdnjs"):
+        assert host not in html
+    for name in re.findall(r'(?:src|href)="(/assets/[^"]+)"', html):
+        asset = c.get(name)
+        assert asset.status_code == 200, name
+        assert "http://" not in asset.text and "https://" not in asset.text.replace("https://www.w3.org", ""), name
+    for h, v in (("x-frame-options", "DENY"), ("x-content-type-options", "nosniff"),
+                 ("content-security-policy", "frame-ancestors 'none'")):
+        assert r.headers[h] == v
+
+
+def test_old_portal_routes_redirect_to_new_page_and_legacy_pages_stay_available(settings, env, client):  # noqa: F811
+    c, _ = client
+    for old, target in (("/surec", "/#hat"), ("/arsiv", "/#arsiv"), ("/karsilastirma", "/#karsilastirma"),
+                        ("/admin", "/#yonetim")):
+        r = c.get(old, follow_redirects=False)
+        assert r.status_code == 307 and r.headers["location"] == target, old
+    for page in ("", "/surec", "/arsiv", "/karsilastirma"):
+        r = c.get("/eski" + page)
+        assert r.status_code == 200 and "text/html" in r.headers["content-type"], page
+    assert c.get("/eski/yok").status_code == 404 and c.get("/eski/..%2Fsecret").status_code == 404
 
 
 def test_get_visible_for_update_refreshes_stale_row(settings, env, client):  # noqa: F811
