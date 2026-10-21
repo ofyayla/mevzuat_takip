@@ -15,11 +15,11 @@ const QUEUES = {
   birikim: { label: 'Birikim', note: 'Baseline sonrası yayımlanan ve 7 günden uzun süredir bekleyen kayıtlar. Benzer kayıtları seçip toplu onaylayın ya da reddedin.' },
   tum: { label: 'Tümü', note: 'Karar bekleyen tüm kayıtlar.' },
   hazirlaniyor: { label: 'YZ hazırlıyor', note: 'Özeti ya da birim önerisi henüz hazır olmayan kayıtlar. Hazır olunca Yeni kuyruğuna düşer; bu sırada karar verilemez.' },
-  ilgisiz: { label: 'İlgisiz örneklemi', note: 'YZ\'nin eşiğe yakın skorla ilgisiz bulduğu kayıtlar. Kaçırılan düzenleme riskine karşı her birinde YZ kararını onaylayın ya da düzeltin.' },
+  ilgisiz: { label: 'İlgisizler', note: 'YZ\'nin ilgisiz bulduğu tüm kayıtlar. Kaçırılan düzenleme riskine karşı her birinde YZ kararını onaylayın ya da düzeltin.' },
 };
 const DECISION_Q = ['yeni', 'birikim', 'tum'];
 const SORTS = { oncelik: { sort: 'priority', direction: 'desc' }, tespit: { sort: 'detected_at', direction: 'desc' },
-  yururluk: { sort: 'effective_date', direction: 'asc' }, onem: { sort: 'severity', direction: 'desc' } };
+  yayim: { sort: 'publish_date', direction: 'desc' }, yururluk: { sort: 'effective_date', direction: 'asc' }, onem: { sort: 'severity', direction: 'desc' } };
 const EFF_OPTS = [['7', '7 gün içinde'], ['30', '30 gün içinde'], ['in', 'Yürürlükte'], ['none', 'Belirtilmemiş']];
 const EFF_API = { 7: '7', 30: '30', in: 'in_force', none: 'none' };
 
@@ -50,7 +50,7 @@ async function loadList() {
   paintList();
   try {
     let d, items;
-    if (S.queue === 'ilgisiz') { d = await GET('/regulations/irrelevant-sample', { page: S.page, page_size: S.ps }); items = d.items.map(upsertIrr); }
+    if (S.queue === 'ilgisiz') { d = await GET('/regulations/irrelevant-sample', { page: S.page, page_size: S.ps, q: S.q.trim() }); items = d.items.map(upsertIrr); }
     else { d = await GET('/regulations', listParams()); items = d.items.map(it => upsert(it)); }
     if (seq !== listSeq) return;
     S.list = { ids: items.map(r => r.id), total: d.total, loading: false, err: null };
@@ -107,14 +107,13 @@ const unitName2 = r => c => (r.units.find(x => x.code === c) || {}).n || unitNam
 
 /* ---------- gelen kutusu */
 function viewGelen() {
-  const dec_ = DECISION_Q.includes(S.queue);
   return `<div class="inbox gut ${S.openId ? 'has-detail' : ''}" id="inbox">
     <section class="list-pane" aria-label="Kayıt listesi">
       <div class="ph"><div><h1>Gelen kutusu</h1><p class="lede">YZ'nin tespit ettiği düzenlemeleri inceleyin; önerilen birimi onaylayın ya da kaydı reddedin.</p></div>
         <div class="ph-act"><button class="btn" data-act="export">${ic('download')}Excel'e aktar</button><button class="btn btn-ghost" data-act="shortcuts">${ic('kbd')}Kısayollar <span class="kbd">?</span></button></div></div>
-      <div id="kpis">${dec_ ? kpis() : ''}</div>
+      <div id="kpis">${kpis()}</div>
       <div id="qtabs">${qtabs()}</div>
-      <div class="fbar"><label class="search"><span class="sr">Ara</span>${ic('search')}<input id="q" type="search" placeholder="Başlık veya özet içinde ara" value="${esc(S.q)}" autocomplete="off"><span class="kbd">/</span></label><div class="fbtns" id="fbtns">${fbtns()}</div></div>
+      <div class="fbar"><label class="search"><span class="sr">Ara</span>${ic('search')}<input id="q" type="search" placeholder="${S.queue === 'ilgisiz' ? 'Başlık veya YZ gerekçesi içinde ara' : 'Başlık veya özet içinde ara'}" value="${esc(S.q)}" autocomplete="off"><span class="kbd">/</span></label><div class="fbtns" id="fbtns">${fbtns()}</div></div>
       <div id="listRegion">${listRegion()}</div>
     </section>
     <button class="scrim" data-act="close" aria-label="Ayrıntıyı kapat" tabindex="-1"></button>
@@ -123,19 +122,24 @@ function viewGelen() {
 }
 function kpis() {
   const st = Boot.stats || {}; const c = counts(); const k = S.kpi || {};
+  const dec_ = DECISION_Q.includes(S.queue);
   const d = (st.severityDistribution || {})[S.queue] || {};
   const dist = SEVS.map(s => d[s] || 0); const tot = Math.max(1, dist.reduce((a, b) => a + b, 0) + (d[''] || 0));
   const pr = st.preparing || {};
   const sevOn = S.f.sev.size === 2 && S.f.sev.has('Kritik') && S.f.sev.has('Yüksek');
   const effOn = S.f.eff.size === 1 && S.f.eff.has('30');
   const n30 = k.n30, n7 = k.n7;
+  const off = (label, note) => `<div class="kpi kpi-off"><span class="kpi-l">${label}</span><span class="kpi-v num">—</span><span class="kpi-s">${note}</span></div>`;
   return `<div class="kpis">
-    <div class="kpi"><span class="kpi-l">${QUEUES[S.queue].label} kuyruğu</span><span class="kpi-v num">${N((st.queues || {})[S.queue])}</span><span class="kpi-s">Toplam karar bekleyen ${N(c.bekleyen)}</span></div>
-    <button class="kpi" data-act="kpi-sev" aria-pressed="${sevOn}" title="Kritik ve Yüksek önemlileri göster"><span class="kpi-l">Kritik ve yüksek</span><span class="kpi-v num">${N(dist[0] + dist[1])}</span>
-      <span class="dist" aria-label="Kritik ${dist[0]}, Yüksek ${dist[1]}, Orta ${dist[2]}, Düşük ${dist[3]}">${dist.map((n, i) => n ? `<i class="d-${'kyod'[i]}" style="width:${n / tot * 100}%" title="${SEVS[i]}: ${n}"></i>` : '').join('')}</span></button>
-    <button class="kpi" data-act="kpi-eff" aria-pressed="${effOn}"><span class="kpi-l">Yürürlüğe 30 gün içinde</span><span class="kpi-v num ${n30 ? 'warn' : ''}">${n30 == null ? '…' : N(n30)}</span><span class="kpi-s">${n7 == null ? '' : n7 ? `${n7} tanesi 7 gün içinde` : '7 gün içinde yok'}</span></button>
-    <button class="kpi" data-act="kpi-need" aria-pressed="${S.f.needUnit}"><span class="kpi-l">Birim atanmalı</span><span class="kpi-v num">${k.need == null ? '…' : N(k.need)}</span><span class="kpi-s">YZ güvenli öneri yapamadı</span></button>
-    <button class="kpi" data-act="queue" data-q="hazirlaniyor"><span class="kpi-l">YZ hazırlıyor</span><span class="kpi-v num">${N(pr.count)}</span><span class="kpi-s ${pr.failed ? 'h-crit' : ''}">${N(pr.failed)} hata · en eski ${N(pr.oldestDays)} gün</span></button>
+    <div class="kpi"><span class="kpi-l">${QUEUES[S.queue].label} kuyruğu</span><span class="kpi-v num">${N(c[S.queue])}</span><span class="kpi-s">Toplam karar bekleyen ${N(c.bekleyen)}</span></div>
+    ${dec_ ? `<button class="kpi" data-act="kpi-sev" aria-pressed="${sevOn}" title="Kritik ve Yüksek önemlileri göster"><span class="kpi-l">Kritik ve yüksek</span><span class="kpi-v num">${N(dist[0] + dist[1])}</span>
+      <span class="dist" aria-label="Kritik ${dist[0]}, Yüksek ${dist[1]}, Orta ${dist[2]}, Düşük ${dist[3]}">${dist.map((n, i) => n ? `<i class="d-${'kyod'[i]}" style="width:${n / tot * 100}%" title="${SEVS[i]}: ${n}"></i>` : '').join('')}</span></button>`
+      : off('Kritik ve yüksek', 'Bu kuyrukta hesaplanmaz')}
+    ${dec_ ? `<button class="kpi" data-act="kpi-eff" aria-pressed="${effOn}"><span class="kpi-l">Yürürlüğe 30 gün içinde</span><span class="kpi-v num ${n30 ? 'warn' : ''}">${n30 == null ? '…' : N(n30)}</span><span class="kpi-s">${n7 == null ? '' : n7 ? `${n7} tanesi 7 gün içinde` : '7 gün içinde yok'}</span></button>`
+      : off('Yürürlüğe 30 gün içinde', 'Bu kuyrukta hesaplanmaz')}
+    ${dec_ ? `<button class="kpi" data-act="kpi-need" aria-pressed="${S.f.needUnit}"><span class="kpi-l">Birim atanmalı</span><span class="kpi-v num">${k.need == null ? '…' : N(k.need)}</span><span class="kpi-s">YZ güvenli öneri yapamadı</span></button>`
+      : off('Birim atanmalı', 'Bu kuyrukta hesaplanmaz')}
+    <button class="kpi" data-act="queue" data-q="hazirlaniyor" aria-pressed="${S.queue === 'hazirlaniyor'}"><span class="kpi-l">YZ hazırlıyor</span><span class="kpi-v num">${N(pr.count)}</span><span class="kpi-s ${pr.failed ? 'h-crit' : ''}">${N(pr.failed)} hata · en eski ${N(pr.oldestDays)} gün</span></button>
   </div>`;
 }
 function qtabs() {
@@ -161,7 +165,7 @@ function chipsRow(total, start, n) {
   return `<div class="chiprow">${chips.map(c => `<span class="chip">${esc(c[2])}<button data-act="unchip" data-k="${c[0]}" data-v="${esc(c[1])}" aria-label="${esc(c[2])} filtresini kaldır">${ic('x')}</button></span>`).join('')}
     ${chips.length ? '<button class="linkbtn" data-act="clear-filters">Filtreleri temizle</button>' : ''}
     <div class="chiprow-r"><span class="num">${total ? `${N(start + 1)}–${N(start + n)} / ${N(total)}` : '0 kayıt'}</span>
-    ${sortable ? `<label>Sırala <select class="select" id="sort" aria-label="Sıralama">${[['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit tarihi'], ['yururluk', 'Yürürlük tarihi'], ['onem', 'Önem']].map(o => `<option value="${o[0]}" ${S.sort === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
+    ${sortable ? `<label>Sırala <select class="select" id="sort" aria-label="Sıralama">${[['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit tarihi'], ['yayim', 'Yayım tarihi'], ['yururluk', 'Yürürlük tarihi'], ['onem', 'Önem']].map(o => `<option value="${o[0]}" ${S.sort === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
     <label>Yön <select class="select" id="sortDir" aria-label="Sıralama yönü">${[['asc', 'Küçükten büyüğe'], ['desc', 'Büyükten küçüğe']].map(o => `<option value="${o[0]}" ${S.sortDir === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>` : ''}</div></div>`;
 }
 function listRegion() {
@@ -188,7 +192,7 @@ function table(rows) {
   const allSel = pageIds.length && pageIds.every(id => S.selected.has(id));
   const cb = r => `<td class="c-cb"><input type="checkbox" data-act="sel" data-id="${r.id}" ${S.selected.has(r.id) ? 'checked' : ''} aria-label="Seç: ${esc(trunc(r.title, 60))}"></td>`;
   const cls = r => `${r.unread ? 'unread' : ''} ${S.openId === r.id ? 'is-open' : ''} ${S.focusId === r.id ? 'is-focus' : ''} ${curSev(r) === 'Kritik' ? 'sv-k' : curSev(r) === 'Yüksek' ? 'sv-y' : ''}`;
-  const meta = (r, extra = '') => `<div class="meta">${srcAbbr(r.src)}${r.type && r.type !== '—' ? `<span>${esc(r.type)}</span>` : ''}${r.pub ? `<span>Yayım ${fDs(r.pub)}</span>` : ''}<span>Tespit ${rel(r.det)}</span>${extra}</div>`;
+  const meta = (r, extra = '') => `<div class="meta">${srcAbbr(r.src)}${r.type && r.type !== '—' ? `<span>${esc(r.type)}</span>` : ''}${r.pub ? `<span class="${DECISION_Q.includes(q) ? 'pub-mobile' : ''}">Yayım ${fD(r.pub)}</span>` : ''}<span>Tespit ${rel(r.det)}</span>${extra}</div>`;
   if (q === 'hazirlaniyor') return `<table class="tbl"><thead><tr><th class="c-main">Düzenleme</th><th>YZ aşaması</th><th class="c-eff">Bekleme</th><th class="c-sev">Önem</th><th class="c-go"></th></tr></thead><tbody>
     ${rows.map(r => { const st = r.stage || {}; const w = dd(NOW, pdt(st.waitingSince) || r.det); const err = st.stage === 'retry' || st.stage === 'failed'; const n = { summary: 2, unit_match: 3, retry: 2, failed: 2 }[st.stage] || 2;
       return `<tr class="${cls(r)}" data-act="open" data-id="${r.id}"><td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r)}</td>
@@ -198,11 +202,11 @@ function table(rows) {
     ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}"><td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r)}</td>
       <td class="c-sev"><span class="tag ${r.relScore != null && r.threshold != null && r.threshold - r.relScore < .05 ? 'tag-warn' : 'tag-plain'}">${dec(r.relScore)} / eşik ${dec(r.threshold)}</span></td><td class="c-unit"><span class="u-s">${esc(trunc(r.why || 'Gerekçe kaydedilmemiş.', 180))}</span></td>
       <td><div class="row-acts"><button class="btn btn-sm" data-act="irr-ok" data-id="${r.id}">İlgisiz, doğru</button><button class="btn btn-sm" data-act="irr-back" data-id="${r.id}">İlgili</button></div></td></tr>`).join('')}</tbody></table>`;
-  return `<table class="tbl"><thead><tr><th class="c-cb"><input type="checkbox" data-act="selall" ${allSel ? 'checked' : ''} aria-label="Bu sayfadaki tüm kayıtları seç"></th><th class="c-main">Düzenleme</th>${sortTh('yururluk', 'Yürürlük', 'c-eff')}${sortTh('onem', 'Önem', 'c-sev')}<th class="c-unit">Önerilen birim</th><th class="c-go"></th></tr></thead><tbody>
+  return `<table class="tbl"><thead><tr><th class="c-cb"><input type="checkbox" data-act="selall" ${allSel ? 'checked' : ''} aria-label="Bu sayfadaki tüm kayıtları seç"></th><th class="c-main">Düzenleme</th>${sortTh('yayim', 'Yayım tarihi', 'c-pub')}${sortTh('yururluk', 'Yürürlük', 'c-eff')}${sortTh('onem', 'Önem', 'c-sev')}<th class="c-unit">Önerilen birim</th><th class="c-go"></th></tr></thead><tbody>
     ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}">${cb(r)}<td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r,
       (r.dup ? '<span class="tag tag-warn">Olası mükerrer</span>' : '') + (r.draftDue ? `<span class="tag tag-brand">Görüş son günü ${fDs(r.draftDue)}</span>` : '') + (r.conflict ? '<span class="tag tag-warn">Tarih çelişkisi</span>' : '') +
       `<span class="m-only">${sevPill(curSev(r))}</span>` + (needsUnit(r) ? `<span class="m-only m-unit need">${ic('alert')}Birim atanmalı</span>` : ''))}</td>
-      <td class="c-eff">${effCell(r, true)}</td><td class="c-sev">${sevPill(curSev(r))}</td><td class="c-unit">${unitCell(r)}</td><td class="c-go">${ic('chev-r')}</td></tr>`).join('')}</tbody></table>`;
+      <td class="c-pub">${r.pub ? fD(r.pub) : '<span class="muted">—</span>'}</td><td class="c-eff">${effCell(r, true)}</td><td class="c-sev">${sevPill(curSev(r))}</td><td class="c-unit">${unitCell(r)}</td><td class="c-go">${ic('chev-r')}</td></tr>`).join('')}</tbody></table>`;
 }
 function pager(total, start, n, pages) {
   const p = S.page; const nums = [];
@@ -224,9 +228,9 @@ function bulkbar() {
 
 /* ---------- ayrıntı */
 const ARSIV_Q = ['Onaylandı', 'Reddedildi'];
-const isArchived = r => r.kind === 'irr' ? S.view === 'arsiv' : ARSIV_Q.includes(r.status);
+const isArchived = r => r.kind === 'irr' || r.kind === 'baseline' ? S.view === 'arsiv' : ARSIV_Q.includes(r.status);
 const navList = () => S.view === 'arsiv' ? S.ar.ids.map(byId).filter(Boolean) : currentList();
-const queueLabel = r => r.kind === 'irr' ? (S.view === 'arsiv' ? 'Arşiv · YZ\'nin elediği' : QUEUES.ilgisiz.label) : r.status === 'Onaylandı' ? 'Arşiv · Onaylandı' : r.status === 'Reddedildi' ? 'Arşiv · Reddedildi' : r.stage ? QUEUES.hazirlaniyor.label : (QUEUES[S.queue] || {}).label || 'Kayıt';
+const queueLabel = r => r.kind === 'baseline' ? 'Arşiv · İlk tarama' : r.kind === 'irr' ? (S.view === 'arsiv' ? 'Arşiv · YZ\'nin elediği' : QUEUES.ilgisiz.label) : r.status === 'Onaylandı' ? 'Arşiv · Onaylandı' : r.status === 'Reddedildi' ? 'Arşiv · Reddedildi' : r.stage ? QUEUES.hazirlaniyor.label : (QUEUES[S.queue] || {}).label || 'Kayıt';
 const isPending = r => r.kind === 'reg' && r.status === 'Bekliyor' && !r.stage;
 
 function detailHtml() {
@@ -260,7 +264,7 @@ function banners(r) {
     else b.push(`<div class="banner banner-warn">${ic('lock')}<div><b>YZ işlemi sürüyor: ${STAGE_TXT[st.stage] || esc(r.analysis)}</b><p>Kayıt ${w > 0 ? w + ' gündür' : 'bugünden beri'} bu adımda${st.stage === 'retry' ? ` (deneme ${st.attempts}/${st.maxAttempts}${st.error ? ', son hata: ' + esc(st.error) : ''})` : ''}. Özet ve birim önerisi hazır olunca Yeni kuyruğuna düşer; o zamana kadar karar verilemez.</p></div></div>`);
   }
   if (r.kind === 'irr') {
-    b.push(`<div class="banner banner-info">${ic('info')}<div><b>YZ bu kaydı ilgisiz buldu (ilgililik skoru ${dec(r.relScore)}${r.threshold != null ? `, eşik ${dec(r.threshold)}` : ''})</b><p>${r.review ? `İncelendi: ${r.review.verdict === 'confirm' ? 'ilgisiz olarak doğrulandı' : 'ilgili sayıldı'} · ${esc(r.review.by || '')}${r.review.at ? ' · ' + fDT(pdt(r.review.at)) : ''}${r.review.note ? ' · Not: ' + esc(r.review.note) : ''}` : 'Kaçırılan düzenleme riskine karşı örneklem kontrolü için önünüze geldi.'}</p></div></div>`);
+    b.push(`<div class="banner banner-info">${ic('info')}<div><b>YZ bu kaydı ilgisiz buldu (ilgililik skoru ${dec(r.relScore)}${r.threshold != null ? `, eşik ${dec(r.threshold)}` : ''})</b><p>${r.review ? `İncelendi: ${r.review.verdict === 'confirm' ? 'ilgisiz olarak doğrulandı' : 'ilgili sayıldı'} · ${esc(r.review.by || '')}${r.review.at ? ' · ' + fDT(pdt(r.review.at)) : ''}${r.review.note ? ' · Not: ' + esc(r.review.note) : ''}` : 'Kaçırılan düzenleme riskine karşı kontrol için önünüze geldi.'}</p></div></div>`);
     if (r.note) b.push(`<div class="banner banner-info">${ic('info')}<div><p>${esc(r.note)}</p></div></div>`);
   }
   if (r.status === 'Onaylandı' && r.decided) b.push(`<div class="banner banner-info">${ic('check')}<div><b>Onaylandı: ${esc(r.units.map(u => u.n).join(', ') || 'birim atanmadı')}</b><p>${fDT(r.decided.at)} · ${esc(r.decided.by)}${approvedChanged(r) ? ` · YZ önerisi değiştirildi (öneri: ${esc(r.aiUnits.map(u => u.n).join(', '))})` : ' · YZ önerisi aynen onaylandı'}${r.decisionNote ? ` · Not: ${esc(r.decisionNote)}` : ''}</p></div></div>`);
@@ -282,6 +286,7 @@ function summaryHtml(r) {
   return out + esc(text.slice(last));
 }
 function summaryTab(r) {
+  if (r.kind === 'baseline') return baselineTab(r);
   if (r.kind === 'irr') return irrTab(r);
   if (r.stage && !r.summary) return `<section class="d-sec"><h3>Kısa içerik <span class="ai">${ic('spark')}YZ özeti</span></h3>${wait()}<p class="hint">Özet hazırlanıyor.</p></section>`;
   const sev = curSev(r); const pend = isPending(r);
@@ -305,6 +310,10 @@ function irrTab(r) {
   return `<section class="d-sec"><h3>YZ neden ilgisiz buldu?</h3>${r.detail || r.why ? `<p class="sum">${esc(r.why || 'Gerekçe kaydedilmemiş.')}</p>` : wait(2)}</section>
   ${r.criteria && r.criteria.length ? `<section class="d-sec"><h3>Değerlendirme ölçütleri</h3><ul class="plist">${r.criteria.map(c => `<li>${esc(typeof c === 'string' ? c : (c.criterion || c.name || c.label || JSON.stringify(c)))}${c && c.met != null ? ` — ${c.met ? 'sağlanıyor' : 'sağlanmıyor'}` : ''}</li>`).join('')}</ul></section>` : ''}
   <section class="d-sec"><h3>Tarihler</h3><dl class="facts"><div><dt>Yayım tarihi</dt><dd>${r.pub ? fD(r.pub) : '—'}</dd></div><div><dt>Tespit</dt><dd>${r.det ? fDT(r.det) : '—'}</dd></div></dl></section>`;
+}
+function baselineTab(r) {
+  return `<section class="d-sec"><h3>İlk tarama kaydı</h3><p class="sum">${esc(r.note || 'Bu kayıt, kaynağın ilk taramasında zaten yayında olduğu için YZ ilgililik analizine gönderilmedi.')}</p></section>
+    <section class="d-sec"><h3>Tarihler</h3><dl class="facts"><div><dt>Yayım tarihi</dt><dd>${r.pub ? fD(r.pub) : '—'}</dd></div><div><dt>Tespit</dt><dd>${r.det ? fDT(r.det) : '—'}</dd></div></dl></section>`;
 }
 
 /* ---------- kayıt bilgilerini düzenleme: YZ'nin ilk değerleri r.ai'de, değişen alanlar r.edited'de */
@@ -381,9 +390,9 @@ function unitSection(r) {
 
 /* ---------- belge sekmesi: sunucudaki çıkarılmış metin + özet dayanak aralıkları */
 function docTab(r) {
-  if (r.kind === 'irr') {
+  if (r.kind !== 'reg') {
     if (!r.docs) return `<div class="empty">${ic('doc')}<b>Yükleniyor…</b></div>`;
-    return `<div class="doc-head">${ic('doc')}<div><b>Kaynak belgeler</b>Bu kayıt portalda görünmediği için çıkarılmış metin gösterilmez; orijinaller kaynak sitesinde.</div></div>
+    return `<div class="doc-head">${ic('doc')}<div><b>Kaynak belgeler</b>Bu kayıt YZ hattına alınmadığı için çıkarılmış metin gösterilmez; orijinaller kaynak sitesinde.</div></div>
       <ul class="rlist">${r.docs.map(d => `<li>${esc(d.title || d.url)}<small>${esc(srcOf(d.source).a)} · ${esc(d.role)}${d.publishedAt ? ' · ' + fD(pd(d.publishedAt)) : ''}${d.isBaseline ? ' · ilk tarama' : ''} · <a href="${esc(d.url)}" target="_blank" rel="noopener">Orijinali aç</a></small></li>`).join('')}</ul>`;
   }
   if (r.docState === 'err') return `<div class="empty">${ic('doc')}<b>Metin henüz çıkarılmadı</b><span>${esc(r.docErr || 'Belge YZ hattında.')} Orijinali kaynağın sitesinde açabilirsiniz.</span></div>`;
@@ -405,7 +414,7 @@ function docTab(r) {
     <div class="doc">${html}</div>${ranges.length ? `<p class="hint">Vurgulu pasajlar YZ özetindeki numaralı ifadelerin dayanağıdır.</p>` : ''}`;
 }
 function histTab(r) {
-  if (r.kind === 'irr') return `<div class="empty"><b>Bu kayıt için denetim izi gösterilmiyor</b><span>İlgisiz arşivindeki kayıtların olayları yalnızca inceleme kararıyla görünür.</span></div>`;
+  if (r.kind !== 'reg') return `<div class="empty"><b>Bu kayıt için denetim izi bulunmuyor</b><span>${r.kind === 'baseline' ? 'İlk tarama kayıtlarında portal kararı ve YZ işlemi yapılmadı.' : 'İlgisiz arşivindeki kayıtların olayları yalnızca inceleme kararıyla görünür.'}</span></div>`;
   if (!r.detail) return wait();
   const ev = [...(r.trail || [])].sort((a, b) => pdt(b.timestamp) - pdt(a.timestamp));
   return `<ol class="tl">${ev.map(e => `<li><time>${fDT(pdt(e.timestamp))}</time><div><span class="who">${esc(e.actor || '')}</span> · ${esc(e.action)}${e.rejectionReason ? ` (${esc(REJ_LABEL[e.rejectionReason] || e.rejectionReason)})` : ''}${e.note ? `<small>${esc(e.note)}</small>` : ''}</div></li>`).join('') || '<li><div>Olay yok.</div></li>'}</ol>
@@ -413,6 +422,7 @@ function histTab(r) {
 }
 function actionsHtml(r) {
   if (metaOn(r)) return metaActions();
+  if (r.kind === 'baseline') return '';
   if (r.kind === 'irr') {
     if (S.view === 'arsiv' || r.review || !canDecide()) return '';
     return `<div class="d-actions"><div class="act-row"><button class="btn grow" data-act="irr-back" data-id="${r.id}">İlgili, YZ'ye geri gönder</button><button class="btn btn-primary grow" data-act="irr-ok" data-id="${r.id}">${ic('check')}İlgisiz, doğru</button></div><div class="act-hint">Kararınız ilgililik modelinin değerlendirme setine eklenir.</div></div>`;

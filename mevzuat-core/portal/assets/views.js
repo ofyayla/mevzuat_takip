@@ -24,14 +24,17 @@ function appbar() {
 }
 
 /* ---------- arşiv: uzman kararları ve YZ önerisi isabeti */
-const ARSIV_FILTERS = [['onay', 'Onaylanan'], ['degisik', 'Birimi değiştirilerek onaylanan'], ['red', 'Reddedilen'], ['irr', 'YZ\'nin elediği']];
+const ARSIV_FILTERS = [['onay', 'Onaylanan'], ['degisik', 'Birimi değiştirilerek onaylanan'], ['red', 'Reddedilen'], ['irr', 'YZ\'nin elediği'], ['baseline', 'İlk tarama']];
 let arSeq = 0;
 async function loadArchive() {
   const seq = ++arSeq; S.ar.loading = true; S.ar.err = null; paintArchive();
   try {
     const base = { q: S.arsivQ.trim(), page: S.arsivPage, page_size: 25 };
     let d, items;
-    if (S.arsivF === 'irr') { d = await GET('/archive/regulations', { ...base, kind: 'irrelevant', sort: 'detected_at', direction: 'desc' }); items = d.items.map(upsertIrr); }
+    if (S.arsivF === 'irr' || S.arsivF === 'baseline') {
+      d = await GET('/archive/regulations', { ...base, kind: S.arsivF === 'baseline' ? 'baseline' : 'irrelevant', sort: 'detected_at', direction: 'desc' });
+      items = d.items.map(upsertArchive);
+    }
     else { d = await GET('/regulations', { ...base, status: S.arsivF === 'red' ? 'Reddedildi' : 'Onaylandı', unit_changed: S.arsivF === 'degisik', sort: 'decided_at', direction: 'desc' }); items = d.items.map(it => upsert(it, { resetSel: true })); }
     if (seq !== arSeq) return;
     S.ar = { ids: items.map(r => r.id), total: d.total, loading: false, err: null };
@@ -40,8 +43,8 @@ async function loadArchive() {
 }
 async function loadArchiveStats() {
   try {
-    const [ds, irr] = await Promise.all([GET('/regulations/decision-stats'), GET('/archive/regulations', { kind: 'irrelevant', page_size: 1 })]);
-    S.arStats = { ...ds, irrAll: (irr.counts || {}).irrelevant ?? irr.total };
+    const [ds, archive] = await Promise.all([GET('/regulations/decision-stats'), GET('/archive/regulations', { kind: 'irrelevant', page_size: 1 })]);
+    S.arStats = { ...ds, irrAll: (archive.counts || {}).irrelevant ?? archive.total, baselineAll: (archive.counts || {}).baseline };
   } catch (_) { S.arStats = null; }
   if (S.view === 'arsiv') paintArchive();
 }
@@ -50,12 +53,13 @@ function arsivBody() {
   const af = S.arsivF; const st = S.arStats; const { ids, total, loading, err } = S.ar; const it = ids.map(byId).filter(Boolean);
   const tile = (l, v, s, cl = '') => `<div class="card"><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${s}</span></div>`;
   const acc = st && st.unitAccuracy != null ? Math.round(st.unitAccuracy * 100) : null;
-  const num = { onay: st && st.approved, degisik: st && st.approvedWithChange, red: st && st.rejected, irr: st && st.irrAll };
+  const num = { onay: st && st.approved, degisik: st && st.approvedWithChange, red: st && st.rejected, irr: st && st.irrAll, baseline: st && st.baselineAll };
   const chip = (k, l) => `<button class="btn btn-sm ${af === k ? 'fbtn on' : ''}" data-act="arsivf" data-f="${k}">${l} ${num[k] != null ? `<span class="muted num">${N(num[k])}</span>` : ''}</button>`;
   const pages = Math.max(1, Math.ceil(total / 25)); const start = (S.arsivPage - 1) * 25;
   const row = r => {
     let tg, a, b, who;
     if (r.kind === 'irr') { tg = ['tag-plain', 'YZ eledi']; a = r.why ? trunc(r.why, 140) : 'Gerekçe kaydedilmemiş'; who = r.review ? [r.review.by, pdt(r.review.at)] : ['—', null]; if (r.review) tg = ['tag-ok', r.review.verdict === 'confirm' ? 'İlgisiz doğrulandı' : 'İlgili sayıldı']; b = `İlgililik skoru ${dec(r.relScore)}`; }
+    else if (r.kind === 'baseline') { tg = ['tag-plain', 'İlk tarama']; a = 'YZ ilgililik analizine girmedi'; b = 'Kanalın ilk taramasında zaten yayındaydı'; who = ['—', null]; }
     else if (r.status === 'Onaylandı') { const ch = approvedChanged(r); tg = [ch ? 'tag-warn' : 'tag-ok', ch ? 'Değiştirilerek onaylandı' : 'Onaylandı']; a = r.units.map(u => u.n).join(', ') || 'Birim atanmadı'; b = ch ? `YZ önerisi: ${r.aiUnits.map(u => u.n).join(', ')}` : ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
     else { tg = ['tag-crit', 'Reddedildi']; a = 'Gerekçe ayrıntıda'; b = ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
     return `<tr class="${S.openId === r.id ? 'is-open' : ''}" data-act="open" data-id="${r.id}"><td class="c-main" style="min-width:240px"><div class="ttl" style="color:var(--fg)">${esc(r.title)}</div><div class="meta">${srcAbbr(r.src)}${r.type && r.type !== '—' ? `<span>${esc(r.type)}</span>` : ''}${r.pub ? `<span>Yayım ${fDs(r.pub)}</span>` : ''}${r.revCount ? `<span class="tag tag-plain" title="Karar sonradan değiştirildi">Düzenlendi${r.revCount > 1 ? ' ×' + r.revCount : ''}</span>` : ''}${r.sev ? `<span class="m-only">${sevPill(r.sev)}</span>` : ''}</div></td>
@@ -66,12 +70,12 @@ function arsivBody() {
     <div class="fbar"><label class="search"><span class="sr">Arşivde ara</span>${ic('search')}<input id="arsivQ" type="search" placeholder="Arşivde ara" value="${esc(S.arsivQ)}"></label><div class="fbtns">${ARSIV_FILTERS.map(f => chip(f[0], f[1])).join('')}</div></div>
     ${err ? `<div class="empty card"><b>Liste yüklenemedi</b><span>${esc(err)}</span><button class="btn" data-act="reload">Yeniden dene</button></div>` :
       loading && !it.length ? '<div class="empty card" aria-busy="true"><b>Yükleniyor…</b></div>' :
-      it.length ? `<div class="tbl-wrap ${loading ? 'is-loading' : ''}" style="margin-bottom:12px"><table class="tbl"><thead><tr><th class="c-main">Düzenleme</th><th>Karar</th><th class="c-unit">${af === 'irr' ? 'YZ gerekçesi' : 'Birim / gerekçe'}</th><th class="c-eff">Karar veren</th><th class="c-go"></th></tr></thead><tbody>${it.map(row).join('')}</tbody></table></div>
+      it.length ? `<div class="tbl-wrap ${loading ? 'is-loading' : ''}" style="margin-bottom:12px"><table class="tbl"><thead><tr><th class="c-main">Düzenleme</th><th>${af === 'baseline' ? 'Durum' : 'Karar'}</th><th class="c-unit">${af === 'irr' ? 'YZ gerekçesi' : af === 'baseline' ? 'Açıklama' : 'Birim / gerekçe'}</th><th class="c-eff">Karar veren</th><th class="c-go"></th></tr></thead><tbody>${it.map(row).join('')}</tbody></table></div>
         <div class="pager" style="margin-bottom:24px"><span class="num">Gösterilen ${N(start + 1)}–${N(start + it.length)} / ${N(total)}</span><span></span><div class="pg"><button class="btn btn-sm" data-act="apage" data-p="${S.arsivPage - 1}" ${S.arsivPage <= 1 ? 'disabled' : ''} aria-label="Önceki sayfa">${ic('chev-l')}</button><span class="num muted">${S.arsivPage} / ${pages}</span><button class="btn btn-sm" data-act="apage" data-p="${S.arsivPage + 1}" ${S.arsivPage >= pages ? 'disabled' : ''} aria-label="Sonraki sayfa">${ic('chev-r')}</button></div></div>`
         : '<div class="empty card"><b>Sonuç yok</b></div>'}`;
 }
 function viewArsiv() {
-  return `<div class="inbox gut ${S.openId ? 'has-detail' : ''}" id="inbox"><section class="list-pane" aria-label="Arşiv listesi"><div class="ph"><div><h1>Arşiv</h1><p class="lede">Karara bağlanmış düzenlemeler. Ayrıntısını görmek için bir kayda tıklayın; kararı düzenleyebilir ya da Gelen kutusuna geri alabilirsiniz. “YZ'nin elediği” sekmesi, ilgisiz bulunan kayıtları arar.</p></div></div>
+  return `<div class="inbox gut ${S.openId ? 'has-detail' : ''}" id="inbox"><section class="list-pane" aria-label="Arşiv listesi"><div class="ph"><div><h1>Arşiv</h1><p class="lede">Karara bağlanmış düzenlemeler, ilk taramada YZ'ye gönderilmeyen kayıtlar ve YZ'nin ilgisiz buldukları. Ayrıntısını görmek için bir kayda tıklayın; karar verilmiş kayıtlar düzenlenebilir ya da Gelen kutusuna geri alınabilir.</p></div></div>
     <div id="arsivMain">${arsivBody()}</div></section>
     <button class="scrim" data-act="close" aria-label="Ayrıntıyı kapat" tabindex="-1"></button>
     <aside class="detail-pane" id="detail" aria-label="Kayıt ayrıntısı" ${S.openId ? '' : 'hidden'}>${S.openId ? detailHtml() : ''}</aside></div>`;
@@ -162,18 +166,50 @@ function viewYonetim() {
 const SEV_TAG = { critical: 'tag-crit', high: 'tag-crit', warning: 'tag-warn', medium: 'tag-warn', info: 'tag-plain', low: 'tag-plain', Yüksek: 'tag-crit', Orta: 'tag-warn', Düşük: 'tag-plain' };
 const SEV_TXT = { critical: 'Kritik', high: 'Yüksek', warning: 'Uyarı', medium: 'Orta', info: 'Bilgi', low: 'Düşük' };
 const H_ST = { ok: ['h-ok', 'Sağlıklı'], delayed: ['h-warn', 'Gecikmeli'], down: ['h-crit', 'Sorunlu'] };
+function healthChart(series, { label, tone, target = null, percent = false, format = N }) {
+  const data = series || []; const valid = data.filter(p => Number.isFinite(p.value));
+  if (!valid.length) return '<div class="spark-empty">Bu dönem için ölçüm yok</div>';
+  const max = percent ? 100 : Math.max(1, target || 0, ...valid.map(p => p.value)) * 1.12;
+  const start = Date.parse(data[0].at); const end = Date.parse(data[data.length - 1].at);
+  const x = p => end === start ? 150 : 4 + (Date.parse(p.at) - start) / (end - start) * 292;
+  const y = v => 48 - v / max * 42;
+  const point = p => `${x(p).toFixed(2)},${y(p.value).toFixed(2)}`;
+  const segments = []; let segment = [];
+  for (const p of data) {
+    if (Number.isFinite(p.value)) segment.push(p);
+    else if (segment.length) { segments.push(segment); segment = []; }
+  }
+  if (segment.length) segments.push(segment);
+  const last = valid[valid.length - 1];
+  const summary = `${label}. ${fDT(pdt(data[0].at))} – ${fDT(pdt(data[data.length - 1].at))}. Son ölçüm: ${format(last.value)}.${target == null ? '' : ` Hedef: ${format(target)}.`}`;
+  return `<figure class="health-chart"><svg class="spark sp-${tone}" viewBox="0 0 300 54" role="img" aria-label="${esc(summary)}">
+    <title>${esc(summary)}</title>
+    ${target == null ? '' : `<line class="sp-target" x1="4" x2="296" y1="${y(target)}" y2="${y(target)}"><title>Hedef: ${esc(format(target))}</title></line>`}
+    ${segments.map(s => s.length < 2 ? '' : `<path class="sp-area" d="M${x(s[0])},48 L${s.map(point).join(' L')} L${x(s[s.length - 1])},48 Z"/><polyline class="sp-line" points="${s.map(point).join(' ')}"/>`).join('')}
+    ${valid.map(p => `<circle class="sp-end" cx="${x(p)}" cy="${y(p.value)}" r="${p === last ? 3 : 1.5}"><title>${esc(fDT(pdt(p.at)) + ': ' + format(p.value))}</title></circle>`).join('')}
+    </svg><figcaption>${valid.length < 2 ? 'Geçmiş ölçümler birikiyor' : 'Boş aralıklar: ölçüm yok'}</figcaption></figure>`;
+}
 function admGenel() {
   const a = S.adm.genel; const al = S.alerts || []; const m = a.metrics; const llm = m.llm || {}; const pr = (Boot.stats || {}).preparing || {};
   const hs = (Boot.health && Boot.health.sources) || []; const bad = hs.filter(s => s.status !== 'ok');
   const sec = ms => ms == null ? '—' : dec(ms / 1000, 1) + ' sn';
+  const scans = m.scans || {}; const queue = m.aiQueue || {}; const ingest = m.ingest || {};
+  const llmTarget = llm.targetMs ?? 60000; const scanTarget = scans.targetRate ?? 98;
+  const llmTone = llm.p95Ms > llmTarget ? 'crit' : llm.failed ? 'warn' : 'ok';
+  const scanTone = scans.successRate != null && scans.successRate < scanTarget ? 'warn' : 'ok';
+  const queueValues = (queue.series || []).filter(p => Number.isFinite(p.value)).map(p => p.value);
+  const growing = queueValues.length > 1 && queueValues[queueValues.length - 1] > queueValues[0];
+  const queueTone = pr.failed || growing ? 'warn' : 'ok'; const ingestTone = m.pendingIngest > 0 ? 'warn' : 'ok';
+  const scanPct = v => '%' + dec(v, 1);
+  const chart = (series, label, tone, extra = {}) => healthChart(series, { label, tone, ...extra });
   return `<div class="stack"><section><div class="sec-h"><h2>Açık alarmlar <span class="muted num">${al.length}</span></h2><p>Kapatılan alarmlar adınızla denetim izine yazılır.</p></div>
     <div class="card alarms">${al.length ? al.map(x => `<div class="alarm-row"><span class="tag ${SEV_TAG[x.severity] || 'tag-plain'}">${esc(SEV_TXT[x.severity] || x.severity)}</span><div class="msg">${esc(x.message)}<small>${esc(x.type)}${x.source ? ' · ' + esc(srcOf(x.source).a) : ''} · ${fDT(pdt(x.openedAt))}</small></div>
       <div class="acts"><a class="btn btn-sm" href="#${esc(x.link || 'yonetim')}">İncele</a><button class="btn btn-sm btn-ghost" data-act="alarm-close" data-id="${x.id}">Kapat</button></div></div>`).join('') : `<div class="empty">${ic('check')}<b>Açık alarm yok</b></div>`}</div></section>
-    <section><div class="sec-h"><h2>Sistem sağlığı</h2><p>Son ${llm.windowHours || 24} saat.</p></div><div class="tiles">
-      <div class="card tile"><div class="tl-h">LLM gecikmesi (P95)<span class="hstat ${llm.calls ? (llm.failed ? 'h-warn' : 'h-ok') : 'h-ok'}">${llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'}</span></div><span class="v num">${sec(llm.p95Ms)}</span><span class="t">Ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata</span></div>
-      <div class="card tile"><div class="tl-h">Kaynak sağlığı<span class="hstat ${bad.length ? 'h-warn' : 'h-ok'}">${bad.length ? 'Dikkat' : 'Normal'}</span></div><span class="v num">${hs.length - bad.length} / ${hs.length}</span><span class="t">${bad.length ? `${bad.length} kaynakta sorun var` : 'Tüm kaynaklar zamanında tarandı'}</span></div>
-      <div class="card tile"><div class="tl-h">YZ kuyruğu<span class="hstat ${pr.failed ? 'h-warn' : 'h-ok'}">${pr.failed ? 'Hata var' : 'Normal'}</span></div><span class="v num">${N(pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span></div>
-      <div class="card tile"><div class="tl-h">Bekleyen aktarım<span class="hstat h-ok">${m.pendingIngest == null ? 'Uygulanmaz' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span></div></div></section>
+    <section><div class="sec-h"><h2>Sistem sağlığı</h2><p>Kesikli çizgi hedef değeri gösterir.</p></div><div class="tiles">
+      <div class="card tile"><div class="tl-h">LLM gecikmesi (P95, son ${llm.windowHours || 24} saat)<span class="hstat h-${llmTone}">${llm.p95Ms > llmTarget ? 'Hedefin üstünde' : llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'}</span></div><span class="v num">${sec(llm.p95Ms)}</span><span class="t">Hedef ≤ ${sec(llmTarget)} · ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata</span>${chart(llm.series, 'Saatlik LLM gecikmesi P95', llmTone, { target: llmTarget, format: sec })}</div>
+      <div class="card tile"><div class="tl-h">Tarama başarısı (${scans.windowDays || 7} gün)<span class="hstat h-${scanTone}">${scans.successRate == null ? 'Tarama yok' : scanTone === 'warn' ? 'Dikkat' : 'Normal'}</span></div><span class="v num">${scans.successRate == null ? '—' : scanPct(scans.successRate)}</span><span class="t">Hedef ≥ %${N(scanTarget)} · ${N(scans.total)} taramadan ${N(scans.failed)}'ü başarısız / kısmi</span>${chart(scans.series, 'Günlük tarama başarısı', scanTone, { target: scanTarget, percent: true, format: scanPct })}</div>
+      <div class="card tile"><div class="tl-h">YZ kuyruğu (${queue.windowDays || 14} gün)<span class="hstat h-${queueTone}">${pr.failed ? 'Hata var' : growing ? 'Büyüyor' : 'Normal'}</span></div><span class="v num">${N(queue.count ?? pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span>${chart(queue.series, 'Saatlik YZ kuyruğu', queueTone)}</div>
+      <div class="card tile"><div class="tl-h">Bekleyen aktarım (son ${ingest.windowHours || 24} saat)<span class="hstat h-${ingestTone}">${m.pendingIngest == null ? (m.crawlMode === 'remote' ? 'Ölçülemiyor' : 'Uygulanmaz') : m.pendingIngest > 0 ? 'Bekliyor' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span>${m.crawlMode !== 'remote' ? '<div class="spark-empty">Yerel toplamada aktarım kuyruğu yok</div>' : chart(ingest.series, 'Saatlik bekleyen aktarım', ingestTone)}</div></div></section>
     <section><div class="sec-h"><h2>Kaynaklar</h2><a class="btn btn-sm" href="#kaynaklar">Tümünü gör</a></div>
       <div class="card alarms"><div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'ok').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
       ${bad.map(s => `<div class="alarm-row"><span class="hstat ${(H_ST[s.status] || H_ST.down)[0]}">${(H_ST[s.status] || H_ST.down)[1]}</span><div class="msg"><b>${esc(s.name)}</b><small>${esc(s.message || '')}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</small></div><div class="acts"><button class="btn btn-sm" data-act="scan" data-k="${esc(s.code)}">Şimdi tara</button></div></div>`).join('')}</div></section></div>`;
@@ -312,9 +348,8 @@ const SET_GROUPS = [
   { g: 'Güven bantları', d: 'Kayıtlarda “Yüksek / Orta / Düşük güven” etiketini belirler.', keys: ['confidence_high', 'confidence_medium'] },
   { g: 'İlgililik', d: 'Hangi kayıtların uzman kuyruğuna geleceğini belirler.', keys: ['relevance_threshold', 'relevance_samples'], weights: ['relevance_weight_model', 'relevance_weight_rules', 'relevance_weight_votes'] },
   { g: 'Mükerrer tespiti', d: 'Farklı kaynaklardan gelen aynı düzenlemenin birleştirilmesi.', keys: ['dedupe_auto_threshold', 'dedupe_review_threshold'] },
-  { g: 'İlgisiz örneklemi', d: 'YZ\'nin ilgisiz bulduğu kayıtlardan uzmana kontrol için sunulanlar.', keys: ['irrelevant_sample_min_score', 'irrelevant_sample_size'] },
 ];
-const SET_LBL = { confidence_high: 'Yüksek güven eşiği', confidence_medium: 'Orta güven eşiği', relevance_threshold: 'İlgililik eşiği', relevance_samples: 'Tutarlılık için örnek sayısı', dedupe_auto_threshold: 'Otomatik birleştirme benzerliği', dedupe_review_threshold: 'Birleştirme önerisi benzerliği', irrelevant_sample_min_score: 'Örnekleme giren en düşük skor', irrelevant_sample_size: 'Örneklem üst sınırı', relevance_weight_model: 'Model skoru', relevance_weight_rules: 'Kurallar', relevance_weight_votes: 'Örnekler arası uyum' };
+const SET_LBL = { confidence_high: 'Yüksek güven eşiği', confidence_medium: 'Orta güven eşiği', relevance_threshold: 'İlgililik eşiği', relevance_samples: 'Tutarlılık için örnek sayısı', dedupe_auto_threshold: 'Otomatik birleştirme benzerliği', dedupe_review_threshold: 'Birleştirme önerisi benzerliği', relevance_weight_model: 'Model skoru', relevance_weight_rules: 'Kurallar', relevance_weight_votes: 'Örnekler arası uyum' };
 const W_COL = { relevance_weight_model: 'var(--brand)', relevance_weight_rules: 'var(--med)', relevance_weight_votes: 'var(--high)' };
 const setSpec = k => (S.adm.ayarlar.specs || {})[k] || { type: 'float', min: 0, max: 1, description: '' };
 const settingDirty = () => Object.keys(S.setSaved || {}).filter(k => Math.abs(S.set[k] - S.setSaved[k]) > 1e-9);

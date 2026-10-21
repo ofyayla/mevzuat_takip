@@ -20,7 +20,7 @@ function refreshInbox(opts = {}) {
     renderAll(); scrollTo(0, y); if ($('#dScroll')) $('#dScroll').scrollTop = ds; return;
   }
   $('.appbar').outerHTML = appbar();
-  $('#kpis').innerHTML = DECISION_Q.includes(S.queue) ? kpis() : '';
+  $('#kpis').innerHTML = kpis();
   $('#qtabs').innerHTML = qtabs();
   $('#fbtns').innerHTML = fbtns();
   $('#listRegion').innerHTML = listRegion();
@@ -109,7 +109,7 @@ async function openRecord(id, opts = {}) {
 }
 async function loadDetail(r) {
   try {
-    if (r.kind === 'irr') upsertIrr(await GET('/archive/regulations/' + r.num));
+    if (r.kind !== 'reg') upsertArchive(await GET('/archive/regulations/' + r.num));
     else {
       const { data } = await api('GET', '/regulations/' + r.num);
       upsert(data, { resetSel: !r.touched });
@@ -344,7 +344,7 @@ document.addEventListener('click', e => {
     case 'kpi-sev': { const on = S.f.sev.size === 2 && S.f.sev.has('Kritik') && S.f.sev.has('Yüksek'); S.f.sev = on ? new Set() : new Set(['Kritik', 'Yüksek']); S.page = 1; refreshInbox(); listChanged(); break; }
     case 'kpi-eff': { const on = S.f.eff.size === 1 && S.f.eff.has('30'); S.f.eff = on ? new Set() : new Set(['30']); S.page = 1; refreshInbox(); listChanged(); break; }
     case 'kpi-need': S.f.needUnit = !S.f.needUnit; S.page = 1; refreshInbox(); listChanged(); break;
-    case 'pop-filter': { const k = t.dataset.f; if (S.pop && S.pop.f === k) { closePop(); break; } openPop(t, filterPopHtml(k), { f: k }); t.setAttribute('aria-expanded', 'true'); break; }
+    case 'pop-filter': { const k = t.dataset.f; if (S.pop && S.pop.f === k) { closePop(); break; } closePop(); const anchor = document.querySelector(`#fbtns [data-act="pop-filter"][data-f="${k}"]`); openPop(anchor, filterPopHtml(k), { f: k }); anchor.setAttribute('aria-expanded', 'true'); break; }
     case 'pop-close': closePop(); break;
     case 'fclear': S.f[t.dataset.f].clear(); S.page = 1; refreshInbox(); closePop(); listChanged(); break;
     case 'unchip': { const k = t.dataset.k; if (k === 'q') { S.q = ''; $('#q').value = ''; } else if (k === 'needUnit') S.f.needUnit = false; else S.f[k].delete(t.dataset.v); S.page = 1; refreshInbox(); listChanged(); break; }
@@ -465,7 +465,7 @@ function bulkReject() {
     } });
 }
 function exportList() {
-  if (S.queue === 'ilgisiz') { toast('İlgisiz örneklemi Excel\'e aktarılamaz.', { err: true }); return; }
+  if (S.queue === 'ilgisiz') { toast('İlgisizler Excel\'e aktarılamaz.', { err: true }); return; }
   dialog({ title: "Excel'e aktar", ok: 'Dışa aktar', body: `<div class="rej-opts" role="group" aria-label="Dışa aktarma kapsamı">
       <label><input type="radio" name="exportScope" value="filtered" checked>Filtrelenmiş liste (${N(S.list.total)} kayıt)</label>
       <label><input type="radio" name="exportScope" value="selected"${S.selected.size ? '' : ' disabled'}>Yalnızca seçilenler (${N(S.selected.size)} kayıt)</label>
@@ -490,7 +490,7 @@ async function openAnywhere(id) {
     else { S.queue = r.stage ? 'hazirlaniyor' : 'tum'; S.q = ''; Object.values(S.f).forEach(v => v instanceof Set && v.clear()); S.f.needUnit = false; S.page = 1; S.list = { ids: [], total: 0, loading: true, err: null }; go('gelen'); }
   } catch (e) {
     if (e.status !== 404) { toast(errMsg(e), { err: true }); return; }
-    try { const d = await GET('/archive/regulations/' + id); const r = upsertIrr(d); S.pendingOpen = r.id; S.arsivF = 'irr'; S.arsivQ = ''; S.arsivPage = 1; S.ar = { ids: [], total: 0, loading: true, err: null }; go('arsiv'); }
+    try { const d = await GET('/archive/regulations/' + id); const r = upsertArchive(d); S.pendingOpen = r.id; S.arsivF = r.kind === 'baseline' ? 'baseline' : 'irr'; S.arsivQ = ''; S.arsivPage = 1; S.ar = { ids: [], total: 0, loading: true, err: null }; go('arsiv'); }
     catch (_) { toast('Bu kayıt portalda ya da arşivde görünmüyor.', { err: true }); }
   }
 }
