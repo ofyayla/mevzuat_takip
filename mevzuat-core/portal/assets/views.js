@@ -162,18 +162,52 @@ function viewYonetim() {
 const SEV_TAG = { critical: 'tag-crit', high: 'tag-crit', warning: 'tag-warn', medium: 'tag-warn', info: 'tag-plain', low: 'tag-plain', Yüksek: 'tag-crit', Orta: 'tag-warn', Düşük: 'tag-plain' };
 const SEV_TXT = { critical: 'Kritik', high: 'Yüksek', warning: 'Uyarı', medium: 'Orta', info: 'Bilgi', low: 'Düşük' };
 const H_ST = { ok: ['h-ok', 'Sağlıklı'], delayed: ['h-warn', 'Gecikmeli'], down: ['h-crit', 'Sorunlu'] };
+function healthChart(series, { label, tone, target = null, percent = false, format = N }) {
+  const data = series || []; const valid = data.filter(p => Number.isFinite(p.value));
+  if (!valid.length) return '<div class="spark-empty">Bu dönem için ölçüm yok</div>';
+  const max = percent ? 100 : Math.max(1, target || 0, ...valid.map(p => p.value)) * 1.12;
+  const start = Date.parse(data[0].at); const end = Date.parse(data[data.length - 1].at);
+  const x = p => end === start ? 150 : 4 + (Date.parse(p.at) - start) / (end - start) * 292;
+  const y = v => 48 - v / max * 42;
+  const point = p => `${x(p).toFixed(2)},${y(p.value).toFixed(2)}`;
+  const segments = []; let segment = [];
+  for (const p of data) {
+    if (Number.isFinite(p.value)) segment.push(p);
+    else if (segment.length) { segments.push(segment); segment = []; }
+  }
+  if (segment.length) segments.push(segment);
+  const last = valid[valid.length - 1];
+  const caption = valid.length < 2 ? 'Geçmiş ölçümler birikiyor' : valid.length < data.length ? 'Boş aralıklar: ölçüm yok' : '';
+  const summary = `${label}. ${fDT(pdt(data[0].at))} – ${fDT(pdt(data[data.length - 1].at))}. Son ölçüm: ${format(last.value)}.${target == null ? '' : ` Hedef: ${format(target)}.`}`;
+  return `<figure class="health-chart"><svg class="spark sp-${tone}" viewBox="0 0 300 54" role="img" aria-label="${esc(summary)}">
+    <title>${esc(summary)}</title>
+    ${target == null ? '' : `<line class="sp-target" x1="4" x2="296" y1="${y(target)}" y2="${y(target)}"><title>Hedef: ${esc(format(target))}</title></line>`}
+    ${segments.map(s => s.length < 2 ? '' : `<path class="sp-area" d="M${x(s[0])},48 L${s.map(point).join(' L')} L${x(s[s.length - 1])},48 Z"/><polyline class="sp-line" points="${s.map(point).join(' ')}"/>`).join('')}
+    ${valid.map(p => `<circle class="sp-end" cx="${x(p)}" cy="${y(p.value)}" r="${p === last ? 3 : 1.5}"><title>${esc(fDT(pdt(p.at)) + ': ' + format(p.value))}</title></circle>`).join('')}
+    </svg>${caption ? `<figcaption>${caption}</figcaption>` : ''}</figure>`;
+}
 function admGenel() {
   const a = S.adm.genel; const al = S.alerts || []; const m = a.metrics; const llm = m.llm || {}; const pr = (Boot.stats || {}).preparing || {};
   const hs = (Boot.health && Boot.health.sources) || []; const bad = hs.filter(s => s.status !== 'ok');
   const sec = ms => ms == null ? '—' : dec(ms / 1000, 1) + ' sn';
+  const scans = m.scans || {}; const queue = m.aiQueue || {}; const ingest = m.ingest || {};
+  const llmTarget = llm.targetMs ?? 60000; const scanTarget = scans.targetRate ?? 98;
+  const llmTone = llm.p95Ms > llmTarget ? 'crit' : llm.failed ? 'warn' : 'ok';
+  const scanTone = scans.successRate != null && scans.successRate < scanTarget ? 'warn' : 'ok';
+  const queueValues = (queue.series || []).filter(p => Number.isFinite(p.value)).map(p => p.value);
+  const growing = queueValues.length > 1 && queueValues[queueValues.length - 1] > queueValues[0];
+  const queueTone = pr.failed || growing ? 'warn' : 'ok';
+  const ingestTone = m.pendingIngest > 0 || (m.pendingIngest == null && m.crawlMode === 'remote') ? 'warn' : 'ok';
+  const scanPct = v => '%' + dec(v, 1);
+  const chart = (series, label, tone, extra = {}) => healthChart(series, { label, tone, ...extra });
   return `<div class="stack"><section><div class="sec-h"><h2>Açık alarmlar <span class="muted num">${al.length}</span></h2><p>Kapatılan alarmlar adınızla denetim izine yazılır.</p></div>
     <div class="card alarms">${al.length ? al.map(x => `<div class="alarm-row"><span class="tag ${SEV_TAG[x.severity] || 'tag-plain'}">${esc(SEV_TXT[x.severity] || x.severity)}</span><div class="msg">${esc(x.message)}<small>${esc(x.type)}${x.source ? ' · ' + esc(srcOf(x.source).a) : ''} · ${fDT(pdt(x.openedAt))}</small></div>
       <div class="acts"><a class="btn btn-sm" href="#${esc(x.link || 'yonetim')}">İncele</a><button class="btn btn-sm btn-ghost" data-act="alarm-close" data-id="${x.id}">Kapat</button></div></div>`).join('') : `<div class="empty">${ic('check')}<b>Açık alarm yok</b></div>`}</div></section>
-    <section><div class="sec-h"><h2>Sistem sağlığı</h2><p>Son ${llm.windowHours || 24} saat.</p></div><div class="tiles">
-      <div class="card tile"><div class="tl-h">LLM gecikmesi (P95)<span class="hstat ${llm.calls ? (llm.failed ? 'h-warn' : 'h-ok') : 'h-ok'}">${llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'}</span></div><span class="v num">${sec(llm.p95Ms)}</span><span class="t">Ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata</span></div>
-      <div class="card tile"><div class="tl-h">Kaynak sağlığı<span class="hstat ${bad.length ? 'h-warn' : 'h-ok'}">${bad.length ? 'Dikkat' : 'Normal'}</span></div><span class="v num">${hs.length - bad.length} / ${hs.length}</span><span class="t">${bad.length ? `${bad.length} kaynakta sorun var` : 'Tüm kaynaklar zamanında tarandı'}</span></div>
-      <div class="card tile"><div class="tl-h">YZ kuyruğu<span class="hstat ${pr.failed ? 'h-warn' : 'h-ok'}">${pr.failed ? 'Hata var' : 'Normal'}</span></div><span class="v num">${N(pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span></div>
-      <div class="card tile"><div class="tl-h">Bekleyen aktarım<span class="hstat h-ok">${m.pendingIngest == null ? 'Uygulanmaz' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span></div></div></section>
+    <section><div class="sec-h"><h2>Sistem sağlığı</h2><p>Kesikli çizgi hedef değeri gösterir.</p></div><div class="tiles">
+      <div class="card tile"><div class="tl-h">LLM gecikmesi (P95, son ${llm.windowHours || 24} saat)<span class="hstat h-${llmTone}">${llm.p95Ms > llmTarget ? 'Hedefin üstünde' : llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'}</span></div><span class="v num">${sec(llm.p95Ms)}</span><span class="t">Hedef ≤ ${sec(llmTarget)} · ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata</span>${chart(llm.series, 'Saatlik LLM gecikmesi P95', llmTone, { target: llmTarget, format: sec })}</div>
+      <div class="card tile"><div class="tl-h">Tarama başarısı (${scans.windowDays || 7} gün)<span class="hstat h-${scanTone}">${scans.successRate == null ? 'Tarama yok' : scanTone === 'warn' ? 'Dikkat' : 'Normal'}</span></div><span class="v num">${scans.successRate == null ? '—' : scanPct(scans.successRate)}</span><span class="t">Hedef ≥ %${N(scanTarget)} · ${N(scans.total)} taramadan ${N(scans.failed)}'ü başarısız / kısmi</span>${chart(scans.series, 'Günlük tarama başarısı', scanTone, { target: scanTarget, percent: true, format: scanPct })}</div>
+      <div class="card tile"><div class="tl-h">YZ kuyruğu (${queue.windowDays || 14} gün)<span class="hstat h-${queueTone}">${pr.failed ? 'Hata var' : growing ? 'Büyüyor' : 'Normal'}</span></div><span class="v num">${N(queue.count ?? pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span>${chart(queue.series, 'Saatlik YZ kuyruğu', queueTone)}</div>
+      <div class="card tile"><div class="tl-h">Bekleyen aktarım (son ${ingest.windowHours || 24} saat)<span class="hstat h-${ingestTone}">${m.pendingIngest == null ? (m.crawlMode === 'remote' ? 'Ölçülemiyor' : 'Uygulanmaz') : m.pendingIngest > 0 ? 'Bekliyor' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span>${m.crawlMode !== 'remote' ? '<div class="spark-empty">Yerel toplamada aktarım kuyruğu yok</div>' : chart(ingest.series, 'Saatlik bekleyen aktarım', ingestTone)}</div></div></section>
     <section><div class="sec-h"><h2>Kaynaklar</h2><a class="btn btn-sm" href="#kaynaklar">Tümünü gör</a></div>
       <div class="card alarms"><div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'ok').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
       ${bad.map(s => `<div class="alarm-row"><span class="hstat ${(H_ST[s.status] || H_ST.down)[0]}">${(H_ST[s.status] || H_ST.down)[1]}</span><div class="msg"><b>${esc(s.name)}</b><small>${esc(s.message || '')}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</small></div><div class="acts"><button class="btn btn-sm" data-act="scan" data-k="${esc(s.code)}">Şimdi tara</button></div></div>`).join('')}</div></section></div>`;

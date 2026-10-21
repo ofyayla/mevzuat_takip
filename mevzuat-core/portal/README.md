@@ -28,6 +28,35 @@ Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç 
 Baseline tarih alanı regresyon testleri (depo kökünden, ek paket gerektirmez):
 `node --test mevzuat-core/portal/tests/baseline-date.test.cjs`
 
+## Sistem sağlığı grafikleri
+
+**Yönetim → Genel bakış** dört kartta gerçek veriye dayalı çizgi/alan grafikleri gösterir:
+
+- **LLM gecikmesi:** son 24 saatin saatlik P95 değerleri; kesikli hedef çizgisi 60 saniye.
+  Kartın büyük değeri tüm 24 saatin P95'idir; başarısız çağrılar gecikme yüzdeliğine katılmaz.
+- **Tarama başarısı:** son 7 günün günlük başarı yüzdeleri; hedef en az %98.
+  Tamamlanan `success`, `partial`, `failed` taramalar sayılır; kısmi tarama başarı kabul edilmez.
+  Kartın yüzdesi, günlük yüzdelerin ortalaması değil, tüm dönem taramalarının başarı oranıdır.
+- **YZ kuyruğu:** son 14 günün saatlik son ölçümleri; gelen kutusundaki YZ hazırlık kuyruğuyla aynı kapsam.
+- **Bekleyen aktarım:** son 24 saatin saatlik son ölçümleri; yalnız uzak crawler kurulumunda uygulanır.
+  Mongo erişilemiyorsa **Ölçülemiyor** gösterilir, sıfır belge veya normal durum gibi sunulmaz.
+
+`GET /api/v1/admin/metrics` yanıtında `llm`, `scans`, `aiQueue`, `ingest` altında `series: [{at, value}]`
+dizileri bulunur. `at` UTC ISO zamanıdır; `null` ölçüm yok demektir, `0` gerçek bir ölçümdür.
+Boş aralıklar çizgiyle birleştirilmez; tek nokta geçmiş oluşana kadar yalnız nokta olarak gösterilir.
+Noktaların araç ipucunda zaman ve değer, ekran okuyucu açıklamasında dönem, son ölçüm ve hedef bulunur.
+Grafikler ek paket/CDN kullanmaz; dar ekranda kartlar tek sütuna geçer. Kaynak sağlığı alttaki Kaynaklar
+bölümünde korunur.
+
+Kuyruk/aktarım geçmişi, sayfa açık olmasa da mevcut **10 dakikalık monitor görevi** tarafından
+`health_sample` tablosuna yazılır ve 14 gün saklanır. Kurulumdan önceki geçmiş uydurulmaz.
+Üretimde dağıtımdan önce `app/` dizininde `alembic upgrade head` çalıştırılmalıdır (revision `0008`);
+`monitor` işçisi ve beat görevi çalışır durumda olmalıdır. Metrik GET isteği veri yazmaz.
+
+Regresyon testleri (depo kökünden):
+`node --test mevzuat-core/portal/tests/health-charts.test.cjs`
+ve `cd mevzuat-core/app && python -m pytest tests/test_admin_health.py tests/test_migrations.py`.
+
 ## Bildirimler
 
 - Sağ üstteki zil menüsünde bir bildirime tıklamak, açık alarmların listelendiği **Yönetim → Genel bakış**
