@@ -15,7 +15,13 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai import relevance, severity
-from app.ai.common import effective_settings, knowledge, regulation_context
+from app.ai.common import (
+    UNAVAILABLE_STRIKES,
+    effective_settings,
+    knowledge,
+    record_unavailable,
+    regulation_context,
+)
 from app.ai.llm_client import LLM, LLMError, LLMUnavailable
 from app.collectors.dates import tr_lower
 from app.db import Regulation, utcnow
@@ -69,7 +75,8 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
         session.flush()
         ensure_detected(session, reg)
     reg.classified_at = utcnow()
-    reg.extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
+    reg.extra = {k: v for k, v in (reg.extra or {}).items()
+                 if k not in ("ai_attempts", "ai_error", "ai_stage", "ai_unavailable_strikes")}
 
 
 def _mark_failed(reg: Regulation, error: str) -> None:
@@ -130,9 +137,18 @@ def classify_pending(session_factory: sessionmaker[Session], llm: LLM, settings:
             try:
                 classify_regulation(session, llm, reg, settings, force=force)
             except LLMUnavailable as e:
-                # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
                 session.rollback()
                 report.processed -= 1
+                strikes = record_unavailable(reg)
+                if strikes >= UNAVAILABLE_STRIKES:
+                    _mark_failed(reg, f"art arda {strikes} kez LLM zaman aşımı/hata: {e}")
+                    session.commit()
+                    report.failed += 1
+                    report.errors.append(f"#{reg_id}: art arda LLM hatası, kayıt AI_FAILED yapıldı: {e}")
+                    log.warning("düzenleme %s art arda LLM hatası verdi; AI_FAILED yapıldı, sıradakine geçiliyor",
+                                reg_id)
+                    continue
+                session.commit()
                 report.unavailable = True
                 report.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
                 log.warning("LLM kullanılamıyor; sınıflandırma durduruldu (düzenleme %s): %s", reg_id, e)

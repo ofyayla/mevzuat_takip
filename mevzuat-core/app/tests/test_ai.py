@@ -454,6 +454,58 @@ def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env): 
         assert s.get(Regulation, bank).extra["ai_attempts"] == 1
     # sunucu geri gelince hepsi işlenir
     assert classify_pending(sf, FakeLLM(settings, handler_from([rel()])), settings).relevant == 2
+    with sf() as s:
+        assert all("ai_unavailable_strikes" not in (s.get(Regulation, rid).extra or {}) for rid in (bank, tokat))
+
+
+@pytest.mark.parametrize("stage", ["relevance", "summary", "unit_match"])
+@pytest.mark.parametrize("attempts", [0, 2])
+def test_repeated_unavailability_does_not_starve_queue(settings, env, stage, attempts):  # noqa: F811
+    from app.ai.summary import summarize_pending
+    from app.ai.unit_matching import match_pending
+    from tests.test_summary import _set_extra, _summary_llm, _two_relevant
+    from tests.test_units import _two_summarized
+
+    sf, _ = env
+    if stage == "relevance":
+        _processed(settings, env)
+        bank, tokat = _bank_and_tokat(sf)
+        runner, healthy = classify_pending, handler_from([rel()])
+        ready = "RELEVANT"
+    elif stage == "summary":
+        bank, tokat = _two_relevant(settings, env)
+        runner, healthy = summarize_pending, _summary_llm(settings).handler
+        ready = "SUMMARIZED"
+    else:
+        bank, tokat = _two_summarized(settings, env)
+        runner, healthy = match_pending, lambda t, m, n: [{"suggestions": []}]
+        ready = "READY"
+    if attempts:
+        _set_extra(sf, bank, "AI_FAILED", ai_stage=stage, ai_attempts=attempts)
+
+    def handler(task, messages, n):
+        if "Mellat" in messages[-1]["content"]:
+            raise LLMUnavailable("record timeout")
+        return healthy(task, messages, n)
+
+    llm = FakeLLM(settings, handler)
+    for _ in range(2):
+        rep = runner(sf, llm, settings)
+        assert rep.unavailable and rep.failed == 0
+        with sf() as s:
+            assert (s.get(Regulation, bank).extra or {}).get("ai_attempts", 0) == attempts
+    rep = runner(sf, llm, settings)
+    assert rep.failed == 1 and not rep.unavailable
+    with sf() as s:
+        failed = s.get(Regulation, bank)
+        assert failed.processing_status == "AI_FAILED"
+        assert failed.extra["ai_attempts"] == attempts + 1 and failed.extra["ai_stage"] == stage
+        assert "ai_unavailable_strikes" not in failed.extra
+        assert s.get(Regulation, tokat).processing_status == ready
+    if attempts == 2:
+        calls = len(llm.calls)
+        assert runner(sf, llm, settings, limit=1).processed == 0
+        assert len(llm.calls) == calls
 
 
 def test_openai_server_errors_become_llm_unavailable(settings, monkeypatch):

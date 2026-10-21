@@ -25,7 +25,14 @@ from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.ai.common import effective_settings, knowledge, messages, regulation_context
+from app.ai.common import (
+    UNAVAILABLE_STRIKES,
+    effective_settings,
+    knowledge,
+    messages,
+    record_unavailable,
+    regulation_context,
+)
 from app.ai.llm_client import LLM, LLMError, LLMUnavailable
 from app.collectors.dates import tr_lower
 from app.db import FewshotExample, Regulation, RegulationSummary, Unit, UnitSuggestion
@@ -216,7 +223,8 @@ def match_regulation(session: Session, llm: LLM, reg: Regulation, settings: Sett
         session.add(UnitSuggestion(regulation_id=reg.id, unit_code=k["unit_code"], rank=i, score=k["score"],
                                    reason=k["reason"], matched_responsibility=k["matched_responsibility"],
                                    origin="ai", llm_call_id=res.call_id))
-    extra = {k: v for k, v in (reg.extra or {}).items() if k not in ("ai_attempts", "ai_error", "ai_stage")}
+    extra = {k: v for k, v in (reg.extra or {}).items()
+             if k not in ("ai_attempts", "ai_error", "ai_stage", "ai_unavailable_strikes")}
     extra["unit_match"] = {"status": "önerildi" if kept else "önerilemedi", "dropped": dropped,
                            "examples_used": len(examples), "keyword_candidates": [c["code"] for c in candidates]}
     reg.extra = extra
@@ -277,9 +285,21 @@ def match_pending(session_factory: sessionmaker[Session], llm: LLM, settings: Se
             try:
                 res = match_regulation(session, llm, reg, settings, force=force or retry)
             except LLMUnavailable as e:
-                # LLM sunucusu kapalı: kayıt değil sunucu sorunlu; deneme sayılmaz, kayıt olduğu gibi kalır, iş kesilir
                 session.rollback()      # AI_FAILED → önceki durum geçişi de geri alınır
                 rep.processed -= 1
+                strikes = record_unavailable(reg)
+                if strikes >= UNAVAILABLE_STRIKES:
+                    extra = dict(reg.extra or {})
+                    extra.update(ai_attempts=extra.get("ai_attempts", 0) + 1, ai_stage="unit_match",
+                                 ai_error=f"art arda {strikes} kez LLM zaman aşımı/hata: {e}"[:500])
+                    reg.extra, reg.processing_status = extra, "AI_FAILED"
+                    session.commit()
+                    rep.failed += 1
+                    rep.errors.append(f"#{reg_id}: art arda LLM hatası, kayıt AI_FAILED yapıldı: {e}")
+                    log.warning("düzenleme %s art arda LLM hatası verdi; AI_FAILED yapıldı, sıradakine geçiliyor",
+                                reg_id)
+                    continue
+                session.commit()
                 rep.unavailable = True
                 rep.errors.append(f"#{reg_id}: LLM kullanılamıyor, toplu iş durduruldu: {e}")
                 log.warning("LLM kullanılamıyor; birim eşleştirme durduruldu (düzenleme %s): %s", reg_id, e)

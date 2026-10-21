@@ -219,8 +219,11 @@ gösterir), sonra **Uygula**. Uygulanmış sınır `app_setting.baseline_cutoff`
 
 - Kayıtlar kaybolmaz. OCR hatasında belge metin katmanıyla bağlanır, taranmış sayfalar `extra.ocr_pending_pages`'te
   bekler ve `catch_up_ocr` yeniden dener (en çok `PROCESS_MAX_ATTEMPTS` kez). LLM sunucusuna ulaşılamıyorsa (bağlantı,
-  zaman aşımı, 5xx, 429) toplu iş durur, kayıtlar olduğu gibi kalır ve deneme sayılmaz; kayda ait LLM hatası
-  `AI_FAILED` (aşama `extra.ai_stage`) olur ve YZ hattı alarmı açılır.
+  zaman aşımı, 5xx, 429) ilk iki ardışık hatada toplu iş durur ve deneme hakkı tüketilmez. Aynı kayıt üçüncü kez
+  erişim hatası verirse `AI_FAILED` (aşama `extra.ai_stage`) yapılır, bir deneme sayılır ve sıradaki kayda geçilir.
+  Bu koruma sınıflandırma, özet ve birim eşleştirmede ortaktır; başarıda ardışık hata sayacı temizlenir. Böylece tek
+  sorunlu kayıt bütün kuyruğu süresiz engellemez. Üç deneme hakkı da bitenler için §4.5'teki hedefli yeniden denemeyi
+  kullanın; uzun süreli sunucu kesintisinde de haklar tükenebileceğinden önce LLM erişimini doğrulayın.
 - Servis düzeldikten sonra `mevzuat-monitor reprocess classify|summarize|match --from … --to …` veya OCR için
   `reprocess extract`.
 - Sağlayıcı değişikliği (ör. OpenAI → kurum içi vLLM) yalnızca `.env` (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`)

@@ -341,6 +341,8 @@ def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env): 
         assert s.get(Regulation, bank).extra["ai_attempts"] == 1
     # sunucu geri gelince ikisi de özetlenir
     assert summarize_pending(sf, _summary_llm(settings), settings).ids == [tokat, bank]   # yeni kayıt önce
+    with sf() as s:
+        assert all("ai_unavailable_strikes" not in (s.get(Regulation, rid).extra or {}) for rid in (bank, tokat))
 
 
 def test_locked_or_changed_regulation_is_skipped(settings, env, monkeypatch):  # noqa: F811

@@ -313,6 +313,8 @@ def test_llm_unavailable_does_not_count_attempt_and_stops_batch(settings, env): 
         assert fresh.processing_status == "SUMMARIZED" and "ai_attempts" not in (fresh.extra or {})
     rep = match_pending(sf, FakeLLM(settings, lambda t, m, n: [{"suggestions": []}]), settings)
     assert (rep.processed, rep.no_suggestion, rep.unavailable) == (2, 2, False)
+    with sf() as s:
+        assert all("ai_unavailable_strikes" not in (s.get(Regulation, rid).extra or {}) for rid in (bank, tokat))
 
 
 def test_locked_or_changed_regulation_is_skipped(settings, env, monkeypatch):  # noqa: F811
