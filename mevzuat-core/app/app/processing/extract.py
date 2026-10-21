@@ -29,8 +29,10 @@ log = logging.getLogger(__name__)
 PAGE_SEP = "\f"
 # Taranmış sayfa: metin katmanı yok denecek kadar az, ya da kısa bir üst bilgi + sayfayı kaplayan görüntü
 # (RG'nin taranmış PDF'lerinde ilk sayfada ~120 karakterlik "Resmî Gazete Sayı : …" metni bulunuyor)
-SCANNED_HEADER_MAX_CHARS = 250
-SCANNED_MIN_IMAGE_COVERAGE = 0.25
+# Tek RG maddesi kesitlerinde (örn. Merkez Bankası "Tebliğ" kararı, Cumhurbaşkanlığı genelgesi) üst bilgi + başlık
+# 150-300 karakter, gövde ise sayfanın %20-45'ini kaplayan tek bir görüntüdür; eşikler bunları da yakalar.
+SCANNED_HEADER_MAX_CHARS = 600
+SCANNED_MIN_IMAGE_COVERAGE = 0.15   # en büyük tek görüntünün sayfa oranı (logo/damga toplamı sayılmaz)
 MIN_TEXT_QUALITY = 0.6
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/tiff", "image/bmp", "image/heif"}
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -132,8 +134,8 @@ def _needs_ocr(page, text: str, settings: Settings) -> bool:
     if chars >= SCANNED_HEADER_MAX_CHARS:
         return False
     area = abs(page.rect) or 1
-    covered = sum(abs(pymupdf.Rect(i["bbox"]) & page.rect) for i in page.get_image_info())
-    return covered / area >= SCANNED_MIN_IMAGE_COVERAGE
+    largest = max((abs(pymupdf.Rect(i["bbox"]) & page.rect) for i in page.get_image_info()), default=0)
+    return largest / area >= SCANNED_MIN_IMAGE_COVERAGE
 
 
 def extract_image(content: bytes, content_type: str, ocr: OcrEngine | None, *, allow_ocr: bool) -> ExtractResult:
