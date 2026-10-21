@@ -466,10 +466,17 @@ function bulkReject() {
 }
 function exportList() {
   if (S.queue === 'ilgisiz') { toast('İlgisiz örneklemi Excel\'e aktarılamaz.', { err: true }); return; }
-  dialog({ title: "Excel'e aktar", ok: 'Dışa aktar', body: `<p>Şu an uygulanan kuyruk ve süzgeçlere uyan ${N(S.list.total)} kayıt (en fazla 5.000) Excel dosyası olarak indirilir. Dosyada başlık, kaynak, tarihler, önem, önerilen birim ve YZ özeti yer alır.</p>`,
+  dialog({ title: "Excel'e aktar", ok: 'Dışa aktar', body: `<div class="rej-opts" role="group" aria-label="Dışa aktarma kapsamı">
+      <label><input type="radio" name="exportScope" value="filtered" checked>Filtrelenmiş liste (${N(S.list.total)} kayıt)</label>
+      <label><input type="radio" name="exportScope" value="selected"${S.selected.size ? '' : ' disabled'}>Yalnızca seçilenler (${N(S.selected.size)} kayıt)</label>
+    </div>${S.selected.size ? '' : '<p class="muted">Yalnızca seçilenleri aktarmak için listeden en az bir kayıt seçin.</p>'}
+    <p>Uygulanan kuyruk, süzgeçler ve sıralama korunur; tüm sayfalardan en fazla 5.000 kayıt indirilir. Dosyada başlık, kaynak, tarihler, önem, önerilen birim ve YZ özeti yer alır.</p>`,
     onOk: async f => {
+      const selectedOnly = f.querySelector('input[name=exportScope]:checked').value === 'selected';
+      if (selectedOnly && !S.selected.size) return 'En az bir kayıt seçin.';
       dlgBusy(f, true);
-      try { const { page, page_size, ...q } = listParams(); const res = await download('/regulations/export', q, 'mevzuat-liste.xlsx'); closeDialog();
+      try { const { page, page_size, ...q } = listParams(); if (selectedOnly) q.ids = [...S.selected];
+        const res = await download('/regulations/export', q, 'mevzuat-liste.xlsx'); closeDialog();
         toast(res.headers.get('X-Export-Truncated') === 'true' ? `Dosya indirildi; ${res.headers.get('X-Export-Total')} kaydın yalnızca ilk bölümü yer alıyor.` : 'Dosya indirildi.'); }
       catch (err) { dlgBusy(f, false); return errMsg(err); } return 'wait';
     } });

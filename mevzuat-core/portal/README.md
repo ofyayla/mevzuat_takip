@@ -62,6 +62,18 @@ Bildirim arayüzü regresyon testleri (depo kökünden, Node.js ile, ek paket ge
 Regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
 `node --test mevzuat-core/portal/tests/pipeline.test.cjs`
 
+## Excel'e aktarma
+
+- **Excel'e aktar** penceresinde varsayılan **Filtrelenmiş liste** veya **Yalnızca seçilenler** kapsamı seçilir.
+  Seçili kayıt yoksa ikinci seçenek pasiftir.
+- Filtrelenmiş liste yalnızca açık sayfayı değil, kuyruk ve süzgeçlere uyan tüm sayfaları kapsar.
+  Yalnızca seçilenler, sayfalar arasında biriken seçimi aynı kuyruk ve süzgeçlerle sınırlar.
+  Her iki kapsamda mevcut sıralama ve en fazla 5.000 kayıt sınırı korunur.
+- İndirme hatası pencerede gösterilir ve yeniden denenebilir; sınır nedeniyle kesilen dosya için uyarı gösterilir.
+
+Dışa aktarma regresyon testleri (depo kökünden, ek paket gerektirmez):
+`node --test mevzuat-core/portal/tests/export.test.cjs`
+
 ## Sıralama
 
 - Gelen kutusunun Yeni, Birikim ve Tümü kuyruklarında öncelik, tespit tarihi, yürürlük tarihi ve önem için
