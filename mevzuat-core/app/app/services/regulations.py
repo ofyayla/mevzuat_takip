@@ -95,6 +95,7 @@ class ListQuery:
     needs_unit: bool = False
     unit_changed: bool = False          # arşiv: onayda birim YZ önerisinden farklı
     edited: bool = False                # arşiv: bilgileri uzman tarafından düzenlenmiş
+    ids: list[int] | None = None
 
 
 def _csv(value: str | None) -> list[str]:
@@ -140,6 +141,8 @@ def _like_escape(value: str) -> str:
 
 def _filters(query: ListQuery, settings: Settings) -> list:
     conds = [visible()]
+    if query.ids is not None:
+        conds.append(Regulation.id.in_(query.ids))
     if query.queue:
         if query.queue not in QUEUES:
             raise ApiError(400, "invalid_queue", f"queue: {', '.join(QUEUES)}")

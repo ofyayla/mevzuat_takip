@@ -93,6 +93,55 @@ def test_export_xlsx_uses_list_filters_and_neutralizes_formulas(settings, env, c
     assert rows[1][1].startswith("'=")
 
 
+def test_export_selected_ids_preserves_filters_order_and_visibility(settings, env, client, monkeypatch):  # noqa: F811
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    reg_id = _ready(settings, env)
+    c, sf = client
+    with sf() as s:
+        s.get(Regulation, reg_id).title = "A selected"
+        fields = {"primary_source_code": "BDDK", "processing_status": "READY", "severity": "Orta"}
+        other = Regulation(title="B unselected", canonical_key="unselected", is_relevant=True, **fields)
+        selected = Regulation(title="C selected", canonical_key="selected", is_relevant=True, **fields)
+        hidden = Regulation(title="D hidden", canonical_key="hidden", is_relevant=False, **fields)
+        s.add_all([other, selected, hidden])
+        s.commit()
+        selected_id, hidden_id = selected.id, hidden.id
+
+    def exported(params):
+        response = c.get("/api/v1/regulations/export", params=params)
+        assert response.status_code == 200
+        rows = list(load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))
+        assert int(response.headers["x-export-total"]) == len(rows) - 1
+        assert response.headers["x-export-truncated"] == "false"
+        return [row[1] for row in rows[1:]]
+
+    ids = f"{selected_id},{reg_id},{reg_id},{hidden_id},999999"
+    assert exported({"ids": ids, "sort": "title", "direction": "asc"}) == ["A selected", "C selected"]
+    assert exported({"ids": ids, "sort": "title", "direction": "desc"}) == ["C selected", "A selected"]
+    assert exported({"ids": ids, "q": "A selected"}) == ["A selected"]
+    assert exported({"ids": ids, "source": "KVKK"}) == []
+    assert exported({"ids": "999999"}) == []
+    assert exported({"sort": "title", "direction": "asc"}) == ["A selected", "B unselected", "C selected"]
+    monkeypatch.setattr("app.api.main.MAX_EXPORT_ROWS", 1)
+    response = c.get("/api/v1/regulations/export", params={"ids": ids, "sort": "title", "direction": "asc"})
+    assert response.headers["x-export-total"] == "2"
+    assert response.headers["x-export-truncated"] == "true"
+    rows = list(load_workbook(BytesIO(response.content)).active.iter_rows(values_only=True))
+    assert len(rows) == 2 and rows[1][1] == "A selected"
+
+
+@pytest.mark.parametrize("ids", ["", " ", ",", "1,", "a", "0", "-1", "1.5", "1,abc",
+                                      "9223372036854775808"])
+def test_export_rejects_invalid_ids(client, ids):
+    c, _ = client
+    response = c.get("/api/v1/regulations/export", params={"ids": ids})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_ids"
+
+
 def test_irrelevant_and_merged_are_hidden(settings, env, client):  # noqa: F811
     reg_id = _ready(settings, env)
     c, sf = client

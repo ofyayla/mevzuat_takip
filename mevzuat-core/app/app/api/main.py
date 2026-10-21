@@ -227,14 +227,24 @@ def regulations_export(session: SessionDep, settings: SettingsDep, actor: ActorD
                                      "priority", "detected_at", "decided_at"] | None = None,
                        direction: Literal["asc", "desc"] = "desc",
                        queue: Literal["yeni", "birikim", "tum", "hazirlaniyor"] | None = None,
-                       effective: str | None = None, needs_unit: bool = False):
+                       effective: str | None = None, needs_unit: bool = False,
+                       ids: Annotated[str | None, Query(max_length=100000)] = None):
     """Liste süzgeçlerine uyan kayıtları Excel (.xlsx) olarak indirir (sayfalamasız, en fazla ``MAX_EXPORT_ROWS``;
-    fazlası varsa ``X-Export-Truncated: true`` başlığı döner)."""
+    fazlası varsa ``X-Export-Truncated: true`` başlığı döner). ``ids`` seçimi mevcut süzgeçlerle daraltır."""
     require(actor, ROLE_VIEWER)
     if status and status not in REVIEW_STATUSES:
         raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
+    selected_ids = None
+    if ids is not None:
+        try:
+            selected_ids = list(dict.fromkeys(int(value) for value in ids.split(",")))
+        except ValueError:
+            raise ApiError(400, "invalid_ids", "ids: virgülle ayrılmış pozitif kayıt numaraları bekleniyor.")
+        if not all(0 < value <= 9223372036854775807 for value in selected_ids):
+            raise ApiError(400, "invalid_ids", "ids: kayıt numaraları pozitif 64 bit tamsayı olmalıdır.")
     query = ListQuery(source, severity, status, unit, int(date_range) if date_range else None, q, metric,
-                      sort=sort, direction=direction, queue=queue, effective=effective, needs_unit=needs_unit)
+                      sort=sort, direction=direction, queue=queue, effective=effective, needs_unit=needs_unit,
+                      ids=selected_ids)
     items, total = export_regulations(session, query, settings, MAX_EXPORT_ROWS)
     headers = {"Content-Disposition": f'attachment; filename="{export_filename(today(settings))}"',
                "X-Export-Total": str(total), "X-Export-Truncated": str(total > len(items)).lower(),

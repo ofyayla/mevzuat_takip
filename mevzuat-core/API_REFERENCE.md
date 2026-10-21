@@ -60,11 +60,16 @@ Bu dosya `app/scripts/gen_api_reference.py` ile OpenAPI şemasından üretilir; 
 
 ## regulations
 
+Excel dışa aktarmada isteğe bağlı `ids`, virgülle ayrılmış pozitif 64 bit kayıt numaralarıdır.
+Verilmezse filtrelenmiş listenin tamamı, verilirse yalnızca bu numaralarla ve mevcut süzgeçlerle eşleşen
+görünür kayıtlar aktarılır. Tekrarlanan numaralar tekilleştirilir; boş veya geçersiz değerler
+`400 invalid_ids` döndürür. Sıralama ve 5.000 kayıt sınırı her iki kapsamda da korunur.
+
 | Yöntem | Yol | Parametreler | Gövde | Açıklama |
 |---|---|---|---|---|
 | `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction`, `queue`, `effective`, `needs_unit`, `unit_changed`, `edited` |  | Regulations |
 | `GET` | `/api/v1/regulations/stats` |  |  | Regulation Stats |
-| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction`, `queue`, `effective`, `needs_unit` |  | Regulations Export |
+| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction`, `queue`, `effective`, `needs_unit`, `ids` |  | Regulations Export |
 | `GET` | `/api/v1/regulations/irrelevant-sample` | `page`, `page_size` |  | Irrelevant Sample List |
 | `POST` | `/api/v1/regulations/{reg_id}/irrelevant-review` | `reg_id` | evet | Irrelevant Review |
 | `POST` | `/api/v1/regulations/bulk-decision` |  | evet | Regulation Bulk Decision |
