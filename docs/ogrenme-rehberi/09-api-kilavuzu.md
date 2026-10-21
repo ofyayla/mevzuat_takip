@@ -35,7 +35,7 @@ services/*  (iş kuralları)  ·  ai/*  ·  collectors/*
 | Konu | Kural | Kaynak |
 |---|---|---|
 | Önek | Her şey `/api/v1` altında; yönetim `/api/v1/admin`, paralel çalışma `/api/v1/evaluation` | `main.py` |
-| Sayfalar | `/` ve `/admin` → portal, `/surec`, `/arsiv`, `/karsilastirma`; statik `/support.js`, `/vendor/*` (React, lucide: dış CDN yok) | `create_app` |
+| Sayfalar | `/` → portal (tek sayfa, `/assets/*`); `/admin`, `/surec`, `/arsiv`, `/karsilastirma` → `/#yonetim`, `/#hat`, `/#arsiv`, `/#karsilastirma` yönlendirmesi; `/eski/*` yedekteki eski arayüz (`/support.js`, `/vendor/*`: yalnızca o sayfalar). Dış CDN yok | `create_app` |
 | Aynı origin | Sayfalar API ile aynı sunucudan gelir; `window.MTP_API_BASE` ile başka bir adrese yönlendirilebilir. CORS yalnız `CORS_ORIGINS` (varsayılan `http://localhost:8080`) için açılır, `ETag` dışa açıktır | `settings.py`, `create_app` |
 | İçerik türü | İstek ve yanıt JSON (UTF-8). İstisnalar: Excel indirme/yükleme (`.xlsx`, `multipart/form-data`) ve `GET /pipeline?format=mermaid` (`text/plain`) | |
 | Alan adları | Yanıtlarda **camelCase** (`publishDate`, `suggestedUnits`); istek gövdesi ve sorgu parametrelerinde **snake_case** (`unit_codes`, `page_size`, `rejection_reason`) | |
@@ -73,7 +73,7 @@ X-Demo-User: Ay%C5%9Fe%20Kaya
 | `mevzuat_expert` | viewer ⊂ expert | `decision`, `units`, `content`, `manual-detections` (yazma) |
 | `mevzuat_admin` | expert ⊂ admin | `/api/v1/admin/*` (tamamı) |
 
-**UI davranışı** (`Mevzuat Takip Portali.dc.html`):
+**UI davranışı** (`portal/assets/*.js`; eski React sayfasında da aynıydı):
 
 - Kullanıcı adı tarayıcıda `localStorage['mtp_user']` içinde tutulur ve **her** `fetch`'e `X-Demo-User` olarak eklenir.
   Başlıktaki "adınız" düğmesi (`changeUser`) değeri değiştirir ve meta + listeyi yeniden yükler.
@@ -144,12 +144,11 @@ kullanıcı güncel durumu görüp kararını yeniden verir.
 
 | Ekran (adres) | Dosya | Çağırdığı uçlar |
 |---|---|---|
-| **Portal – Liste** (`/`) | `portal/Mevzuat Takip Portali.dc.html` | `GET /sources`, `/units`, `/sources/health`, `/me` (açılışta) · `GET /regulations/stats` · `GET /regulations` · `GET /regulations/export` |
-| **Portal – Ayrıntı** (`/#kayit=<id>`) | aynı | `GET /regulations/{id}` · `POST /regulations/{id}/views` · `POST …/decision` · `PUT …/units` · `PATCH …/content` |
-| **Portal – Yönetim** (`/admin`) | aynı | `GET/PUT /admin/settings` · `GET /admin/metrics` · `GET /admin/scans` · `GET /admin/alerts` · `POST /admin/sources/{kod}/run`, `…/backfill` · `POST /admin/reprocess`, `/admin/retry-failed` · `GET/POST /admin/rebaseline` · `GET /admin/audit/verify` |
-| **Süreç haritası** (`/surec`) | `portal/surec-haritasi.html` | `GET /pipeline` · `GET /pipeline/nodes/{id}` · `GET /sources/health` · `GET /pipeline?format=mermaid` |
-| **Arşiv** (`/arsiv`) | `portal/arsiv.html` | `GET /archive/regulations` · `GET /archive/regulations/{id}` · `GET /sources` |
-| **Karşılaştırma** (`/karsilastirma`) | `portal/karsilastirma.html` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) |
+| **Gelen kutusu** (`/#gelen`) | `portal/assets/{api,inbox,app}.js` | `GET /me`, `/sources`, `/units`, `/sources/health` (açılışta) · `GET /regulations/stats` · `GET /regulations?queue=…` · `GET /regulations/export` · `GET /regulations/irrelevant-sample` |
+| **Ayrıntı bölmesi** | aynı | `GET /regulations/{id}` · `GET …/document` · `POST …/views` · `POST …/decision` · `PUT …/units` · `PATCH …/content` · `POST /regulations/bulk-decision` · `POST …/irrelevant-review` · `GET /archive/regulations/{id}` |
+| **Arşiv** (`/#arsiv`) | `portal/assets/views.js` | `GET /regulations?status=…` · `GET /regulations/decision-stats` · `POST …/decision/revise`, `…/decision/reopen` · `GET /archive/regulations?kind=irrelevant` |
+| **Yönetim** (`/#yonetim`, `/#hat`, `/#kaynaklar`, `/#ayarlar`, `/#bakim`) | `portal/assets/views.js` | `GET /pipeline`, `/pipeline/nodes/{id}` · `GET /admin/metrics`, `/admin/scans`, `/admin/alerts` + `…/resolve` · `GET/PUT /admin/settings` (+`/history`, `/preview`) · `POST /admin/sources/{kod}/run`, `…/backfill` · `POST /admin/reprocess` (`dry_run`), `/admin/retry-failed` · `GET/POST /admin/rebaseline` · `GET /admin/audit/verify` |
+| **Excel karşılaştırma** (`/#karsilastirma`) | `portal/assets/views.js` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) |
 | *UI'sı yok (API/CLI)* | — | `POST/GET /evaluation/manual-detections`, `POST …/upload`, `GET /evaluation/report`, `GET /evaluation/filtered-out`, `POST /admin/regulations/{id}/split`, `…/regenerate`, `POST /admin/monitor/run` |
 | Altyapı | — | `GET /healthz`, `GET /readyz` |
 
@@ -786,7 +785,7 @@ Belgenin taramadan portala kadar geçtiği durumları ve her durumdaki canlı sa
 - `nodes[].id` kuralı: `sources`, `fetch`, **`raw:<DURUM>`** (ham belge), **`reg:<DURUM>`** (düzenleme), **`review:<DURUM>`** (portal incelemesi).
   `kind`: `flow` · `ok` · `wait` · `fail` · `terminal` — UI renk/ikon seçer. `queue`: edge'i işleyen Celery kuyruğu.
 - `unknownStatuses`: grafikte karşılığı olmayan bir durum çıktıysa (yeni durum eklendi, haritaya eklenmedi) burada görünür.
-- Yerleşim (sütun/satır) **UI'dadır** (`POS`); yeni düğüm eklenirse hem `services/pipeline.py: NODES` hem `surec-haritasi.html: POS` güncellenmelidir.
+- Yerleşim (sütun/satır) **UI'dadır** (`POS`); yeni düğüm eklenirse hem `services/pipeline.py: NODES` hem `portal/assets/views.js: HAT_COLS` (işleme hattı sütunları) güncellenmelidir.
 
 **Düğüm paneli — `GET /pipeline/nodes/{node_id}?days=&limit=20`** (`limit` 1–100)
 

@@ -1,5 +1,7 @@
 # portal/vendor — üçüncü taraf betikler
 
+> Yeni arayüz (`assets/`) hiçbir üçüncü taraf betik kullanmaz. Bu klasör yalnızca yedekteki eski React arayüzü (`portal/eski/`, `/eski`) içindir.
+
 Portal kurum ağında dış CDN'e (unpkg.com, Google Fonts) çıkmaz; bu dosyalar API tarafından `/vendor/<ad>` adresinden
 sunulur (`app/api/main.py` → `vendor_file`; yalnızca düz dosya adı, `.js`/`.css`/`.map`). Sürümler sabittir, dosya
 içeriği değiştirilmez.
