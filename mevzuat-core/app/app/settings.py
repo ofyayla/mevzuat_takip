@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     ocr_model: str = "prebuilt-read"
     ocr_locale: str | None = "tr-TR"
     ocr_timeout_s: float = 180.0
+    ocr_batch_pages: int = 20                # taranmış sayfalar bu kadarlık gruplar halinde ayrı istekle gönderilir
+    ocr_max_request_bytes: int = 8_000_000   # bundan büyük PDF tek istekle gönderilmez (ağ geçidi 413 verebiliyor)
     ocr_min_chars_per_page: int = 40         # metin katmanı bundan azsa sayfa taranmış kabul edilir
     ocr_baseline: bool = False               # ilk taramadaki eski belgeler de OCR'a gönderilsin mi (yük)
     ocr_verify_tls: bool = True

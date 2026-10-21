@@ -101,23 +101,60 @@ def extract_pdf(content: bytes, settings: Settings, ocr: OcrEngine | None, *, al
             raise UnsupportedContent("PDF parola korumalı")
         texts = [_page_text(page) for page in doc]
         scanned = [i + 1 for i, page in enumerate(doc) if _needs_ocr(page, texts[i], settings)]
-    res = ExtractResult("", "pdf_text", page_count=len(texts))
-    if scanned and ocr is not None and allow_ocr:
-        try:
-            o = ocr.analyze(content, "application/pdf", pages=scanned)
-        except OcrError as e:     # servis kesintisi belgeyi düşürmesin: OCR kapalıymış gibi bekletilir
-            log.warning("OCR başarısız, %d sayfa OCR bekliyor: %s", len(scanned), e)
-            res.ocr_pending_pages, res.ocr_error = scanned, str(e)
-        else:
-            for n in scanned:
-                if (t := o.pages.get(n)) and len(t.strip()) > len(texts[n - 1].strip()):
+        res = ExtractResult("", "pdf_text", page_count=len(texts))
+        if scanned and ocr is not None and allow_ocr:
+            done, failed, confs, error = _ocr_in_batches(doc, content, scanned, ocr, settings)
+            for n, t in done.items():
+                if t and len(t.strip()) > len(texts[n - 1].strip()):
                     texts[n - 1] = t
-            res.ocr_pages, res.ocr_confidence = scanned, o.confidence
-            res.method = "ocr" if len(scanned) == len(texts) else "pdf_text+ocr"
-    elif scanned:
-        res.ocr_pending_pages = scanned
+            res.ocr_pages = sorted(done)
+            res.ocr_confidence = round(sum(confs) / len(confs), 4) if confs else None
+            if failed:     # servis kesintisi belgeyi düşürmesin: kalan sayfalar OCR bekler, metin katmanıyla ilerlenir
+                res.ocr_pending_pages, res.ocr_error = failed, error
+            if done:
+                res.method = "ocr" if len(done) == len(texts) else "pdf_text+ocr"
+        elif scanned:
+            res.ocr_pending_pages = scanned
     res.text = PAGE_SEP.join(normalize_text(t) for t in texts)
     return res
+
+
+def _ocr_in_batches(doc, content: bytes, scanned: list[int], ocr: OcrEngine, settings: Settings):
+    """Taranmış sayfaları ``ocr_batch_pages``'lik gruplar halinde OCR'a gönderir; her grup yalnızca kendi sayfalarını
+    içeren küçük bir PDF'tir. Tek istekte yüzlerce sayfa göndermek ağ geçidinde 413'e ve toplam süre aşımına yol
+    açıyordu. Küçük belge (az sayfa, küçük dosya) eskisi gibi tek istekle gider. Başarısız grubun sayfaları
+    ``failed``'da döner; başarılı gruplar korunur. Dönüş: (sayfa→metin, başarısız sayfalar, güvenler, hata)."""
+    import pymupdf
+
+    size = max(settings.ocr_batch_pages, 1)
+    if len(scanned) <= size and len(content) <= settings.ocr_max_request_bytes:
+        batches = [(scanned, content, scanned)]
+    else:
+        batches = []
+        for i in range(0, len(scanned), size):
+            part = scanned[i:i + size]
+            sub = pymupdf.open()
+            for n in part:
+                sub.insert_pdf(doc, from_page=n - 1, to_page=n - 1)
+            batches.append((part, sub.tobytes(garbage=3, deflate=True), list(range(1, len(part) + 1))))
+            sub.close()
+    done: dict[int, str] = {}
+    failed: list[int] = []
+    confs: list[float] = []
+    error: str | None = None
+    for part, data, sent_pages in batches:
+        try:
+            o = ocr.analyze(data, "application/pdf", pages=sent_pages)
+        except OcrError as e:
+            log.warning("OCR grubu başarısız (%d sayfa, ilk sayfa %d): %s", len(part), part[0], e)
+            failed += part
+            error = error or str(e)
+            continue
+        for sent, n in zip(sent_pages, part):    # alt PDF'te sayfa no 1..k; asıl belgedeki numaraya geri eşlenir
+            done[n] = o.pages.get(sent, "")
+        if o.confidence is not None:
+            confs.append(o.confidence)
+    return done, failed, confs, error
 
 
 def _page_text(page) -> str:
