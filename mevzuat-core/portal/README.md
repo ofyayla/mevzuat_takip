@@ -36,6 +36,22 @@ Bildirim arayüzü regresyon testleri (depo kökünden, Node.js ile, ek paket ge
 - Onayda birim seçimi değiştiyse önce `PUT /units`, sonra `POST /decision` çağrılır (ikisi de güncel sürümle).
 - Toplu işlem en fazla 100 kayıt alır; sonuçta `done`/`skipped` nedenleriyle özetlenir.
 
+## İşleme hattı
+
+- Konumu değişmez: **Yönetim → İşleme hattı**, doğrudan `/#hat`.
+- Eski süreç haritasının beş katmanlı SVG görünümü kullanılır: toplama, ham belge, düzenleme kaydı,
+  YZ analizi ve portal incelemesi. Düğümler, canlı sayılar ve oklar `GET /pipeline` yanıtından çizilir;
+  kesikli oklar yeniden deneme / işleme yollarını gösterir.
+- **Teknik adlar** ve **Geçiş etiketleri** ayrı ayrı açılabilir. Bir düğüm seçilince bağlantılı geçişler
+  vurgulanır; sağ panelde açıklama, ölçümler, geçişler ve en yeni kayıtlar görünür.
+- Düğümler fare, Tab ve Enter / Boşluk ile seçilir. Dar ekranda yalnız harita yatay kayar, panel alta geçer.
+  Yenilemede seçim, klavye odağı ve haritanın yatay kaydırma konumu korunur.
+- Mevcut 30 saniyelik otomatik yenileme, Mermaid kopyalama ve yönetim eylemleri korunur.
+  Kayıt listesi yüklenemezse hata ve yeniden deneme düğmesi gösterilir; boş liste gibi sunulmaz.
+
+Regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
+`node --test mevzuat-core/portal/tests/pipeline.test.cjs`
+
 ## Sıralama
 
 - Gelen kutusunun Yeni, Birikim ve Tümü kuyruklarında öncelik, tespit tarihi, yürürlük tarihi ve önem için
