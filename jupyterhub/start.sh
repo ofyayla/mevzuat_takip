@@ -76,7 +76,7 @@ MONGO_URL='mongodb://127.0.0.1:27017'
 MONGO_DB='mevzuat_crawl'
 
 # LLM (vLLM, OpenAI uyumlu)
-LLM_BASE_URL='https://qwen36-35b-a3b-nvfp4.llm.alb.albarakatech.com/v1'
+LLM_BASE_URL='https://doc-parser-dev.artinttest.albarakaturk.local/v1'
 LLM_MODEL='qwen36-35b-a3b-nvfp4'
 LLM_API_KEY='EMPTY'
 LLM_MAX_CONCURRENCY='2'
