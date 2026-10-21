@@ -18,6 +18,15 @@ Eski adresler yeni sayfaya yönlenir: `/surec → /#hat`, `/arsiv → /#arsiv`, 
 
 Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç noktalar için `API_REFERENCE.md`.
 
+## Bildirimler
+
+- Sağ üstteki zil menüsünde bir bildirime tıklamak, açık alarmların listelendiği **Yönetim → Genel bakış**
+  sayfasına (`#yonetim`) yönlendirir. Bildirim bağlantıları klavyeyle de açılabilir.
+- Bildirime veya **Tümünü gör** bağlantısına basınca menü kapanır; aynı sayfadayken de açık kalmaz.
+
+Bildirim arayüzü regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
+`node --test mevzuat-core/portal/tests/notifications.test.cjs`
+
 ## Hata ve eşzamanlılık davranışı
 
 - Karar, birim ve içerik yazmaları `If-Match: "<version>"` gönderir. **412 `version_mismatch`**: kayıt başkası tarafından
