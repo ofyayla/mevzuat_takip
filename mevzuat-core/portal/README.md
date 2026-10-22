@@ -18,6 +18,18 @@ Eski adresler yeni sayfaya yönlenir: `/surec → /#hat`, `/arsiv → /#arsiv`, 
 
 Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç noktalar için `API_REFERENCE.md`.
 
+## Ayrıntı bölmesinin genişliği
+
+- Gelen kutusu ve Arşiv ekranlarında sağdaki ayrıntı bölmesinin **sol kenarını sürükleyerek**
+  genişliği kesintisiz ayarlayabilirsiniz; dokunmatik ekranlar da desteklenir.
+- Kenara klavyeyle odaklanıp **Sol/Sağ ok** ile 10 piksel, **Shift + ok** ile 50 piksel
+  değiştirebilirsiniz. **Home** en dar, **End** en geniş boyuta getirir.
+- Bölme en az 320 piksel olur; daha dar ekranlarda ekran genişliğiyle sınırlanır.
+  Masaüstünde listenin en az 320 pikseli görünür kalır.
+- Seçilen genişlik kayıt, sekme ve ekran değişimlerinde korunur; sayfa yenilenince varsayılan boyuta döner.
+
+Regresyon testleri: `node --test mevzuat-core/portal/tests/detail-resize.test.cjs`
+
 ## Baseline sınırı
 
 - **Yönetim → Bakım ve denetim → Baseline sınırı → Yeni sınır** alanında tarih, takvim simgesinden
