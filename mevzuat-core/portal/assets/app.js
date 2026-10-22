@@ -301,6 +301,7 @@ async function loadAdmin(tab) {
       if (!S.set || !settingDirty().length) { S.set = numify(d.values); S.setSaved = { ...S.set }; }
     } else if (tab === 'bakim') { const [baseline, failed] = await Promise.all([GET('/admin/rebaseline'), GET('/pipeline/nodes/reg:AI_FAILED', { limit: 20 }), loadStats()]); S.adm.bakim = { baseline, failed: failed.items }; }
     else if (tab === 'excel') S.adm.excel = true;
+    else if (tab === 'deney') { S.adm.deney = true; await loadPromptExperimentHome(); }
   } catch (e) { S.admErr = errMsg(e); }
   if (S.view === 'yonetim' && S.adminTab === tab) { const y = scrollY; renderAll(); scrollTo(0, y); }
 }
@@ -363,6 +364,11 @@ document.addEventListener('click', e => {
     case 'xl-review': S.xl.reviewNo = S.xl.reviewNo === +t.dataset.no ? null : +t.dataset.no; renderAll(); break;
     case 'xl-select': xlSelect(+t.dataset.no, id); break;
     case 'xl-unselect': xlSelect(+t.dataset.no, null); break;
+    case 'pe-add': addPromptExperimentRecord(+id); break;
+    case 'pe-remove': removePromptExperimentRecord(+id); break;
+    case 'pe-start': startPromptExperiment(); break;
+    case 'pe-open': openPromptExperiment(+id); break;
+    case 'pe-reload': loadPromptExperimentHome(); break;
     case 'edit-start': startEdit(S.openId); break;
     case 'edit-mode': S.edit.mode = t.dataset.m; { const w = $('#editWhy'); if (w) S.edit.why = w.value; } repaint(); { const b = document.querySelector('.seg-b[aria-checked=true]'); if (b) b.focus({ preventScroll: true }); } break;
     case 'edit-cancel': cancelEdit(); repaint(); break;
@@ -504,6 +510,11 @@ async function openAnywhere(id) {
 /* ---------- değişiklik ve yazma olayları */
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.change === 'pe-label') {
+    const item = S.pe.selected[t.dataset.id];
+    if (item) item.expectedRelevant = t.value === 'unknown' ? null : t.value === 'true';
+    return;
+  }
   if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; const k = t.dataset.f; refreshInbox(); listChanged(); const nb = document.querySelector(`[data-act=pop-filter][data-f=${k}]`); if (nb) openPop(nb, filterPopHtml(k), { f: k }); return; }
   if (t.id === 'xlFile' && t.files[0] && !S.xl.running) { xlSetFile(t.files[0]); return; }
   if (t.id === 'xlM') { S.xl.method = t.value; renderAll(); return; }
@@ -522,6 +533,12 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.id === 'peSearch') {
+    S.pe.search = t.value; clearTimeout(peSearchTimer);
+    peSearchTimer = setTimeout(searchPromptExperimentRecords, 300); return;
+  }
+  if (t.id === 'pePromptB') { S.pe.promptB = t.value; return; }
+  if (t.id === 'peTitle') { S.pe.title = t.value; return; }
   if (t.id === 'blIn') {
     S.bl = t.value; S.blPlan = null; S.blErr = null;
     const card = t.closest('.mcard'); card.querySelector('[data-act="bl-apply"]').disabled = true;
@@ -621,7 +638,7 @@ addEventListener('scroll', () => { if (S.pop) closePop(); }, { passive: true });
 setInterval(() => { if (S.view === 'yonetim' && S.adminTab === 'hat' && S.auto && !document.hidden && !$('#dlg')) loadAdmin('hat'); }, 30000);
 
 /* ---------- yönlendirme ve açılış */
-const ROUTES = { gelen: ['gelen'], arsiv: ['arsiv'], karsilastirma: ['yonetim', 'excel'], yonetim: ['yonetim', 'genel'], hat: ['yonetim', 'hat'], kaynaklar: ['yonetim', 'kaynaklar'], ayarlar: ['yonetim', 'ayarlar'], bakim: ['yonetim', 'bakim'] };
+const ROUTES = { gelen: ['gelen'], arsiv: ['arsiv'], karsilastirma: ['yonetim', 'excel'], 'prompt-deneyi': ['yonetim', 'deney'], yonetim: ['yonetim', 'genel'], hat: ['yonetim', 'hat'], kaynaklar: ['yonetim', 'kaynaklar'], ayarlar: ['yonetim', 'ayarlar'], bakim: ['yonetim', 'bakim'] };
 function go(hash) { if (location.hash.slice(1) === hash) route(); else location.hash = hash; }
 function route() {
   const h = location.hash.slice(1); let r = ROUTES[h] || ROUTES.gelen;

@@ -149,6 +149,7 @@ kullanıcı güncel durumu görüp kararını yeniden verir.
 | **Arşiv** (`/#arsiv`) | `portal/assets/views.js` | `GET /regulations?status=…` · `GET /regulations/decision-stats` · `POST …/decision/revise`, `…/decision/reopen` · `GET /archive/regulations?kind=irrelevant` |
 | **Yönetim** (`/#yonetim`, `/#hat`, `/#kaynaklar`, `/#ayarlar`, `/#bakim`) | `portal/assets/views.js` | `GET /pipeline`, `/pipeline/nodes/{id}` · `GET /admin/metrics`, `/admin/scans`, `/admin/alerts` + `…/resolve` · `GET/PUT /admin/settings` (+`/history`, `/preview`) · `POST /admin/sources/{kod}/run`, `…/backfill` · `POST /admin/reprocess` (`dry_run`), `/admin/retry-failed` · `GET/POST /admin/rebaseline` · `GET /admin/audit/verify` |
 | **Excel karşılaştırma** (`/#karsilastirma`) | `portal/assets/views.js` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) |
+| **Prompt deneyi** (`/#prompt-deneyi`) | `portal/assets/views.js` | `GET /evaluation/prompt-experiments/defaults`, `/records`, `/` · `POST /evaluation/prompt-experiments` · `GET /evaluation/prompt-experiments/{id}` |
 | *UI'sı yok (API/CLI)* | — | `POST/GET /evaluation/manual-detections`, `POST …/upload`, `GET /evaluation/report`, `GET /evaluation/filtered-out`, `POST /admin/regulations/{id}/split`, `…/regenerate`, `POST /admin/monitor/run` |
 | Altyapı | — | `GET /healthz`, `GET /readyz` |
 
@@ -920,6 +921,25 @@ POST /api/v1/evaluation/manual-detections
 `system` (gösterilen, karara bağlanan, reddedilen, `unnecessary_rate`, bekleyen), `severity_agreement`, `unit_accuracy`
 (`top1`, `any`), `latency_hours` (tespit gecikmesi, `median`, `p90`) ve `threshold_sweep[]` (ilgililik eşiğini 0.2–0.6 oynatırsak kaçırma/gereksiz oranı nasıl değişir — eşik ayarı için).
 `snake_case` kullanır (bu grup portal sözleşmesinden önce yazıldığı için).
+
+### 11.3 Prompt A/B deneyi *(expert; Yönetim → Prompt deneyi)*
+
+Bu deney mevcut ilgililik hattından ayrıdır. Her run için A sistem promptu, B düzenlenebilir sistem promptu, seçilen
+kayıtlar, opsiyonel beklenen ilgililik etiketleri ve aynı model/örnekleme/eşik/ağırlık ayarlarının anlık görüntüsü
+saklanır. A ve B aynı kayıt bağlamı ve kullanıcı mesajı ile çalışır. Üretim etiketleri ve uzman kararları değişmez.
+
+| Uç | Açıklama |
+|---|---|
+| `GET /evaluation/prompt-experiments/defaults` | A promptu, model ve çalışma anındaki sabit ayarlar |
+| `GET /evaluation/prompt-experiments/records?q=` | Seçim için kayıt arama (en çok 30 sonuç) |
+| `POST /evaluation/prompt-experiments` | 1–50 kayıt ve B promptuyla deney oluşturur; `202` ile kuyruğa alır |
+| `GET /evaluation/prompt-experiments` | Son 50 kalıcı deney |
+| `GET /evaluation/prompt-experiments/{id}` | Prompt anlık görüntüleri, kararlar, gerekçeler, skorlar ve ölçümler |
+
+Her iki promptun çıktıları `prompt_experiment` / `prompt_experiment_item` tablolarında saklanır; LLM çağrısı ayrıca
+mevcut `llm_call` önbelleğini kullanır. Aynı tam girdi, model, prompt sürümü ve örnekleme parametreleri tekrar
+çalıştırılırsa başarılı önbellek sonucu kullanılır. Etiketsiz kayıtta doğruluk/precision/recall hesaplanmaz; yalnızca
+A/B karar değişikliği raporlanır. LLM hataları ilgili tarafın hata alanında gösterilir.
 
 ---
 

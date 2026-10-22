@@ -4,6 +4,7 @@
    ============================================================================================================ */
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
+S.pe = { defaults: null, runs: [], records: [], selected: {}, detail: null, search: '', error: null, loading: false };
 S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null };
 S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
@@ -182,11 +183,11 @@ function xlExtra(res) {
 }
 
 /* ---------- yönetim kabuğu */
-const ADM = [['genel', 'Genel bakış', 'yonetim'], ['hat', 'İşleme hattı', 'hat'], ['kaynaklar', 'Kaynaklar ve taramalar', 'kaynaklar'], ['ayarlar', 'YZ ayarları', 'ayarlar'], ['excel', 'Excel karşılaştırma', 'karsilastirma'], ['bakim', 'Bakım ve denetim', 'bakim']];
-const ADM_LEDE = { genel: 'Sistem sağlığı, açık alarmlar ve kaynak durumu. Bu bölümü yalnızca yönetici rolündekiler görür.', hat: 'Kayıtların toplama aşamasından uzman kararına kadar geçtiği adımlar. Kutudaki büyük sayı, o adımda şu an bekleyen kayıt sayısıdır.', kaynaklar: 'Her kaynağın son taraması, sağlığı ve sonraki planı. Taramayı elle başlatabilir ya da geçmiş tarih aralığını yeniden tarayabilirsiniz.', ayarlar: 'İlgililik, güven ve mükerrer tespiti eşikleri. Değişiklikler gerekçesiyle kaydedilir ve etkisi önceden gösterilir.', excel: 'Başkanlığın mevzuat listesini yükleyin; her satır sistem kayıtlarıyla eşleştirilir. Ters yönde, aynı dönemde portalda görünüp listede olmayan kayıtlar da listelenir. Karşılaştırma hiçbir şeyi kaydetmez.', bakim: 'Yeniden işleme, başarısız YZ kayıtları, baseline sınırı ve denetim izi.' };
+const ADM = [['genel', 'Genel bakış', 'yonetim'], ['hat', 'İşleme hattı', 'hat'], ['kaynaklar', 'Kaynaklar ve taramalar', 'kaynaklar'], ['ayarlar', 'YZ ayarları', 'ayarlar'], ['excel', 'Excel karşılaştırma', 'karsilastirma'], ['deney', 'Prompt deneyi', 'prompt-deneyi'], ['bakim', 'Bakım ve denetim', 'bakim']];
+const ADM_LEDE = { genel: 'Sistem sağlığı, açık alarmlar ve kaynak durumu. Bu bölümü yalnızca yönetici rolündekiler görür.', hat: 'Kayıtların toplama aşamasından uzman kararına kadar geçtiği adımlar. Kutudaki büyük sayı, o adımda şu an bekleyen kayıt sayısıdır.', kaynaklar: 'Her kaynağın son taraması, sağlığı ve sonraki planı. Taramayı elle başlatabilir ya da geçmiş tarih aralığını yeniden tarayabilirsiniz.', ayarlar: 'İlgililik, güven ve mükerrer tespiti eşikleri. Değişiklikler gerekçesiyle kaydedilir ve etkisi önceden gösterilir.', excel: 'Başkanlığın mevzuat listesini yükleyin; her satır sistem kayıtlarıyla eşleştirilir. Ters yönde, aynı dönemde portalda görünüp listede olmayan kayıtlar da listelenir. Karşılaştırma hiçbir şeyi kaydetmez.', deney: 'Aynı kayıtları ve ayarları mevcut A promptu ile düzenlenebilir B promptunda çalıştırın. Deney sonuçları kalıcı saklanır; canlı ilgililik etiketleri değişmez.', bakim: 'Yeniden işleme, başarısız YZ kayıtları, baseline sınırı ve denetim izi.' };
 function viewYonetim() {
   const t = ADM.find(a => a[0] === S.adminTab) || ADM[0];
-  const body = S.admErr ? `<div class="empty card"><b>Veri yüklenemedi</b><span>${esc(S.admErr)}</span><button class="btn" data-act="adm-reload">Yeniden dene</button></div>` : !S.adm[t[0]] && t[0] !== 'excel' ? '<div class="empty card" aria-busy="true"><b>Yükleniyor…</b></div>' : { genel: admGenel, hat: admHat, kaynaklar: admKaynak, ayarlar: admAyar, excel: admExcel, bakim: admBakim }[t[0]]();
+  const body = S.admErr ? `<div class="empty card"><b>Veri yüklenemedi</b><span>${esc(S.admErr)}</span><button class="btn" data-act="adm-reload">Yeniden dene</button></div>` : !S.adm[t[0]] && t[0] !== 'excel' && t[0] !== 'deney' ? '<div class="empty card" aria-busy="true"><b>Yükleniyor…</b></div>' : { genel: admGenel, hat: admHat, kaynaklar: admKaynak, ayarlar: admAyar, excel: admExcel, deney: admPromptExperiment, bakim: admBakim }[t[0]]();
   return `<div class="page gut"><div class="crumb"><a href="#yonetim">Yönetim</a>${t[0] !== 'genel' ? ` › ${t[1]}` : ''}</div>
     <div class="ph"><div><h1>${t[0] === 'genel' ? 'Yönetim' : t[1]}</h1><p class="lede">${ADM_LEDE[t[0]]}</p></div></div>
     <div class="tabs adm-tabs">${ADM.map(a => `<a class="tab" href="#${a[2]}" ${a[0] === t[0] ? 'aria-current="page"' : ''}>${a[1]}${a[0] === 'genel' && openAlarms() ? `<span class="cnt h-crit">${openAlarms()}</span>` : ''}</a>`).join('')}</div>${body}</div>`;
@@ -443,4 +444,161 @@ function admBakim() {
     <div class="ph-act"><button class="btn" data-act="chain">${ic('check')}Zinciri doğrula</button></div></section>
   <section class="card mcard"><h3>Kimlik ve yetki</h3><p>Kararlar kullanıcı adıyla kaydedilir. Kurumsal tek oturum açma (SSO) ayrı fazda eklenecek; o zamana kadar ad, istek başlığıyla gelir.</p>
     <div class="result"><b>${esc(Boot.me.name)}</b><span>${esc(Boot.me.title || '')}</span><span class="muted">Roller: ${esc((Boot.me.roles || []).join(', '))}</span></div></section></div>`;
+}
+
+async function loadPromptExperimentHome() {
+  const p = S.pe; p.error = null;
+  try {
+    if (!p.defaults) {
+      p.defaults = await GET('/evaluation/prompt-experiments/defaults');
+      if (!p.promptB) p.promptB = p.defaults.systemPromptA;
+    }
+    const [runs, records] = await Promise.all([
+      GET('/evaluation/prompt-experiments'),
+      GET('/evaluation/prompt-experiments/records', { q: p.search }),
+    ]);
+    p.runs = runs.items || []; p.records = records.items || [];
+  } catch (e) { p.error = errMsg(e); }
+  if (S.view === 'yonetim' && S.adminTab === 'deney') renderAll();
+}
+
+let peSearchTimer = null;
+async function searchPromptExperimentRecords() {
+  const p = S.pe;
+  try {
+    const records = await GET('/evaluation/prompt-experiments/records', { q: p.search });
+    p.records = records.items || []; p.error = null;
+  } catch (e) { p.error = errMsg(e); }
+  if (S.view === 'yonetim' && S.adminTab === 'deney') {
+    const pos = $('#peSearch')?.selectionStart;
+    renderAll();
+    const input = $('#peSearch');
+    if (input) { input.focus(); input.setSelectionRange(pos, pos); }
+  }
+}
+
+function addPromptExperimentRecord(id) {
+  const p = S.pe; const record = p.records.find(item => item.id === id);
+  if (!p.selected[id] && Object.keys(p.selected).length >= ((p.defaults || {}).maxRecords || 50)) {
+    p.error = `Bir deneye en fazla ${N((p.defaults || {}).maxRecords || 50)} kayıt eklenebilir.`; renderAll(); return;
+  }
+  if (record) p.selected[id] = { ...record, expectedRelevant: null };
+  p.error = null;
+  renderAll();
+}
+
+function removePromptExperimentRecord(id) {
+  delete S.pe.selected[id]; S.pe.error = null;
+  renderAll();
+}
+
+async function startPromptExperiment() {
+  const p = S.pe;
+  const records = Object.entries(p.selected).map(([id, record]) => ({
+    regulation_id: +id, expected_relevant: record.expectedRelevant,
+  }));
+  const promptInput = $('#pePromptB');
+  const titleInput = $('#peTitle');
+  const systemPrompt = promptInput ? promptInput.value : p.promptB || '';
+  const title = (titleInput ? titleInput.value : p.title || '').trim();
+  if (!records.length) { p.error = 'Deney için en az bir kayıt seçin.'; renderAll(); return; }
+  if (!title) { p.error = 'Deneye bir ad verin.'; renderAll(); return; }
+  p.promptB = systemPrompt; p.error = null; p.loading = true; renderAll();
+  try {
+    const created = await api('POST', '/evaluation/prompt-experiments', {
+      body: { title, records, system_prompt_b: systemPrompt },
+    }).then(r => r.data);
+    p.detail = created; p.runs = [created, ...p.runs.filter(run => run.id !== created.id)];
+    p.selected = {}; toast('Prompt deneyi kaydedildi ve çalıştırıldı.');
+    pollPromptExperiment(created.id);
+  } catch (e) { p.error = errMsg(e); }
+  p.loading = false; renderAll();
+}
+
+async function openPromptExperiment(id) {
+  const p = S.pe;
+  try {
+    p.detail = await GET(`/evaluation/prompt-experiments/${id}`);
+    pollPromptExperiment(id);
+  } catch (e) { p.error = errMsg(e); }
+  renderAll();
+}
+
+function pollPromptExperiment(id) {
+  clearTimeout(S.pe.pollTimer);
+  const refresh = async () => {
+    if (S.view !== 'yonetim' || S.adminTab !== 'deney') return;
+    try {
+      const detail = await GET(`/evaluation/prompt-experiments/${id}`);
+      if (S.pe.detail && S.pe.detail.id === id) S.pe.detail = detail;
+      S.pe.runs = [detail, ...S.pe.runs.filter(run => run.id !== id)];
+      if (['queued', 'running'].includes(detail.status)) S.pe.pollTimer = setTimeout(refresh, 1500);
+    } catch (e) { S.pe.error = errMsg(e); }
+    if (S.view === 'yonetim' && S.adminTab === 'deney') renderAll();
+  };
+  S.pe.pollTimer = setTimeout(refresh, 500);
+}
+
+function peMetricCell(label, metric) {
+  return `<div class="card"><span class="kpi-l">${label}</span><span class="kpi-v num">${metric.labelled ? `${N(metric.tp)} / ${N(metric.fp)} / ${N(metric.fn)}` : '—'}</span><span class="kpi-s">Doğru ilgili / gereksiz / kaçırılan · ${N(metric.labelled)} etiketli</span><span class="kpi-s">Precision ${metric.precision == null ? '—' : '%' + Math.round(metric.precision * 100)} · Recall ${metric.recall == null ? '—' : '%' + Math.round(metric.recall * 100)}</span></div>`;
+}
+
+function peDecision(result, error) {
+  if (error) return `<div class="result"><span class="field-err">${esc(error)}</span></div>`;
+  if (!result) return '<div class="result"><span>Sonuç bekleniyor…</span></div>';
+  return `<div class="result"><b>${result.is_relevant ? 'İlgili' : 'İlgisiz'} · skor ${dec(result.score, 3)}</b>
+    <span>${result.uncertain ? 'Tereddüt var' : 'Tereddüt yok'} · ${esc(result.band || '—')} · ${result.cached ? 'önbellekten' : 'yeni LLM sonucu'}</span>
+    <span>${esc(result.rationale || 'Gerekçe yok')}</span>
+    ${result.topics && result.topics.length ? `<span class="muted">Konular: ${esc(result.topics.join(', '))}</span>` : ''}</div>`;
+}
+
+function promptExperimentResults(detail) {
+  if (!detail) return '';
+  const summary = detail.summary;
+  const metricCards = summary ? `<div class="cards">${peMetricCell('A · mevcut prompt', summary.A)}${peMetricCell('B · taslak prompt', summary.B)}
+    <div class="card"><span class="kpi-l">Karar değişikliği</span><span class="kpi-v num">${N(summary.changed)}</span><span class="kpi-s">${N(summary.unlabelled)} etiketsiz kayıt yalnız farklılık olarak sayılır</span><span class="kpi-s">${N(summary.cachedCalls)} sonuç önbellekten</span></div></div>` : '';
+  const items = (detail.items || []).map(item => `<article class="card mcard">
+    <h3>${esc(item.title)}</h3><p>Kayıt #${N(item.regulationId)} · beklenen: ${item.expectedRelevant == null ? 'etiketlenmedi' : item.expectedRelevant ? 'ilgili' : 'ilgisiz'} · ${esc(item.status)}</p>
+    <div class="grid2"><section><b>A · mevcut prompt</b>${peDecision(item.A, item.errorA)}</section><section><b>B · taslak prompt</b>${peDecision(item.B, item.errorB)}</section></div>
+    <details><summary>Girdi özeti ve önbellek kimliği</summary><code>${esc(item.inputHash || 'henüz oluşmadı')}</code></details></article>`).join('');
+  return `<section class="stack" style="margin-top:18px"><div class="sec-h"><h2>${esc(detail.title)}</h2><p>${esc(detail.status)} · ${detail.createdAt ? fDT(pdt(detail.createdAt)) : ''}</p></div>
+    ${summary ? metricCards : '<div class="result">A/B sonuçları kaydediliyor…</div>'}
+    <details><summary>A ve B prompt anlık görüntüleri</summary><div class="grid2">
+      <pre class="card" style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(detail.systemPromptA || '')}</pre>
+      <pre class="card" style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(detail.systemPromptB || '')}</pre></div></details>
+    ${items || '<div class="empty card">Henüz kayıt sonucu yok.</div>'}</section>`;
+}
+
+function admPromptExperiment() {
+  const p = S.pe; const d = p.defaults || {}; const selected = Object.values(p.selected);
+  const selectedIds = new Set(selected.map(record => record.id));
+  const provider = d.provider && d.provider !== 'none';
+  const recordRows = p.records.map(record => `<div class="alarm-row" style="grid-template-columns:minmax(0,1fr) auto;display:grid;gap:10px;align-items:center">
+    <div class="msg"><b>${esc(record.title)}</b><small>${esc(record.issuer || '—')} · ${record.publishDate ? esc(record.publishDate) : 'tarih yok'} · ${esc(record.status)}</small></div>
+    <button class="btn btn-sm" data-act="pe-add" data-id="${record.id}" ${selectedIds.has(record.id) || selected.length >= (d.maxRecords || 50) ? 'disabled' : ''}>${selectedIds.has(record.id) ? 'Eklendi' : 'Seç'}</button></div>`).join('');
+  const selectedRows = selected.map(record => `<div class="alarm-row" style="grid-template-columns:minmax(0,1fr) auto auto;display:grid;gap:10px;align-items:center">
+    <div class="msg"><b>${esc(record.title)}</b><small>#${N(record.id)} · ${esc(record.issuer || '—')}</small></div>
+    <select class="select" data-change="pe-label" data-id="${record.id}" aria-label="${esc(record.title)} beklenen ilgililik">
+      <option value="unknown" ${record.expectedRelevant == null ? 'selected' : ''}>Etiketsiz</option>
+      <option value="true" ${record.expectedRelevant === true ? 'selected' : ''}>İlgili</option>
+      <option value="false" ${record.expectedRelevant === false ? 'selected' : ''}>İlgisiz</option>
+    </select><button class="btn btn-sm" data-act="pe-remove" data-id="${record.id}">Kaldır</button></div>`).join('');
+  const runs = p.runs.map(run => `<button class="btn btn-sm" data-act="pe-open" data-id="${run.id}">${esc(run.title)} · ${esc(run.status)} · ${run.createdAt ? fDT(pdt(run.createdAt)) : ''}</button>`).join('');
+  const settings = d.settings || {};
+  return `<div class="cards">
+    <section class="card mcard"><h3>Test kayıtları</h3><p>Mevcut kayıtları seçin. Beklenen ilgililik etiketi yalnızca bu deneyin ölçümünde kullanılır; seçilmezse doğruluk metriğine katılmaz.</p>
+      <label class="search">${ic('search')}<input id="peSearch" type="search" placeholder="Başlık veya kurumda ara" value="${esc(p.search)}"></label>
+      <div class="stack" style="max-height:320px;overflow:auto">${recordRows || '<div class="result">Kayıt bulunamadı.</div>'}</div>
+      <h3>Deney örneklemi (${N(selected.length)}/50)</h3><div class="stack">${selectedRows || '<div class="result">Henüz kayıt seçilmedi.</div>'}</div>
+    </section>
+    <section class="card mcard"><h3>A/B ayarları</h3><p>A: kayıt oluşturulurken anlık görüntüsü alınan mevcut sistem promptu. B: düzenlenebilir tam sistem promptu.</p>
+      <div class="result"><b>${esc(d.provider || 'LLM kapalı')} · ${esc(d.model || '—')}</b><span>Eşik ${dec(settings.relevanceThreshold, 2)} · ağırlıklar ${dec(settings.relevanceWeightModel, 2)} / ${dec(settings.relevanceWeightVotes, 2)} / ${dec(settings.relevanceWeightRules, 2)} · örnek ${N(settings.relevanceSamples)} · sıcaklık ${dec(settings.sampleTemperature, 2)}</span><span>A ve B aynı belge girdisi, model ve ayarlarla çalışır. Yeni çağrı gerektiğinde iki promptun her biri için en çok ${N(selected.length * 2 * (settings.relevanceSamples || 1))} örnek çağrısı yapılır; eşleşen sonuçlar önbellekten gelir.</span></div>
+      <label class="field">Deney adı<input class="input" id="peTitle" maxlength="200" placeholder="Örn. İşveren ve veri sorumlusu rolleri" value="${esc(p.title || '')}"></label>
+      <label class="field">B · taslak sistem promptu<textarea class="input" id="pePromptB" rows="16" maxlength="30000">${esc(p.promptB || d.systemPromptA || '')}</textarea></label>
+      ${p.error ? `<span class="field-err">${esc(p.error)}</span>` : ''}
+      <div class="ph-act"><button class="btn btn-primary" data-act="pe-start" ${!provider || p.loading || !selected.length ? 'disabled' : ''}>${p.loading ? 'Kaydediliyor…' : 'A/B deneyini çalıştır'}</button><button class="btn" data-act="pe-reload">Deneyleri yenile</button></div>
+      <p class="muted">Promptlar ve sonuçlar kalıcı olarak saklanır. Deney canlı ilgililik etiketlerini değiştirmez. Sadece aynı prompt, belge girdisi, model ve örnekleme ayarlarında önbellek kullanılır.</p>
+    </section></div>
+    ${runs ? `<section class="card mcard" style="margin-top:16px"><h3>Kaydedilmiş deneyler</h3><div class="frow">${runs}</div></section>` : ''}
+    ${promptExperimentResults(p.detail)}`;
 }

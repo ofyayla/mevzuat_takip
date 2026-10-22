@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from app.ai.common import REG_TYPES, Knowledge, RegulationContext, messages
+from app.ai.common import REG_TYPES, Knowledge, RegulationContext, messages, render
 from app.ai.llm_client import LLM
 from app.collectors.dates import tr_lower
 from app.settings import BACKEND_DIR, Settings
@@ -81,20 +81,31 @@ def load_fewshot(path: Path = FEWSHOT_FILE, limit: int = 6) -> list[dict]:
 
 def relevance_messages(ctx: RegulationContext, kn: Knowledge, examples: list[dict]) -> list[dict]:
     tx = kn.taxonomy
-    return messages("relevance", PROMPT,
-                    {"institution": tx["institution"], "guide": kn.guide, "topics": tx.get("topics", []),
-                     "clearly_irrelevant": tx.get("clearly_irrelevant", []), "reg_types": REG_TYPES},
-                    {"examples": examples, "title": ctx.title, "alt_titles": ctx.alt_titles or [], "issuer": ctx.issuer, "sources": ctx.sources,
-                     "publish_date": ctx.publish_date, "reg_type_hint": ctx.reg_type_hint, "has_text": ctx.has_text,
-                     "text": ctx.text})
+    result = messages("relevance", PROMPT,
+                      {"institution": tx["institution"], "guide": kn.guide, "topics": tx.get("topics", []),
+                       "clearly_irrelevant": tx.get("clearly_irrelevant", []), "reg_types": REG_TYPES},
+                      {"examples": examples, "title": ctx.title, "alt_titles": ctx.alt_titles or [],
+                       "issuer": ctx.issuer, "sources": ctx.sources, "publish_date": ctx.publish_date,
+                       "reg_type_hint": ctx.reg_type_hint, "has_text": ctx.has_text, "text": ctx.text})
+    return result
+
+
+def relevance_system_prompt(kn: Knowledge) -> str:
+    tx = kn.taxonomy
+    return render(f"relevance.{PROMPT}.system.j2",
+                  institution=tx["institution"], guide=kn.guide, topics=tx.get("topics", []),
+                  clearly_irrelevant=tx.get("clearly_irrelevant", []), reg_types=REG_TYPES)
 
 
 def assess(llm: LLM, ctx: RegulationContext, kn: Knowledge, settings: Settings, *, session=None,
-           force: bool = False) -> RelevanceDecision:
-    examples = load_fewshot()
+           force: bool = False, system_prompt_override: str | None = None,
+           prompt_version_override: str | None = None, examples_override: list[dict] | None = None) -> RelevanceDecision:
+    examples = load_fewshot() if examples_override is None else examples_override
     msgs = relevance_messages(ctx, kn, examples)
+    if system_prompt_override is not None:
+        msgs[0]["content"] = system_prompt_override
     n = max(1, int(settings.relevance_samples))
-    res = llm.complete_json("relevance", f"relevance.{PROMPT}+{kn.version}", msgs, RelevanceOut,
+    res = llm.complete_json("relevance", prompt_version_override or f"relevance.{PROMPT}+{kn.version}", msgs, RelevanceOut,
                             temperature=settings.relevance_sample_temperature if n > 1 else 0.1, n=n,
                             session=session, regulation_id=ctx.regulation.id, force=force)
     outs = res.outputs

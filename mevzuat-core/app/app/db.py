@@ -398,6 +398,44 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class PromptExperiment(Base):
+    """Kalıcı A/B prompt deneyleri; canlı düzenleme kararlarından bağımsızdır."""
+
+    __tablename__ = "prompt_experiment"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    system_prompt_a: Mapped[str] = mapped_column(Text)
+    system_prompt_b: Mapped[str] = mapped_column(Text)
+    settings_snapshot: Mapped[dict] = mapped_column(JSON)
+    summary: Mapped[dict | None] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PromptExperimentItem(Base):
+    """Bir deneydeki tek kayıt ve A/B kararları; beklenen etiket deney kapsamındadır."""
+
+    __tablename__ = "prompt_experiment_item"
+    __table_args__ = (UniqueConstraint("experiment_id", "regulation_id", name="uq_prompt_experiment_regulation"),)
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    experiment_id: Mapped[int] = mapped_column(
+        ForeignKey("prompt_experiment.id", ondelete="CASCADE"), index=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    title_snapshot: Mapped[str] = mapped_column(Text)
+    expected_relevant: Mapped[bool | None] = mapped_column(Boolean)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    input_hash: Mapped[str | None] = mapped_column(String(64))
+    result_a: Mapped[dict | None] = mapped_column(JSON)
+    result_b: Mapped[dict | None] = mapped_column(JSON)
+    error_a: Mapped[str | None] = mapped_column(Text)
+    error_b: Mapped[str | None] = mapped_column(Text)
+
+
 class AppSetting(Base):
     """Çalışma zamanında değiştirilebilen eşikler (paralel çalışmada kod dağıtımı gerekmeden ayarlanır)."""
 

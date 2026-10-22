@@ -15,8 +15,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Form, Header, 
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field, Json, model_validator
-from sqlalchemy import select, text
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.auth import ROLE_ADMIN, ROLE_EXPERT, ROLE_VIEWER, current_actor, require
@@ -975,14 +975,149 @@ async def manual_detection_upload(session: SessionDep, actor: ActorDep, file: Up
             "items": [_md_out(m) for m in added]}
 
 
+class PromptExperimentRecordIn(BaseModel):
+    regulation_id: int = Field(gt=0, strict=True)
+    expected_relevant: bool | None = Field(default=None, strict=True)
+
+
+class PromptExperimentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    records: list[PromptExperimentRecordIn] = Field(min_length=1, max_length=50)
+    system_prompt_b: str = Field(min_length=20, max_length=30000)
+
+
+@evaluation.get("/prompt-experiments/defaults")
+def prompt_experiment_defaults(session: SessionDep, settings: SettingsDep, actor: ActorDep):
+    from app.ai.common import effective_settings, knowledge
+    from app.ai.relevance import load_fewshot, relevance_system_prompt
+
+    require(actor, ROLE_EXPERT)
+    current = effective_settings(session, settings)
+    kn = knowledge(current)
+    return {
+        "systemPromptA": relevance_system_prompt(kn),
+        "provider": current.llm_provider,
+        "model": current.llm_model,
+        "settings": {
+            "relevanceThreshold": current.relevance_threshold,
+            "relevanceWeightModel": current.relevance_weight_model,
+            "relevanceWeightVotes": current.relevance_weight_votes,
+            "relevanceWeightRules": current.relevance_weight_rules,
+            "relevanceSamples": current.relevance_samples,
+            "sampleTemperature": current.relevance_sample_temperature,
+        },
+        "fewshotCount": len(load_fewshot()),
+        "maxRecords": 50,
+    }
+
+
+@evaluation.get("/prompt-experiments/records")
+def prompt_experiment_records(session: SessionDep, actor: ActorDep,
+                              q: Annotated[str, Query(max_length=120)] = ""):
+    from app.db import Regulation
+
+    require(actor, ROLE_EXPERT)
+    stmt = select(Regulation)
+    if q.strip():
+        term = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Regulation.title.ilike(term), Regulation.issuer.ilike(term),
+                              Regulation.issuer_name.ilike(term)))
+    records = session.scalars(stmt.order_by(Regulation.publish_date.desc(), Regulation.id.desc()).limit(30)).all()
+    return {"items": [{
+        "id": record.id,
+        "title": record.title,
+        "issuer": record.issuer_name or record.issuer,
+        "publishDate": record.publish_date.isoformat() if record.publish_date else None,
+        "status": record.processing_status,
+    } for record in records]}
+
+
+@evaluation.post("/prompt-experiments", status_code=202)
+def create_prompt_experiment(body: PromptExperimentCreate, background: BackgroundTasks, session: SessionDep,
+                             settings: SettingsDep, actor: ActorDep, request: Request):
+    from app.ai.common import effective_settings, knowledge
+    from app.ai.relevance import load_fewshot, relevance_system_prompt
+    from app.db import PromptExperiment, PromptExperimentItem, Regulation
+    from app.evaluation.prompt_experiments import experiment_output, freeze_settings, run_prompt_experiment
+
+    require(actor, ROLE_EXPERT)
+    title = body.title.strip()
+    if not title:
+        raise ApiError(422, "invalid_title", "Deney adı boş olamaz.")
+    if not body.system_prompt_b.strip():
+        raise ApiError(422, "invalid_prompt", "B sistem promptu boş olamaz.")
+    current = effective_settings(session, settings)
+    if current.llm_provider not in {"openai", "vllm"}:
+        raise ApiError(503, "llm_unavailable", "Prompt deneyi için LLM yapılandırılmalı.")
+    ids = [item.regulation_id for item in body.records]
+    if len(set(ids)) != len(ids):
+        raise ApiError(400, "duplicate_records", "Aynı kayıt bir deneyde birden fazla kez seçilemez.")
+    records = session.scalars(select(Regulation).where(Regulation.id.in_(ids))).all()
+    by_id = {record.id: record for record in records}
+    if len(by_id) != len(ids):
+        raise ApiError(404, "record_not_found", "Seçilen kayıtların bir kısmı bulunamadı.")
+
+    kn = knowledge(current)
+    prompt_a = relevance_system_prompt(kn)
+    if body.system_prompt_b.strip() == prompt_a.strip():
+        raise ApiError(400, "identical_prompts", "B promptu A promptundan farklı olmalı.")
+    config = freeze_settings(current, kn, load_fewshot())
+    experiment = PromptExperiment(
+        title=title, status="queued", system_prompt_a=prompt_a, system_prompt_b=body.system_prompt_b,
+        settings_snapshot=config, created_by=actor.name,
+    )
+    session.add(experiment)
+    session.flush()
+    items = []
+    labels = {item.regulation_id: item.expected_relevant for item in body.records}
+    for reg_id in ids:
+        item = PromptExperimentItem(
+            experiment_id=experiment.id, regulation_id=reg_id, title_snapshot=by_id[reg_id].title,
+            expected_relevant=labels[reg_id], status="queued",
+        )
+        session.add(item)
+        items.append(item)
+    session.commit()
+    output = experiment_output(experiment, items)
+    background.add_task(run_prompt_experiment, request.app.state.session_factory, settings, experiment.id)
+    return output
+
+
+@evaluation.get("/prompt-experiments")
+def list_prompt_experiments(session: SessionDep, actor: ActorDep):
+    from app.db import PromptExperiment
+    from app.evaluation.prompt_experiments import experiment_output
+
+    require(actor, ROLE_EXPERT)
+    experiments = session.scalars(select(PromptExperiment).order_by(PromptExperiment.id.desc()).limit(50)).all()
+    return {"items": [experiment_output(experiment) for experiment in experiments]}
+
+
+@evaluation.get("/prompt-experiments/{experiment_id}")
+def get_prompt_experiment(experiment_id: int, session: SessionDep, actor: ActorDep):
+    from app.db import PromptExperiment, PromptExperimentItem
+    from app.evaluation.prompt_experiments import experiment_output
+
+    require(actor, ROLE_EXPERT)
+    experiment = session.get(PromptExperiment, experiment_id)
+    if experiment is None:
+        raise ApiError(404, "not_found", "Prompt deneyi bulunamadı.")
+    items = session.scalars(select(PromptExperimentItem).where(
+        PromptExperimentItem.experiment_id == experiment_id).order_by(PromptExperimentItem.id)).all()
+    return experiment_output(experiment, items)
+
+
 class ExcelMatchSelection(BaseModel):
     row: int = Field(gt=0, strict=True)
     regulation_id: int = Field(gt=0, strict=True)
 
 
+_EXCEL_SELECTIONS = TypeAdapter(list[ExcelMatchSelection])
+
+
 @evaluation.post("/excel-compare")
 async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
-                         selections: Annotated[Json[list[ExcelMatchSelection]] | None, Form()] = None,
+                         selection_json: Annotated[str | None, Form(alias="selections")] = None,
                         format: Literal["json", "xlsx"] = "json",
                         title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
                         text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
@@ -1005,6 +1140,11 @@ async def excel_compare(session: SessionDep, settings: SettingsDep, actor: Actor
         raise ApiError(400, "invalid_file", f"dosya okunamadı: {e}") from e
     if not rows:
         raise ApiError(400, "empty_file", "dosyada Konu veya Metin sütunu dolu satır bulunamadı")
+    try:
+        selections = _EXCEL_SELECTIONS.validate_json(selection_json or "[]")
+    except ValidationError as exc:
+        errors = [{**error, "loc": ("body", "selections", *error["loc"])} for error in exc.errors()]
+        raise RequestValidationError(errors, body={"selections": selection_json}) from exc
     chosen = {s.row: s.regulation_id for s in selections or []}
     if len(chosen) != len(selections or []):
         raise ApiError(400, "invalid_selection", "Aynı Excel satırı için birden fazla onay gönderildi.")

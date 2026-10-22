@@ -435,6 +435,25 @@ POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from
   hesaplanır. Dönem, ilk Oluşturulma Tarihi − 3 gün ile son tarih arasıdır; `from` ve `to` ile değiştirilebilir.
 - `format=xlsx` aynı sonucu indirir: Özet / Excel satırları / Fazla uyarılar.
 
+**Prompt deneyi (`/prompt-deneyi`, Yönetim → Prompt deneyi).** Bir ila 50 mevcut düzenleme seçilir; beklenen ilgililik
+etiketi deney başına isteğe bağlı verilir. A, deney oluşturulurken anlık görüntüsü alınan güncel sistem promptudur;
+B tam sistem promptunun düzenlenebilir kopyasıdır. İki taraf aynı belge bağlamı, model, örnek sayısı, sıcaklık,
+eşik, ağırlıklar, taksonomi ve few-shot örnekleriyle çalışır. Sonuçlar, gerekçeler, puanlar, tereddüt bilgisi,
+etiketler, ayarlar ve prompt anlık görüntüleri `prompt_experiment` tablolarında kalıcıdır.
+
+```
+GET  /api/v1/evaluation/prompt-experiments/defaults
+GET  /api/v1/evaluation/prompt-experiments/records?q=...
+POST /api/v1/evaluation/prompt-experiments                 # 202, arka planda çalışır
+GET  /api/v1/evaluation/prompt-experiments
+GET  /api/v1/evaluation/prompt-experiments/{id}
+```
+
+Önceki başarılı LLM çıktıları, `llm_call` tablosundaki mevcut girdi özetiyle eşleşirse yeniden kullanılır; prompt,
+belge metni, model veya örnekleme ayarı değiştiğinde yeni çağrı gerekir. Etiketlenmemiş örnekler doğruluk ölçütlerine
+katılmaz; yalnız A/B karar farklılığı sayılır. Bu ekran hiçbir canlı ilgililik etiketini, uzman kararını veya ana
+işleme kuyruğunu değiştirmez.
+
 Rapor: **kaçırma oranı** ve nedenleri — `not_collected` (hiç toplanmadı, İK-1), `not_processed` (toplandı, işlenmedi,
 İK-2), `baseline` (ilk taramada zaten sitedeydi), `below_threshold` (YZ ilgisiz buldu, İK-3), `dedupe_lost` (portalda
 olmayan bir kayda birleştirildi); **gereksiz bildirim oranı** (reddedilen / karar verilen), önem derecesi uyumu,
