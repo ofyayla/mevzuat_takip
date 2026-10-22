@@ -5,6 +5,7 @@ from functools import lru_cache
 
 from app.db import make_sessionmaker
 from app.monitoring.service import run_monitor
+from app.services.scans import log_ai_queue
 from app.settings import get_settings
 from app.worker import app
 
@@ -20,5 +21,7 @@ def run_monitor_task() -> dict:
     with _session_factory()() as session:
         res = run_monitor(session, s)
         session.commit()
+        queue = log_ai_queue(session)
     return {"statuses": {st.code: st.status for st in res.statuses}, "opened": len(res.sync.opened),
-            "resolved": len(res.sync.resolved), "open": res.sync.still_open + len(res.sync.opened)}
+            "resolved": len(res.sync.resolved), "open": res.sync.still_open + len(res.sync.opened),
+            "aiQueue": queue}

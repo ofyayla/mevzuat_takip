@@ -167,6 +167,26 @@ uzmanın seçtiği birimler değişmez (yalnızca YZ önerileri yenilenir); yeni
 - Kayıtlar hiç ilerlemiyorsa worker'ın `ai` kuyruğunu dinlediğini, tek Beat örneğinin çalıştığını ve
   `mevzuat-ai llm-check` sonucunu kontrol edin. `AI_FAILED` olanlar için aşağıdaki hedefli yeniden denemeyi kullanın.
 
+**Worker loglarını yorumlama:** `classify_regulations` sonucundaki `processed: 0`, yalnızca sınıflandırma görevinin
+o turda kayıt işlemediğini söyler; portalın YZ hazırlık kuyruğunun boş olduğunu veya LLM bağlantısının başarılı
+olduğunu göstermez. Özet turu saatin 17./47., birim turu 27./57. dakikasındadır. `ingest_crawl` sıfırları ise
+yeni aktarılacak içerikle ilgilidir; mevcut YZ kayıtlarını açıklamaz.
+
+Her sınıflandırma/özet/birim görevi sonunda ve izleme göreviyle 10 dakikada bir ayrı bir **`YZ kuyruk özeti`** logu
+yazılır; Celery'nin uzun görev sonuçlarını kısaltmasından etkilenmez. `NEW`, `RELEVANT`, `SUMMARIZED`, `AI_FAILED`
+durum sayılarıyla birlikte:
+
+- `preparing`: portalda görünen YZ hazırlık sayısı (ilgili olduğu bilinen, henüz hazır olmayan kayıtlar).
+- `summary_blocked`: daha önce kaynak metni yetersiz olduğu için işaretlenmiş `RELEVANT` kayıtlar. Bu bir metin/OCR
+  bekleme işaretidir; o anda OCR servisinin çalıştığına veya metnin hâlâ eksik olduğuna dair bağlantı testi değildir.
+- `retryable` / `exhausted`: başarısız olup otomatik deneme hakkı kalan / biten kayıtlar.
+- `failed_stages`: başarısızların hangi YZ adımında kaldığı (`relevance`, `summary`, `unit_match`).
+
+Aynı salt okunur özet görev sonucunun `aiQueue` alanında ve `GET /api/v1/admin/scans` yanıtının `aiQueue` alanında da
+bulunur. `waiting` eski anlamıyla başarısızlar hariç bekleyenleri, `total` ise başarısızlar dahil tüm YZ kayıtlarını sayar;
+bu iki sayı portalın `preparing` sayısıyla karıştırılmamalıdır. Loga belge başlığı, metni veya bağlantı bilgileri yazılmaz.
+Bu ölçümler kayıt durumlarını değiştirmez ve tükenmiş deneme haklarını kendiliğinden sıfırlamaz.
+
 #### Başarısız (`AI_FAILED`) kayıtları yeniden deneme
 
 YZ adımı üç denemede de hata veren kayıt `AI_FAILED`'da kalır ve Beat artık denemez (YZ hattı alarmı açılır). Bunları tarih

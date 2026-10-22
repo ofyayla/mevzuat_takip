@@ -128,6 +128,7 @@ def ai_queue(session: Session) -> dict:
     turlarla, baseline sınırı/yeniden işleme işleri ise doğrudan işler."""
     from sqlalchemy import func
 
+    from app.ai.classify import AI_MAX_ATTEMPTS
     from app.db import Regulation
 
     codes = [c for c, _, _ in AI_QUEUE_STAGES]
@@ -136,7 +137,34 @@ def ai_queue(session: Session) -> dict:
     by = {status: (n, oldest) for status, n, oldest in rows}
     stages = [{"status": code, "stage": stage, "label": label, "count": by.get(code, (0, None))[0],
                "oldestAt": _iso(by[code][1]) if code in by else None} for code, stage, label in AI_QUEUE_STAGES]
-    return {"stages": stages, "waiting": sum(s["count"] for s in stages if s["status"] != "AI_FAILED")}
+    attempts = func.coalesce(Regulation.extra["ai_attempts"].as_integer(), 0)
+    failed = Regulation.processing_status == "AI_FAILED"
+    preparing, blocked, retryable, exhausted = session.execute(select(
+        func.count().filter(Regulation.is_relevant.is_(True),
+                            Regulation.processing_status.in_(("RELEVANT", "SUMMARIZED", "AI_FAILED"))),
+        func.count().filter(Regulation.processing_status == "RELEVANT",
+                            Regulation.extra["summary_blocked"].as_string().is_not(None)),
+        func.count().filter(failed, attempts < AI_MAX_ATTEMPTS),
+        func.count().filter(failed, attempts >= AI_MAX_ATTEMPTS),
+    )).one()
+    failed_stage = func.coalesce(Regulation.extra["ai_stage"].as_string(), "relevance")
+    failed_stages = dict(session.execute(select(failed_stage, func.count()).where(failed)
+                                        .group_by(failed_stage).order_by(failed_stage)).all())
+    return {"stages": stages, "waiting": sum(s["count"] for s in stages if s["status"] != "AI_FAILED"),
+            "total": sum(s["count"] for s in stages), "preparing": preparing,
+            "summaryBlocked": blocked, "failedRetryable": retryable, "failedExhausted": exhausted,
+            "failedByStage": failed_stages}
+
+
+def log_ai_queue(session: Session) -> dict:
+    queue = ai_queue(session)
+    counts = {s["status"]: s["count"] for s in queue["stages"]}
+    log.info("YZ kuyruk özeti: NEW=%d RELEVANT=%d SUMMARIZED=%d AI_FAILED=%d "
+             "preparing=%d summary_blocked=%d retryable=%d exhausted=%d failed_stages=%s",
+             counts["NEW"], counts["RELEVANT"], counts["SUMMARIZED"], counts["AI_FAILED"],
+             queue["preparing"], queue["summaryBlocked"], queue["failedRetryable"], queue["failedExhausted"],
+             queue["failedByStage"])
+    return queue
 
 
 def collect_scans(session: Session, settings: Settings, now: datetime | None = None, *, source: str | None = None,
