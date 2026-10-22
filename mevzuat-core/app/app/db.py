@@ -321,6 +321,17 @@ class Alert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class HealthSample(Base):
+    """Yönetim grafiklerinin 10 dakikalık kuyruk ve crawler aktarım ölçümleri."""
+
+    __tablename__ = "health_sample"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    ai_queue_count: Mapped[int] = mapped_column(Integer)
+    pending_ingest: Mapped[int | None] = mapped_column(Integer)
+
+
 class JobRun(Base):
     """Yönetimden / CLI'dan başlatılan arka plan işleri (BackgroundTasks, Celery, CLI). Yönetim sayfasındaki
     "Taramalar ve işler" bölümü bunu gösterir. Uzak moddaki taramaların kaydı Mongo ``crawl_requests``'tir."""

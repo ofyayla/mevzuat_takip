@@ -321,6 +321,17 @@ class Alert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class HealthSample(Base):
+    """Yönetim grafiklerinin 10 dakikalık kuyruk ve crawler aktarım ölçümleri."""
+
+    __tablename__ = "health_sample"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    ai_queue_count: Mapped[int] = mapped_column(Integer)
+    pending_ingest: Mapped[int | None] = mapped_column(Integer)
+
+
 class JobRun(Base):
     """Yönetimden / CLI'dan başlatılan arka plan işleri (BackgroundTasks, Celery, CLI). Yönetim sayfasındaki
     "Taramalar ve işler" bölümü bunu gösterir. Uzak moddaki taramaların kaydı Mongo ``crawl_requests``'tir."""
@@ -396,6 +407,20 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(String(200))
     updated_by: Mapped[str | None] = mapped_column(String(100))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AppSettingHistory(Base):
+    """Çalışma zamanı ayar değişikliklerinin geçmişi: kim, ne zaman, neyi neye çevirdi, neden."""
+
+    __tablename__ = "app_setting_history"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    old_value: Mapped[str | None] = mapped_column(String(200))
+    new_value: Mapped[str] = mapped_column(String(200))
+    reason: Mapped[str | None] = mapped_column(Text)
+    changed_by: Mapped[str | None] = mapped_column(String(100))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 def make_sessionmaker(database_url: str, *, auto_create: bool | None = None) -> sessionmaker[Session]:

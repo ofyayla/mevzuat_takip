@@ -4,8 +4,9 @@ from __future__ import annotations
 import logging
 
 import pytest
+from sqlalchemy import select
 
-from app.db import Regulation
+from app.db import HealthSample, Regulation
 from app.services.scans import ai_queue, log_ai_queue
 from tests.test_api import client  # noqa: F401
 from tests.test_processing import env  # noqa: F401
@@ -112,3 +113,6 @@ def test_monitor_reports_backlog_even_when_no_source_alert_is_opened(settings, e
         result = monitor.run_monitor_task()
     assert result["opened"] == 0 and result["aiQueue"]["preparing"] == 55
     assert "summary_blocked=40 retryable=3 exhausted=5" in caplog.text
+    with sf() as s:
+        sample = s.scalars(select(HealthSample)).one()
+    assert sample.ai_queue_count == 55 and sample.pending_ingest is None
