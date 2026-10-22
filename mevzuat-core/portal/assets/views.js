@@ -48,7 +48,7 @@ async function loadArchiveStats() {
   } catch (_) { S.arStats = null; }
   if (S.view === 'arsiv') paintArchive();
 }
-function paintArchive() { if (S.view === 'arsiv' && $('#arsivMain')) { $('#arsivMain').innerHTML = arsivBody(); const det = $('#detail'); if (det) { det.hidden = !S.openId; det.innerHTML = S.openId ? detailHtml() : ''; } $('#inbox') && $('#inbox').classList.toggle('has-detail', !!S.openId); } }
+function paintArchive() { if (S.view === 'arsiv' && $('#arsivMain')) { $('#arsivMain').innerHTML = arsivBody(); const det = $('#detail'); if (det) { det.hidden = !S.openId; det.innerHTML = S.openId ? detailHtml() : ''; } $('#inbox') && $('#inbox').classList.toggle('has-detail', !!S.openId); syncDetailSize(); } }
 function arsivBody() {
   const af = S.arsivF; const st = S.arStats; const { ids, total, loading, err } = S.ar; const it = ids.map(byId).filter(Boolean);
   const tile = (l, v, s, cl = '') => `<div class="card"><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${s}</span></div>`;

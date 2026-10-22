@@ -9,6 +9,7 @@ function renderAll() {
   const focusedNode = document.activeElement && document.activeElement.matches('.hat-node') ? document.activeElement.dataset.n : null;
   const keep = document.activeElement && document.activeElement.dataset ? { id: document.activeElement.id, set: document.activeElement.dataset.set, txt: document.activeElement.classList.contains('input') } : null;
   $('#app').innerHTML = appbar() + `<main id="main">${VIEWS[S.view]()}</main>`;
+  syncDetailSize();
   if (keep && (keep.id || keep.set)) { const el = keep.id ? document.getElementById(keep.id) : document.querySelector(`input.input[data-set="${keep.set}"]`); if (el && el.focus) { el.focus(); if (el.setSelectionRange && el.type !== 'range') { try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) { /* tür desteklemiyor */ } } } }
   if (focusedNode) { const el = Array.from(document.querySelectorAll('.hat-node')).find(n => n.dataset.n === focusedNode); if (el) el.focus({ preventScroll: true }); }
   if (graph && $('.flow-scroll')) $('.flow-scroll').scrollLeft = graphScroll;
@@ -28,6 +29,7 @@ function refreshInbox(opts = {}) {
   const det = $('#detail'); det.hidden = !S.openId;
   const keep = !opts.top && $('#dScroll') ? $('#dScroll').scrollTop : 0;
   det.innerHTML = S.openId ? detailHtml() : '';
+  syncDetailSize();
   if ($('#dScroll')) $('#dScroll').scrollTop = keep;
   const f = $('#citeFocus'); if (f && opts.cite) f.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
@@ -550,7 +552,35 @@ function showShortcuts() {
   const k = [['J / ↓', 'Sonraki kayıt'], ['K / ↑', 'Önceki kayıt'], ['Enter', 'Kaydı aç'], ['X', 'Kaydı seç'], ['A', 'Birim önerisini onayla'], ['R', 'Reddet'], ['E', 'Arşivde kararı düzenle'], ['/', 'Aramaya git'], ['Esc', 'Ayrıntıyı ya da pencereyi kapat'], ['?', 'Bu listeyi göster']];
   dialog({ title: 'Klavye kısayolları', cancel: 'Kapat', body: `<div class="kbd-list">${k.map(x => `<span class="kbd">${x[0]}</span><span>${x[1]}</span>`).join('')}</div>` });
 }
+let detailDrag = null;
+function endDetailResize(e) {
+  if (!detailDrag || (e && e.pointerId !== detailDrag.pointerId)) return;
+  const { handle, pointerId } = detailDrag;
+  detailDrag = null;
+  if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+  document.documentElement.classList.remove('detail-resizing');
+}
+document.addEventListener('pointerdown', e => {
+  const handle = e.target.closest('#detailResize');
+  if (!handle || e.button !== 0 || !e.isPrimary) return;
+  e.preventDefault();
+  detailDrag = { handle, pointerId: e.pointerId, x: e.clientX, width: $('#detail').getBoundingClientRect().width };
+  handle.setPointerCapture(e.pointerId);
+  document.documentElement.classList.add('detail-resizing');
+});
+document.addEventListener('pointermove', e => {
+  if (detailDrag && e.pointerId === detailDrag.pointerId) setDetailSize(detailDrag.width + detailDrag.x - e.clientX);
+});
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(name => document.addEventListener(name, endDetailResize));
+addEventListener('blur', () => endDetailResize());
 document.addEventListener('keydown', e => {
+  if (e.target.closest('#detailResize') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+    e.preventDefault();
+    const { min, max } = detailSizeBounds();
+    const width = $('#detail').getBoundingClientRect().width;
+    setDetailSize(e.key === 'Home' ? min : e.key === 'End' ? max : width + (e.key === 'ArrowLeft' ? 1 : -1) * (e.shiftKey ? 50 : 10));
+    return;
+  }
   const node = e.target.closest('.hat-node');
   if (node && (e.key === 'Enter' || e.key === ' ')) {
     e.preventDefault(); node.dispatchEvent(new MouseEvent('click', { bubbles: true })); return;
@@ -578,7 +608,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'a' && S.openId) { const r = byId(S.openId); if (r && isPending(r) && r.sel.length && canDecide()) approve(r.id); }
   else if (k === 'r' && S.openId) { const r = byId(S.openId); if (r && isPending(r) && canDecide()) { S.rejecting = true; refreshInbox(); } }
 });
-addEventListener('resize', () => closePop());
+addEventListener('resize', () => { closePop(); endDetailResize(); syncDetailSize(); });
 ['dragover', 'dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => {
   const z = e.target.closest && e.target.closest('#xlDrop'); if (!z) return; e.preventDefault();
   z.classList.toggle('drag', ev === 'dragover');

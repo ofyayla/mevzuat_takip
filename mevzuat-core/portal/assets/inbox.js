@@ -231,13 +231,36 @@ const navList = () => S.view === 'arsiv' ? S.ar.ids.map(byId).filter(Boolean) : 
 const queueLabel = r => r.kind === 'baseline' ? 'Arşiv · İlk tarama' : r.kind === 'irr' ? (S.view === 'arsiv' ? 'Arşiv · YZ\'nin elediği' : QUEUES.ilgisiz.label) : r.status === 'Onaylandı' ? 'Arşiv · Onaylandı' : r.status === 'Reddedildi' ? 'Arşiv · Reddedildi' : r.stage ? QUEUES.hazirlaniyor.label : (QUEUES[S.queue] || {}).label || 'Kayıt';
 const isPending = r => r.kind === 'reg' && r.status === 'Bekliyor' && !r.stage;
 
+function detailSizeBounds() {
+  const inbox = $('#inbox');
+  const style = getComputedStyle(inbox);
+  const available = inbox.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const max = Math.floor(innerWidth < 1100 ? document.documentElement.clientWidth : Math.max(320, available - 344));
+  return { min: Math.min(320, max), max };
+}
+function syncDetailSize() {
+  const pane = $('#detail'), handle = $('#detailResize');
+  if (!pane || pane.hidden || !handle) return;
+  const bounds = detailSizeBounds();
+  handle.setAttribute('aria-valuemin', bounds.min);
+  handle.setAttribute('aria-valuemax', bounds.max);
+  handle.setAttribute('aria-valuenow', Math.round(pane.getBoundingClientRect().width));
+}
+function setDetailSize(width) {
+  const { min, max } = detailSizeBounds();
+  const size = Math.max(min, Math.min(max, width));
+  document.documentElement.style.setProperty('--detail-width', size + 'px');
+  document.documentElement.style.setProperty('--detail-column', (size + 24) + 'px');
+  syncDetailSize();
+}
 function detailHtml() {
   const r = byId(S.openId); if (!r) return '';
   const list = navList(); const idx = list.findIndex(x => x.id === r.id); const inL = idx >= 0;
   const pos = S.view === 'arsiv' ? (S.arsivPage - 1) * 25 + idx + 1 : (S.page - 1) * S.ps + idx + 1;
   const total = S.view === 'arsiv' ? S.ar.total : S.list.total;
   const sev = curSev(r);
-  return `<div class="d-head"><div class="d-pos"><span>${esc(queueLabel(r))}</span>${inL ? `<b class="num">${N(pos)} / ${N(total)}</b>` : ''}</div>
+  return `<div class="detail-resizer" id="detailResize" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="detail" aria-label="Ayrıntı genişliği" title="Genişliği ayarlamak için sürükleyin veya sağ/sol ok tuşlarını kullanın"></div>
+    <div class="d-head"><div class="d-pos"><span>${esc(queueLabel(r))}</span>${inL ? `<b class="num">${N(pos)} / ${N(total)}</b>` : ''}</div>
     <div class="d-nav"><button class="btn btn-ghost icon-btn" data-act="prev" ${!inL || idx <= 0 || S.meta ? 'disabled' : ''} title="Önceki (K)" aria-label="Önceki kayıt">${ic('chev-u')}</button>
     <button class="btn btn-ghost icon-btn" data-act="next" ${!inL || idx >= list.length - 1 || S.meta ? 'disabled' : ''} title="Sonraki (J)" aria-label="Sonraki kayıt">${ic('chev-d')}</button>
     <button class="btn btn-ghost icon-btn" data-act="close" title="Kapat (Esc)" aria-label="Kapat">${ic('x')}</button></div></div>
