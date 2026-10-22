@@ -4,7 +4,7 @@
    ============================================================================================================ */
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
-S.xl = { file: null, tTitle: 85, tText: 80, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null };
+S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null };
 S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
 const openAlarms = () => (S.alerts || []).length;

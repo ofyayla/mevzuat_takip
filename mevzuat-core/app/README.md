@@ -397,13 +397,16 @@ Dosya sütunları: `Başlık`, `Kurum` (kısaltma da olur: "BDDK", "Hazine ve Ma
 **veritabanına yazılmadan** karşılaştırılır (`app/evaluation/excel_compare.py`):
 
 ```
-POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=80[&from&to][&format=xlsx]   multipart file
+POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from&to][&format=xlsx]   multipart file
 ```
 
 - Her satır yukarıdaki eşleştiriciden geçer. Tek fark tarih penceresi: **14 gün geriye, 2 gün ileriye**. Bunun nedeni,
   "Oluşturulma Tarihi"nin yayım tarihi değil listeye giriş tarihi olması.
 - Başlık tutmazsa `Metin` sütunu kullanılır. Önce HTML ve `&nbsp;` temizlenir; "*****" ayracından sonraki asıl duyuru
   alınır. Bu metin, pencere içindeki ham belge metinlerinde (ekler dahil) `partial_ratio` ile aranır.
+- Varsayılan eşikler başlık için **85**, metin için **65**'tir. Daha düşük metin eşiği, farklı biçimde özetlenmiş
+  açıklamaları da yakalar; benzerlik skoru doğruluk olasılığı değildir, özellikle düşük skorlu eşleşmeler belgeyle
+  doğrulanmalıdır. İstek parametreleriyle daha yüksek eşik kullanılabilir.
 - "Basın Duyurusu" gibi en fazla 4 sözcüklü genel başlıklarla eşleşen satırlar da metinle doğrulanır.
 - Sonuçlar üç gruba ayrılır:
   - **Relevant:** sistem kaydı buldu ve YZ ilgili dedi.

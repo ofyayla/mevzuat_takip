@@ -979,7 +979,7 @@ async def manual_detection_upload(session: SessionDep, actor: ActorDep, file: Up
 async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
                         format: Literal["json", "xlsx"] = "json",
                         title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
-                        text_threshold: Annotated[float, Query(ge=50, le=100)] = 80,
+                        text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
                         date_from: Annotated[date | None, Query(alias="from")] = None,
                         date_to: Annotated[date | None, Query(alias="to")] = None):
     """Başkanlık Excel listesini sistem kayıtlarıyla karşılaştırır; veritabanına yazmaz. ``format=xlsx`` aynı sonucu

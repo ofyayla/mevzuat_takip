@@ -138,6 +138,24 @@ def test_title_threshold_parameter(data):
         assert compare(s, rows, title_threshold=60)["items"][0]["regulation"]["id"] == ids["A"]
 
 
+def test_default_text_threshold_matches_paraphrased_body(data):
+    sf, ids = data
+    rows = parse_sheet("liste.xlsx", EXCEL)[1:2]
+    rows[0]["title"] = "Pay sahipliği hakları hakkında bilgi notu"
+    rows[0]["text"] = BODY.replace("Bankacılık Düzenleme ve Denetleme Kurulunun", "BDDK kurulunun").replace(
+        "5411 sayılı Bankacılık Kanununun 18 inci maddesinin beşinci fıkrası uyarınca",
+        "ilgili kanun maddesi kapsamında",
+    )
+    with sf() as s:
+        result = compare(s, rows)
+        item = result["items"][0]
+        assert result["thresholds"] == {"title": 85, "text": 65}
+        assert item["regulation"]["id"] == ids["B"]
+        assert item["method"] == "fuzzy_text"
+        assert 0.65 <= item["score"] < 0.80
+        assert compare(s, rows, text_threshold=80)["items"][0]["category"] == "not_collected"
+
+
 def test_api_json_and_xlsx_do_not_write(settings, data):
     sf, ids = data
     c = TestClient(create_app(settings.model_copy(update={"cors_origins": ""}), sf))
@@ -145,6 +163,13 @@ def test_api_json_and_xlsx_do_not_write(settings, data):
     r = c.post("/api/v1/evaluation/excel-compare", files=files)
     assert r.status_code == 200, r.text
     assert r.json()["summary"]["total"] == 3
+    assert r.json()["thresholds"] == {"title": 85, "text": 65}
+    schema = c.get("/openapi.json").json()["paths"]["/api/v1/evaluation/excel-compare"]["post"]
+    defaults = {p["name"]: p["schema"].get("default") for p in schema["parameters"]}
+    assert defaults["title_threshold"] == 85 and defaults["text_threshold"] == 65
+    strict = c.post("/api/v1/evaluation/excel-compare", params={"text_threshold": 80}, files=files)
+    assert strict.status_code == 200, strict.text
+    assert strict.json()["thresholds"] == {"title": 85, "text": 80}
     x = c.post("/api/v1/evaluation/excel-compare", params={"format": "xlsx"}, files=files)
     assert x.status_code == 200 and 'filename="karsilastirma-' in x.headers["content-disposition"]
     assert openpyxl.load_workbook(BytesIO(x.content)).sheetnames[0] == "Özet"

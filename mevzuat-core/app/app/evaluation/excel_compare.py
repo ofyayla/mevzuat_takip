@@ -41,7 +41,7 @@ from app.services.export import _cell
 from app.services.regulations import VISIBLE_STATUSES
 
 WINDOW = (timedelta(days=14), timedelta(days=2))   # (geriye, ileriye): kayıt tarihi yayımdan sonra gelir
-TEXT_THRESHOLD = 80
+TEXT_THRESHOLD = 65
 TEXT_NEEDLE_CHARS = 400        # Excel metninin aranan baş kısmı
 TEXT_HAYSTACK_CHARS = 20000    # ham belgede bakılan kısım (uzun PDF'lerde süre sınırı)
 EXTRA_LEAD = timedelta(days=3)  # ters yön dönemi: ilk kayıt tarihinden bu kadar önce yayımlananlar da sayılır

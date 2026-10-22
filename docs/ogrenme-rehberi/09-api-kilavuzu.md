@@ -820,12 +820,16 @@ Paralel çalışma dönemi: Başkanlığın elle tuttuğu liste ile sistemin bul
 |---|---|
 | `format` | `json` (varsayılan) · `xlsx` (aynı sonucu çalışma kitabı olarak indirir) |
 | `title_threshold` | 50–100, varsayılan **85** — başlık benzerliği eşiği |
-| `text_threshold` | 50–100, varsayılan **80** — metin benzerliği eşiği |
+| `text_threshold` | 50–100, varsayılan **65** — metin benzerliği eşiği |
 | `from`, `to` | "Fazla uyarılar" için dönem; verilmezse listedeki tarihlerden türetilir |
 
 Sütun başlıkları esnektir (büyük/küçük harf ve Türkçe karakter fark etmez): `Referans No`, `Konu`/`Başlık`, `Talep Tipi`,
 `Kurum`, `Risk Seviyesi`/`Önem`, `Alıcılar`, `Oluşturulma Tarihi`/`Tarih`, `Metin`, `URL`/`Bağlantı`. `Konu` ya da `Metin`
 dolu satır yoksa `400 empty_file`.
+
+Metin eşiğinin 65 olması, farklı biçimde özetlenmiş açıklamaların da eşleşmesini sağlar; benzerlik skoru
+doğruluk olasılığı değildir. Düşük skorlu eşleşmeler belgeyle doğrulanmalı; daha sıkı karşılaştırma için
+`text_threshold=80` gibi bir değer gönderilebilir. Başlık eşiğinin varsayılanı 85 olarak korunur.
 
 ```bash
 curl -X POST 'http://localhost:8080/api/v1/evaluation/excel-compare?title_threshold=85' \
@@ -838,7 +842,7 @@ curl -X POST 'http://localhost:8080/api/v1/evaluation/excel-compare?title_thresh
   "precision": { "period": { "from": null, "to": null }, "shown": 0, "inList": 0, "extra": 0, "precision": null },
   "severityAgreement": { "n": 0, "exact": null },
   "byIssuer": [ { "issuer": "BDDK", "total": 1, "relevant": 0, "irrelevant": 0, "missing": 1 } ],
-  "thresholds": { "title": 85.0, "text": 80.0 },
+  "thresholds": { "title": 85.0, "text": 65.0 },
   "items": [
     { "no": 1, "ref": "R1", "title": "Bank Mellat sermaye yeterliliği", "issuer": "BDDK", "requestType": null,
       "severity": "Orta", "recipients": null, "createdAt": null,
