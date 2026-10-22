@@ -5,7 +5,7 @@
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
 S.pe = { defaults: null, runs: [], records: [], selected: {}, detail: null, search: '', error: null, loading: false };
-S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null };
+S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, baseRes: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null };
 S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
 const openAlarms = () => (S.alerts || []).length;
@@ -86,7 +86,7 @@ function viewArsiv() {
 const XL_RES = { relevant: ['tag-ok', 'Relevant'], irrelevant: ['tag-crit', 'Irrelevant'], missing: ['tag-warn', 'Bulunamadı'] };
 function xlParams() { return { title_threshold: S.xl.tTitle, text_threshold: S.xl.tText }; }
 function xlSetFile(file) {
-  Object.assign(S.xl, { file, res: null, err: null, selections: {}, reviewNo: null });
+  Object.assign(S.xl, { file, res: null, baseRes: null, err: null, selections: {}, reviewNo: null });
   renderAll();
 }
 function xlForm(selections) {
@@ -94,20 +94,84 @@ function xlForm(selections) {
   fd.append('selections', JSON.stringify(Object.entries(selections).map(([row, id]) => ({ row: +row, regulation_id: id }))));
   return fd;
 }
-async function xlSelect(no, id) {
-  const selections = { ...S.xl.selections };
+function xlApplySelections(base, selections) {
+  const res = JSON.parse(JSON.stringify(base));
+  for (const [no, id] of Object.entries(selections)) {
+    const item = res.items.find(row => row.no === +no);
+    const candidate = item && (item.candidates || []).find(c => c.regulation && c.regulation.id === +id);
+    if (!candidate) throw new Error('Aday yeni karşılaştırmada bulunamadı. Seçimi kaldırıp yeniden inceleyin.');
+    if (!candidate.selection) throw new Error('Portal ve API sürümleri uyumsuz. İkisi birlikte güncellenmeli; ardından sayfayı yenileyin.');
+    Object.assign(item, candidate.selection, {
+      method: 'manual_selection', methodLabel: 'Kullanıcı onayı (bu karşılaştırma)',
+      score: null, selectedRegulationId: +id,
+    });
+  }
+
+  const groups = { relevant: 0, irrelevant: 0, missing: 0 };
+  const reasons = new Map(), states = new Map(), issuers = new Map(), matchedIds = new Set();
+  const severityPairs = [];
+  let matched = 0;
+  for (const item of res.items) {
+    groups[item.group] = (groups[item.group] || 0) + 1;
+    if (item.group === 'missing') reasons.set(item.category, (reasons.get(item.category) || 0) + 1);
+    states.set(item.matchState, (states.get(item.matchState) || 0) + 1);
+    const code = item.issuerCode || item.issuer || '—';
+    const count = issuers.get(code) || { relevant: 0, irrelevant: 0, missing: 0, total: 0 };
+    count[item.group] = (count[item.group] || 0) + 1; count.total += 1; issuers.set(code, count);
+    if (item.regulation) {
+      matchedIds.add(item.regulation.id); matched += 1;
+      if (item.severity && item.regulation.severity) severityPairs.push([item.severity, item.regulation.severity]);
+    } else if (item.rawDocumentId != null) matched += 1;
+  }
+  const total = res.items.length;
+  const extra = (res.extra || []).filter(reg => !matchedIds.has(reg.id));
+  const shown = res.precision.shown;
+  res.extra = extra;
+  res.summary = {
+    ...res.summary, total, relevant: groups.relevant, irrelevant: groups.irrelevant, missing: groups.missing,
+    missingByReason: Object.fromEntries(reasons), notFound: states.get('unmatched') || 0,
+    review: states.get('review') || 0, unprocessed: states.get('unprocessed') || 0, matched,
+    matchRate: total ? Math.round(matched / total * 1000) / 1000 : null,
+    recall: total ? Math.round(groups.relevant / total * 1000) / 1000 : null,
+    foundRate: total ? Math.round((groups.relevant + groups.irrelevant) / total * 1000) / 1000 : null,
+  };
+  res.precision = {
+    ...res.precision, inList: shown - extra.length, extra: extra.length,
+    precision: shown ? Math.round((shown - extra.length) / shown * 1000) / 1000 : null,
+  };
+  res.severityAgreement = {
+    n: severityPairs.length,
+    exact: severityPairs.length
+      ? Math.round(severityPairs.filter(([a, b]) => a === b).length / severityPairs.length * 1000) / 1000
+      : null,
+  };
+  res.byIssuer = [...issuers.entries()]
+    .map(([issuer, counts]) => ({ issuer, total: counts.total, relevant: counts.relevant,
+      irrelevant: counts.irrelevant, missing: counts.missing }))
+    .sort((a, b) => b.total - a.total);
+  return res;
+}
+function xlSelect(no, id) {
+  const x = S.xl; if (!x.baseRes || x.running) return;
+  const selections = { ...x.selections };
   if (id) selections[no] = +id; else delete selections[no];
-  await xlRun(selections, true);
+  try {
+    x.res = xlApplySelections(x.baseRes, selections);
+    x.selections = selections; x.err = null;
+    toast(id ? 'Eşleşme bu karşılaştırma için kabul edildi.' : 'Eşleşme onayı geri alındı.');
+  } catch (e) { x.err = errMsg(e); toast(x.err, { err: true }); }
+  renderAll();
 }
 async function xlRun(selections = S.xl.selections, preserveTab = false) {
   const x = S.xl; if (!x.file || x.running) return;
   const a = +x.tTitle, b = +x.tText; if (!(a >= 50 && a <= 100) || !(b >= 50 && b <= 100)) { toast('Eşikler 50 ile 100 arasında olmalı.', { err: true }); return; }
   x.running = true; x.err = null; renderAll();
   try {
-    const r = await api('POST', '/evaluation/excel-compare', { query: xlParams(), form: xlForm(selections) });
+    const r = await api('POST', '/evaluation/excel-compare', { query: xlParams(), form: xlForm({}) });
     if (!r.data.summary || typeof r.data.summary.notFound !== 'number' || typeof r.data.summary.review !== 'number') throw new Error('Portal ve API sürümleri uyumsuz. İkisi birlikte güncellenmeli; ardından sayfayı yenileyin.');
-    if (Object.entries(selections).some(([no, id]) => !(r.data.items || []).some(row => row.no === +no && row.selectedRegulationId === id && row.method === 'manual_selection'))) throw new Error('Sunucu eşleşme onayını doğrulamadı. Sonuç değiştirilmedi; yeniden inceleyin.');
-    x.res = r.data; x.selections = selections; if (!preserveTab) x.tab = 'tum'; toast(`${N(r.data.summary.total)} satır karşılaştırıldı.`);
+    const res = xlApplySelections(r.data, selections);
+    x.baseRes = r.data; x.res = res; x.selections = selections;
+    if (!preserveTab) x.tab = 'tum'; toast(`${N(r.data.summary.total)} satır karşılaştırıldı.`);
   }
   catch (e) { x.err = errMsg(e); }
   x.running = false; renderAll();
@@ -127,7 +191,7 @@ function admExcel() {
       <label class="field">Metin eşiği<span class="xl-num"><input class="input num" id="xlX" value="${x.tText}" inputmode="numeric"><span>%</span></span></label>
       <p class="hint" style="margin:0;flex:1 1 220px">Önce bağlantı, sonra kurum ve belge numarası doğrulanır. Belirsiz kimlikler incelemeye ayrılır. Numara tanınmadığında başlık ve metin benzerliği kullanılır. Eşiği değiştirince yeniden karşılaştırın.</p>
       <button class="btn btn-primary" data-act="xl-run" ${x.file && !x.running ? '' : 'disabled'}>${x.running ? 'Karşılaştırılıyor…' : 'Karşılaştır'}</button>
-      <button class="btn" data-act="xl-export" ${res && !x.running ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div><p class="hint">Manuel eşleşmeler yalnız bu karşılaştırmada ve Excel çıktısında kullanılır; sayfa yenilenince silinir. YZ etiketini değiştirmez.</p>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
+      <button class="btn" data-act="xl-export" ${res && !x.running ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div><p class="hint">Manuel eşleşmeler bu karşılaştırmada anında uygulanır; Excel aktarımında sunucuda doğrulanır. Sayfa yenilenince silinir ve YZ etiketini değiştirmez.</p>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
   if (!res) return upload + `<div class="empty card" style="margin-top:16px">${ic('doc')}<b>Henüz karşılaştırma yok</b><span>Dosyayı yükleyip Karşılaştır'a basın. Karşılaştırma hiçbir kaydı değiştirmez.</span></div>`;
   const s = res.summary, pr = res.precision, sa = res.severityAgreement; const W = v => (s.total ? v / s.total * 100 : 0).toFixed(2) + '%';
   const kpi = (l, v, sub, cl = '', tab) => `<${tab ? `button class="kpi xl-kpi" data-act="xl-tab" data-t="${tab}" aria-pressed="${x.tab === tab}"` : 'div class="kpi xl-kpi"'}><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${sub}</span></${tab ? 'button' : 'div'}>`;

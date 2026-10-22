@@ -181,7 +181,7 @@ Uydurma veri bırakılmadı; aşağıdakiler ya hiç gösterilmez ya da API'nin 
 | Yönetim: son denetim olayları listesi | Genel denetim listesi ucu yok; kayıt bazında Geçmiş sekmesi ve "Zinciri doğrula" var |
 | Arka plan işi **"Devam ettir"** | Yok; başarısızlar "Yeniden dene" ile tekrar çalıştırılır |
 | Ayar etki önizlemesindeki "412 kayıt" gibi sabit sayılar | Önizleme `POST /admin/settings/preview` sonucudur (son 30 gün) |
-| Excel karşılaştırma: eşikleri sayfada anında uygulama | Karşılaştırma sunucuda yapılır; eşik değişince **Karşılaştır** yeniden çalıştırılır (dosya tarayıcıda tutulur) |
+| Excel karşılaştırma | İlk karşılaştırma ve eşik değişikliğinde tam tarama sunucuda yapılır; aday kabul/geri alma mevcut sonuçta anında uygulanır. Excel çıktısında seçimler sunucuya gönderilip doğrulanır. |
 | Kurumsal kullanıcı bilgisi (AD, birim, rol, oturum saati) | `GET /me` (ad, unvan, roller); SSO ayrı fazda, şimdilik `X-Demo-User` |
 
 Sunucuda ayrıca yapılan küçük bir değişiklik: karar düzeltmesinde (`decision_revised`) denetim izi öğesi artık

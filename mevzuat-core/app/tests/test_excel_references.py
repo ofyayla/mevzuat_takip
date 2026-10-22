@@ -251,10 +251,15 @@ def test_review_accept_and_undo_preserve_ai_label_and_metrics(env):
         assert before["items"][0]["matchState"] == "review"
         assert {c["regulation"]["id"] for c in before["items"][0]["candidates"]} == {first, other}
         assert before["items"][0]["candidates"][0]["textExcerpt"] == DECISION
+        other_candidate = next(c for c in before["items"][0]["candidates"] if c["regulation"]["id"] == other)
+        assert other_candidate["selection"]["group"] == "irrelevant"
+        assert other_candidate["selection"]["regulation"]["id"] == other
         accepted = compare(s, [row()], selections={1: other})
         item = accepted["items"][0]
         assert item["method"] == "manual_selection" and item["score"] is None
         assert item["group"] == "irrelevant" and item["selectedRegulationId"] == other
+        assert item["group"] == other_candidate["selection"]["group"]
+        assert item["regulation"] == other_candidate["selection"]["regulation"]
         assert accepted["summary"]["review"] == 0 and accepted["summary"]["matched"] == 1
         assert compare(s, [row()])["summary"]["review"] == 1
         assert s.scalar(select(func.count()).select_from(ManualDetection)) == 0

@@ -196,6 +196,12 @@ def _reg_out(reg: Regulation | None) -> dict | None:
             "severity": reg.severity, "rationale": rel.get("rationale")}
 
 
+def _match_state(category: str, has_candidates: bool) -> str:
+    return ("review" if category == "reference_review" and has_candidates else
+            "unmatched" if category in ("reference_review", "not_collected") else
+            "matched" if category in ("detected", "below_threshold") else "unprocessed")
+
+
 def _review_candidates(session: Session, row: dict, reference: ReferenceResult,
                        title_threshold: float, text_threshold: float) -> list[dict]:
     ids = list(reference.candidates)
@@ -222,8 +228,18 @@ def _review_candidates(session: Session, row: dict, reference: ReferenceResult,
         text = (raw.text or "") if raw is not None else ""
         pos = tr_lower(text).find(reference.reference.number)
         excerpt = text[:3000] if pos < 2500 else text[:1000] + "\n…\n" + text[max(0, pos - 700):pos + 1300]
+        selected_md = ManualDetection(title=row["title"], issuer=row["issuer"],
+                                      publish_date=row["created"], url=row["url"])
+        selected_md.matched_regulation_id = rid
+        selected_md.matched_raw_document_id = raw.id if raw is not None else None
+        category, selected_reg = classify_detection(session, selected_md)
         candidates.append({"regulation": _reg_out(reg), "rawDocumentId": raw.id if raw else None,
-                           "textExcerpt": excerpt, "evidence": "reference" if rid in reference.candidates else "similarity"})
+                           "textExcerpt": excerpt, "evidence": "reference" if rid in reference.candidates else "similarity",
+                           "selection": {"category": category, "categoryLabel": LABELS.get(category, category),
+                                         "group": GROUPS.get(category, "missing"),
+                                         "matchState": _match_state(category, False),
+                                         "rawDocumentId": selected_md.matched_raw_document_id,
+                                         "regulation": _reg_out(selected_reg)}})
     return candidates
 
 
@@ -260,10 +276,9 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
             sev_pairs.append((row["severity"], reg.severity))
         code = issuer_code(row["issuer"]) or row["issuer"] or "—"
         by_issuer.setdefault(code, Counter())[group] += 1
-        state = ("review" if cat == "reference_review" and candidates else
-                 "unmatched" if cat in ("reference_review", "not_collected") else
-                 "matched" if group in ("relevant", "irrelevant") else "unprocessed")
+        state = _match_state(cat, bool(candidates))
         items.append({"no": i, "ref": row["ref"], "title": row["title"], "issuer": row["issuer"],
+                      "issuerCode": code,
                       "requestType": row["request_type"], "severity": row["severity"],
                       "recipients": row["recipients"],
                       "createdAt": row["created"].isoformat() if row["created"] else None,

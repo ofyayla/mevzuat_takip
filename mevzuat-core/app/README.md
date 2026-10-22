@@ -416,8 +416,10 @@ POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from
   Bülten numarasıyla eşleşme bülten düzeyindedir; içindeki her kararın ayrı YZ analiz edildiği anlamına gelmez.
 - Portal adayların başlık, kurum, yayım tarihi ve ham metin kesitini Excel satırıyla yan yana gösterir.
   Kullanıcı adayı yalnız bu karşılaştırma için kabul edebilir ve onayı geri alabilir. Seçimler yeniden
-  hesaplamaya ve Excel çıktısına gönderilir; yeni dosya yüklenince veya sayfa yenilenince kaybolur.
-  Sunucu güncel aday listesinde olmayan seçimleri reddeder. Seçim YZ ilgililik etiketini değiştirmez.
+  karşılaştırma sonucuna tarayıcıda anında uygulanır; her kabul/geri alma Excel'i yeniden yükleyip eşleştirmez.
+  Eşik değiştirip **Karşılaştır** yeniden çalıştırıldığında seçimler güncel adaylarla eşleştirilir. Excel çıktısı
+  hazırlanırken dosya ve seçimler sunucuya gönderilir; sunucu adayları yeniden doğrular ve yetkili sonucu üretir.
+  Yeni dosya yüklenince veya sayfa yenilenince seçimler kaybolur. Seçim YZ ilgililik etiketini değiştirmez.
   Sayaçlar `notFound` (aday bulunamadı), `review` (aday incelemesi), `unprocessed` (bulundu; YZ sonucu yok)
   olarak ayrıdır. Eski `missing` sayacı geriye uyum için bu üçünün toplamını korur; crawl yokluğu demek değildir.
 - Başlık tutmazsa `Metin` sütunu kullanılır. Önce HTML ve `&nbsp;` temizlenir; "*****" ayracından sonraki asıl duyuru
