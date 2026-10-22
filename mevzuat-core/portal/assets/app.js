@@ -360,6 +360,9 @@ document.addEventListener('click', e => {
     case 'xl-run': { S.xl.tTitle = $('#xlT').value; S.xl.tText = $('#xlX').value; xlRun(); break; }
     case 'xl-export': xlExport(); break;
     case 'xl-open': openAnywhere(id); break;
+    case 'xl-review': S.xl.reviewNo = S.xl.reviewNo === +t.dataset.no ? null : +t.dataset.no; renderAll(); break;
+    case 'xl-select': xlSelect(+t.dataset.no, id); break;
+    case 'xl-unselect': xlSelect(+t.dataset.no, null); break;
     case 'edit-start': startEdit(S.openId); break;
     case 'edit-mode': S.edit.mode = t.dataset.m; { const w = $('#editWhy'); if (w) S.edit.why = w.value; } repaint(); { const b = document.querySelector('.seg-b[aria-checked=true]'); if (b) b.focus({ preventScroll: true }); } break;
     case 'edit-cancel': cancelEdit(); repaint(); break;
@@ -502,7 +505,7 @@ async function openAnywhere(id) {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; const k = t.dataset.f; refreshInbox(); listChanged(); const nb = document.querySelector(`[data-act=pop-filter][data-f=${k}]`); if (nb) openPop(nb, filterPopHtml(k), { f: k }); return; }
-  if (t.id === 'xlFile' && t.files[0]) { S.xl.file = t.files[0]; S.xl.res = null; S.xl.err = null; renderAll(); return; }
+  if (t.id === 'xlFile' && t.files[0] && !S.xl.running) { xlSetFile(t.files[0]); return; }
   if (t.id === 'xlM') { S.xl.method = t.value; renderAll(); return; }
   if (t.id === 'm-type') { syncDraft(); S.meta.draft.type = t.value; refreshInbox(); const el = $('#m-type'); if (el) el.focus(); return; }
   if (t.dataset.change === 'unit') { const r = byId(S.openId); const u = t.dataset.u; r.sel = t.checked ? [...r.sel, u] : r.sel.filter(x => x !== u); r.touched = true; repaint(); return; }
@@ -612,7 +615,7 @@ addEventListener('resize', () => { closePop(); endDetailResize(); syncDetailSize
 ['dragover', 'dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => {
   const z = e.target.closest && e.target.closest('#xlDrop'); if (!z) return; e.preventDefault();
   z.classList.toggle('drag', ev === 'dragover');
-  if (ev === 'drop' && e.dataTransfer.files[0]) { const f = e.dataTransfer.files[0]; if (!/\.(xlsx|xlsm|csv|txt)$/i.test(f.name)) { toast('Yalnızca .xlsx ya da .csv dosyası yükleyin.', { err: true }); return; } S.xl.file = f; S.xl.res = null; S.xl.err = null; renderAll(); }
+  if (ev === 'drop' && e.dataTransfer.files[0] && !S.xl.running) { const f = e.dataTransfer.files[0]; if (!/\.(xlsx|xlsm|csv|txt)$/i.test(f.name)) { toast('Yalnızca .xlsx ya da .csv dosyası yükleyin.', { err: true }); return; } xlSetFile(f); }
 }));
 addEventListener('scroll', () => { if (S.pop) closePop(); }, { passive: true });
 setInterval(() => { if (S.view === 'yonetim' && S.adminTab === 'hat' && S.auto && !document.hidden && !$('#dlg')) loadAdmin('hat'); }, 30000);

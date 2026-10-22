@@ -115,7 +115,8 @@ def test_compare_categories_text_fallback_and_reverse_direction(data):
     assert c["group"] == "missing" and c["category"] == "not_collected" and c["regulation"] is None
 
     assert res["summary"] == {"total": 3, "relevant": 1, "irrelevant": 1, "missing": 1,
-                              "missingByReason": {"not_collected": 1}, "recall": 0.333, "foundRate": 0.667}
+                              "missingByReason": {"not_collected": 1}, "recall": 0.333, "foundRate": 0.667,
+                              "notFound": 1, "review": 0, "unprocessed": 0, "matched": 2, "matchRate": 0.667}
     # ters yön: 28.09–02.10 arasında görünen A, B2, D; listede yalnız A var. E dönem dışı.
     p = res["precision"]
     assert p["period"] == {"from": "2026-09-28", "to": "2026-10-02"}

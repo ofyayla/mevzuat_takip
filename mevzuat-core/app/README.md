@@ -414,6 +414,12 @@ POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from
   Yapılandırılmış karar başlığıyla çelişen numara/tarih `conflict` olur. Kimliği doğrulanmış ham belgenin
   düzenleme kaydı yoksa `reference_raw_only` döner: bu durum “toplanmadı” değildir.
   Bülten numarasıyla eşleşme bülten düzeyindedir; içindeki her kararın ayrı YZ analiz edildiği anlamına gelmez.
+- Portal adayların başlık, kurum, yayım tarihi ve ham metin kesitini Excel satırıyla yan yana gösterir.
+  Kullanıcı adayı yalnız bu karşılaştırma için kabul edebilir ve onayı geri alabilir. Seçimler yeniden
+  hesaplamaya ve Excel çıktısına gönderilir; yeni dosya yüklenince veya sayfa yenilenince kaybolur.
+  Sunucu güncel aday listesinde olmayan seçimleri reddeder. Seçim YZ ilgililik etiketini değiştirmez.
+  Sayaçlar `notFound` (aday bulunamadı), `review` (aday incelemesi), `unprocessed` (bulundu; YZ sonucu yok)
+  olarak ayrıdır. Eski `missing` sayacı geriye uyum için bu üçünün toplamını korur; crawl yokluğu demek değildir.
 - Başlık tutmazsa `Metin` sütunu kullanılır. Önce HTML ve `&nbsp;` temizlenir; "*****" ayracından sonraki asıl duyuru
   alınır. Bu metin, pencere içindeki ham belge metinlerinde (ekler dahil) `partial_ratio` ile aranır.
 - Varsayılan eşikler başlık için **85**, metin için **65**'tir. Daha düşük metin eşiği, farklı biçimde özetlenmiş

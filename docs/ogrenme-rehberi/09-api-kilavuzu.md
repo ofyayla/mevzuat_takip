@@ -841,6 +841,21 @@ Bülten numarası eşleşmesi yalnızca bültenin bulunduğunu doğrular; her ka
 Kimliği doğrulanan ham belge henüz düzenleme kaydına bağlanmamışsa `category=reference_raw_only` döner;
 bu durum crawl yokluğu değildir. Başlıkla yapılandırılmış karar başlığı çelişirse otomatik bağlanmaz.
 
+`summary.notFound`, `summary.review`, `summary.unprocessed` ayrı sayaçlardır; `missing` eski birleşik
+sayaçtır. `matched` düzenleme/ham belgeyle doğrulanan veya kullanıcı onaylı satır sayısı,
+`matchRate=matched/total` oranıdır (ilk tarama dahil). Eski `foundRate` YZ ilgili+ilgisiz oranını korur.
+Satırdaki `matchState`: `matched`, `review`, `unmatched`, `unprocessed`. `candidates` her adayın
+`regulation`, `rawDocumentId`, `textExcerpt`, `evidence` alanlarını içerir. `evidence=similarity` yalnız
+öneridir; belge kimliğinin doğrulandığı anlamına gelmez.
+
+Multipart formda isteğe bağlı `selections` JSON metni gönderilebilir:
+`[{"row":6,"regulation_id":2675}]`. Satır numarası 1 tabanlıdır. Yalnız güncel aday kabul edilir;
+yinelenen/geçersiz satır veya aday `400 invalid_selection`, bozuk JSON/alan türleri `422` döndürür.
+Seçilen satır `method=manual_selection`, `selectedRegulationId=2675` ile döner; benzerlik skoru verilmez.
+`format=xlsx` için aynı seçimler yeniden gönderilmelidir. Onay veritabanına yazılmaz, YZ etiketini
+değiştirmez ve gönderilmediği sonraki isteğe taşınmaz. Portal bunu mevcut sayfa oturumunda saklar;
+farklı dosya yüklenince temizler.
+
 ```bash
 curl -X POST 'http://localhost:8080/api/v1/evaluation/excel-compare?title_threshold=85' \
      -F 'file=@liste.xlsx'

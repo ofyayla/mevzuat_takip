@@ -1,15 +1,20 @@
 # ruff: noqa: F811
+import json
 from datetime import date
 from io import BytesIO
 
 import openpyxl
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
-from app.db import RawDocument, RegulationKey, Source
+from app.api.main import create_app
+from app.db import ManualDetection, RawDocument, Regulation, RegulationKey, Source
 from app.evaluation.excel_compare import build_workbook, compare
 from app.evaluation.references import extract_reference
 from app.processing.dedupe import canonical_url
-from tests.test_excel_compare import _reg
+from app.services.regulations import ApiError
+from tests.test_excel_compare import _reg, _xlsx
 from tests.test_processing import add_raw, env  # noqa: F401
 
 DAY = date(2026, 10, 3)
@@ -232,3 +237,86 @@ def test_undated_number_does_not_match_prior_year(env):
     with env[0]() as s:
         item = compare(s, [row("Karar No: 11537", issuer="BDDK", created=date(2026, 1, 2))])["items"][0]
     assert item["category"] == "reference_review"
+
+
+def test_review_accept_and_undo_preserve_ai_label_and_metrics(env):
+    first, _ = document(env, "candidate-a", DECISION, DECISION)
+    other, _ = document(env, "candidate-b", DECISION, DECISION)
+    with env[0]() as s:
+        r = s.get(Regulation, other)
+        r.processing_status, r.is_relevant, r.severity = "IRRELEVANT", False, "Orta"
+        s.commit()
+        before = compare(s, [row()])
+        assert before["summary"]["review"] == 1 and before["summary"]["notFound"] == 0
+        assert before["items"][0]["matchState"] == "review"
+        assert {c["regulation"]["id"] for c in before["items"][0]["candidates"]} == {first, other}
+        assert before["items"][0]["candidates"][0]["textExcerpt"] == DECISION
+        accepted = compare(s, [row()], selections={1: other})
+        item = accepted["items"][0]
+        assert item["method"] == "manual_selection" and item["score"] is None
+        assert item["group"] == "irrelevant" and item["selectedRegulationId"] == other
+        assert accepted["summary"]["review"] == 0 and accepted["summary"]["matched"] == 1
+        assert compare(s, [row()])["summary"]["review"] == 1
+        assert s.scalar(select(func.count()).select_from(ManualDetection)) == 0
+        assert s.get(Regulation, other).is_relevant is False
+        book = openpyxl.load_workbook(BytesIO(build_workbook(accepted)))
+        values = list(book["Excel satırları"].values)
+        assert values[1][values[0].index("Kullanıcı onaylı eşleşme")] == other
+
+
+def test_missing_baseline_and_review_have_separate_counters(env):
+    rid, _ = document(env, "baseline", DECISION, DECISION)
+    with env[0]() as s:
+        s.get(Regulation, rid).processing_status = "BASELINE"
+        s.commit()
+        result = compare(s, [row(), row(title="SPK Bülteni 2026/99")])
+    assert result["summary"]["notFound"] == 1
+    assert result["summary"]["review"] == 0 and result["summary"]["unprocessed"] == 1
+    assert result["summary"]["matched"] == 1 and result["summary"]["matchRate"] == 0.5
+    book = openpyxl.load_workbook(BytesIO(build_workbook(result)))
+    values = list(book["Excel satırları"].values)
+    assert values[1][values[0].index("Sonuç")] == "Bulundu; YZ sonucu yok"
+
+
+def test_unverified_exact_title_is_review_candidate_not_automatic_match(env):
+    title = "Kurumun uygulamaya ilişkin açıklaması"
+    rid, _ = document(env, "suggestion", title, "Belge numarası metinde yok.")
+    with env[0]() as s:
+        result = compare(s, [row(title=title, text=DECISION)])
+        item = result["items"][0]
+        assert item["regulation"] is None and item["reference"]["status"] == "unverified"
+        assert item["candidates"][0]["regulation"]["id"] == rid
+        assert item["candidates"][0]["evidence"] == "similarity"
+        assert result["summary"]["review"] == 1
+        book = openpyxl.load_workbook(BytesIO(build_workbook(result)))
+        values = list(book["Excel satırları"].values)
+        assert values[1][values[0].index("Aday kayıtlar")] == str(rid)
+
+
+@pytest.mark.parametrize("selections", [{1: 999999}, {2: 1}])
+def test_invalid_manual_selection_is_rejected(env, selections):
+    document(env, "candidate", DECISION, DECISION)
+    with env[0]() as s, pytest.raises(ApiError):
+        compare(s, [row()], selections=selections)
+
+
+def test_manual_selections_multipart_json_and_export_are_read_only(settings, env):
+    first, _ = document(env, "a", DECISION, DECISION)
+    document(env, "b", DECISION, DECISION)
+    c = TestClient(create_app(settings.model_copy(update={"cors_origins": ""}), env[0]))
+    content = _xlsx([["REF", DECISION, "Bilgi", "SPK", "Orta", "Uyum", DAY, DECISION]])
+    files = {"file": ("test.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    selections = json.dumps([{"row": 1, "regulation_id": first}])
+    url = "/api/v1/evaluation/excel-compare"
+    result = c.post(url, files=files, data={"selections": selections})
+    assert result.status_code == 200, result.text
+    assert result.json()["items"][0]["method"] == "manual_selection"
+    export = c.post(url, params={"format": "xlsx"}, files=files, data={"selections": selections})
+    assert export.status_code == 200, export.text
+    assert openpyxl.load_workbook(BytesIO(export.content))["Excel satırları"].max_row == 2
+    for invalid in ["not-json", '[{"row":1,"regulation_id":true}]']:
+        assert c.post(url, files=files, data={"selections": invalid}).status_code == 422
+    duplicated = json.dumps([{"row": 1, "regulation_id": first}] * 2)
+    assert c.post(url, files=files, data={"selections": duplicated}).status_code == 400
+    with env[0]() as s:
+        assert s.scalar(select(func.count()).select_from(ManualDetection)) == 0

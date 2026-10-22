@@ -11,11 +11,11 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Header, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, Json, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -975,8 +975,14 @@ async def manual_detection_upload(session: SessionDep, actor: ActorDep, file: Up
             "items": [_md_out(m) for m in added]}
 
 
+class ExcelMatchSelection(BaseModel):
+    row: int = Field(gt=0, strict=True)
+    regulation_id: int = Field(gt=0, strict=True)
+
+
 @evaluation.post("/excel-compare")
 async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
+                         selections: Annotated[Json[list[ExcelMatchSelection]] | None, Form()] = None,
                         format: Literal["json", "xlsx"] = "json",
                         title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
                         text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
@@ -999,8 +1005,11 @@ async def excel_compare(session: SessionDep, settings: SettingsDep, actor: Actor
         raise ApiError(400, "invalid_file", f"dosya okunamadı: {e}") from e
     if not rows:
         raise ApiError(400, "empty_file", "dosyada Konu veya Metin sütunu dolu satır bulunamadı")
+    chosen = {s.row: s.regulation_id for s in selections or []}
+    if len(chosen) != len(selections or []):
+        raise ApiError(400, "invalid_selection", "Aynı Excel satırı için birden fazla onay gönderildi.")
     result = compare(session, rows, title_threshold=title_threshold, text_threshold=text_threshold,
-                     date_from=date_from, date_to=date_to)
+                     date_from=date_from, date_to=date_to, selections=chosen)
     session.rollback()   # salt okunur: eşleştirme sırasında oluşan hiçbir şey yazılmaz
     if format == "xlsx":
         headers = {"Content-Disposition": f'attachment; filename="{compare_filename(today(settings))}"',

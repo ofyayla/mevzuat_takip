@@ -4,7 +4,7 @@
    ============================================================================================================ */
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
-S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null };
+S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null };
 S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
 const openAlarms = () => (S.alerts || []).length;
@@ -84,17 +84,36 @@ function viewArsiv() {
 /* ---------- Excel karşılaştırma: Başkanlığın listesi ↔ sistem kayıtları (sunucu karşılaştırır, hiçbir şey kaydetmez) */
 const XL_RES = { relevant: ['tag-ok', 'Relevant'], irrelevant: ['tag-crit', 'Irrelevant'], missing: ['tag-warn', 'Bulunamadı'] };
 function xlParams() { return { title_threshold: S.xl.tTitle, text_threshold: S.xl.tText }; }
-async function xlRun() {
+function xlSetFile(file) {
+  Object.assign(S.xl, { file, res: null, err: null, selections: {}, reviewNo: null });
+  renderAll();
+}
+function xlForm(selections) {
+  const fd = new FormData(); fd.append('file', S.xl.file);
+  fd.append('selections', JSON.stringify(Object.entries(selections).map(([row, id]) => ({ row: +row, regulation_id: id }))));
+  return fd;
+}
+async function xlSelect(no, id) {
+  const selections = { ...S.xl.selections };
+  if (id) selections[no] = +id; else delete selections[no];
+  await xlRun(selections, true);
+}
+async function xlRun(selections = S.xl.selections, preserveTab = false) {
   const x = S.xl; if (!x.file || x.running) return;
   const a = +x.tTitle, b = +x.tText; if (!(a >= 50 && a <= 100) || !(b >= 50 && b <= 100)) { toast('Eşikler 50 ile 100 arasında olmalı.', { err: true }); return; }
   x.running = true; x.err = null; renderAll();
-  try { const fd = new FormData(); fd.append('file', x.file); const r = await api('POST', '/evaluation/excel-compare', { query: xlParams(), form: fd }); x.res = r.data; x.tab = 'tum'; toast(`${N(r.data.summary.total)} satır karşılaştırıldı.`); }
+  try {
+    const r = await api('POST', '/evaluation/excel-compare', { query: xlParams(), form: xlForm(selections) });
+    if (!r.data.summary || typeof r.data.summary.notFound !== 'number' || typeof r.data.summary.review !== 'number') throw new Error('Portal ve API sürümleri uyumsuz. İkisi birlikte güncellenmeli; ardından sayfayı yenileyin.');
+    if (Object.entries(selections).some(([no, id]) => !(r.data.items || []).some(row => row.no === +no && row.selectedRegulationId === id && row.method === 'manual_selection'))) throw new Error('Sunucu eşleşme onayını doğrulamadı. Sonuç değiştirilmedi; yeniden inceleyin.');
+    x.res = r.data; x.selections = selections; if (!preserveTab) x.tab = 'tum'; toast(`${N(r.data.summary.total)} satır karşılaştırıldı.`);
+  }
   catch (e) { x.err = errMsg(e); }
   x.running = false; renderAll();
 }
 async function xlExport() {
   const x = S.xl; if (!x.file) return;
-  try { const fd = new FormData(); fd.append('file', x.file); const { blob, res } = await api('POST', '/evaluation/excel-compare', { query: { ...xlParams(), format: 'xlsx' }, form: fd, blob: true });
+  try { const { blob, res } = await api('POST', '/evaluation/excel-compare', { query: { ...xlParams(), format: 'xlsx' }, form: xlForm(x.selections), blob: true });
     const m = /filename="?([^";]+)"?/i.exec(res.headers.get('Content-Disposition') || ''); saveBlob(blob, m ? m[1] : 'karsilastirma.xlsx'); }
   catch (e) { toast(errMsg(e), { err: true }); }
 }
@@ -102,23 +121,22 @@ const P1 = v => v == null ? '—' : dec(Math.floor(v * 1000) / 10, 1);
 function admExcel() {
   const x = S.xl; const res = x.res;
   const upload = `<section class="card xl-up"><div class="xl-drop ${x.drag ? 'drag' : ''}" id="xlDrop">${ic('download')}<div><b>${x.file ? esc(x.file.name) : 'Excel dosyasını sürükleyin ya da seçin'}</b><span>${x.file ? `${(x.file.size / 1024).toFixed(0)} KB · dosya yalnızca karşılaştırma için gönderilir, kaydedilmez` : 'Beklenen sütunlar: Referans No, Konu, Gönderen/Düzenleyici Kurum, Risk Seviyesi, Oluşturulma Tarihi, Metin (.xlsx, .csv; en fazla 5 MB)'}</span></div>
-      <label class="btn btn-sm" for="xlFile">${x.file ? 'Başka dosya seç' : 'Dosya seç'}</label><input type="file" id="xlFile" accept=".xlsx,.xlsm,.csv,.txt" hidden></div>
+      <label class="btn btn-sm" for="xlFile">${x.file ? 'Başka dosya seç' : 'Dosya seç'}</label><input type="file" id="xlFile" accept=".xlsx,.xlsm,.csv,.txt" ${x.running ? 'disabled' : ''} hidden></div>
     <div class="xl-ctl"><label class="field">Başlık eşiği<span class="xl-num"><input class="input num" id="xlT" value="${x.tTitle}" inputmode="numeric"><span>%</span></span></label>
       <label class="field">Metin eşiği<span class="xl-num"><input class="input num" id="xlX" value="${x.tText}" inputmode="numeric"><span>%</span></span></label>
       <p class="hint" style="margin:0;flex:1 1 220px">Önce bağlantı, sonra kurum ve belge numarası doğrulanır. Belirsiz kimlikler incelemeye ayrılır. Numara tanınmadığında başlık ve metin benzerliği kullanılır. Eşiği değiştirince yeniden karşılaştırın.</p>
       <button class="btn btn-primary" data-act="xl-run" ${x.file && !x.running ? '' : 'disabled'}>${x.running ? 'Karşılaştırılıyor…' : 'Karşılaştır'}</button>
-      <button class="btn" data-act="xl-export" ${res ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
+      <button class="btn" data-act="xl-export" ${res && !x.running ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div><p class="hint">Manuel eşleşmeler yalnız bu karşılaştırmada ve Excel çıktısında kullanılır; sayfa yenilenince silinir. YZ etiketini değiştirmez.</p>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
   if (!res) return upload + `<div class="empty card" style="margin-top:16px">${ic('doc')}<b>Henüz karşılaştırma yok</b><span>Dosyayı yükleyip Karşılaştır'a basın. Karşılaştırma hiçbir kaydı değiştirmez.</span></div>`;
   const s = res.summary, pr = res.precision, sa = res.severityAgreement; const W = v => (s.total ? v / s.total * 100 : 0).toFixed(2) + '%';
   const kpi = (l, v, sub, cl = '', tab) => `<${tab ? `button class="kpi xl-kpi" data-act="xl-tab" data-t="${tab}" aria-pressed="${x.tab === tab}"` : 'div class="kpi xl-kpi"'}><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${sub}</span></${tab ? 'button' : 'div'}>`;
-  const reasons = Object.entries(s.missingByReason || {}).map(([k, n]) => `${esc((res.items.find(i => i.category === k) || {}).categoryLabel || k)} ${n}`).join(' · ');
-  const tabs = [['tum', 'Tüm satırlar', s.total], ['relevant', 'Relevant', s.relevant], ['irrelevant', 'Irrelevant', s.irrelevant], ['missing', 'Eşleşmeyen / inceleme', s.missing], ['fazla', 'Fazla uyarılar', pr.extra]];
+  const tabs = [['tum', 'Tüm satırlar', s.total], ['relevant', 'Relevant', s.relevant], ['irrelevant', 'Irrelevant', s.irrelevant], ['unmatched', 'Eşleşme bulunamadı', s.notFound], ['review', 'Aday incelemesi', s.review], ['unprocessed', 'Bulundu; YZ sonucu yok', s.unprocessed], ['fazla', 'Fazla uyarılar', pr.extra]];
   return `${upload}
   <div class="xl-grid">
     <section class="card xl-sec"><div class="sec-h"><h2>Excel'deki ${N(s.total)} satır sistemde ne oldu?</h2><p>Kapsama</p></div>
-      <div class="xl-bar" role="img" aria-label="Relevant ${s.relevant}, Irrelevant ${s.irrelevant}, Kesin eşleşme yok ${s.missing}"><i class="b-ok" style="width:${W(s.relevant)}"></i><i class="b-crit" style="width:${W(s.irrelevant)}"></i><i class="b-warn" style="width:${W(s.missing)}"></i></div>
-      <div class="kpis xl-kpis">${kpi('Relevant', N(s.relevant), 'Sistem buldu, YZ ilgili dedi', 'h-ok', 'relevant')}${kpi('Irrelevant', N(s.irrelevant), 'Sistem buldu, YZ eledi', 'crit', 'irrelevant')}${kpi('Kesin eşleşme yok', N(s.missing), reasons || 'Tüm satırlar bulundu', 'warn', 'missing')}</div>
-      <div class="xl-rates"><div><b class="num">%${P1(s.recall)}</b><span>Recall · relevant / toplam</span></div><div><b class="num">%${P1(s.foundRate)}</b><span>Bulunma oranı · relevant + irrelevant</span></div><div><b class="num">${sa.exact == null ? '—' : '%' + P1(sa.exact)}</b><span>Risk seviyesi uyumu · ${N(sa.n)} eşleşen kayıt üzerinden</span></div></div></section>
+      <div class="xl-bar" role="img" aria-label="Relevant ${s.relevant}, Irrelevant ${s.irrelevant}, Aday incelemesi ${s.review}, Eşleşme bulunamadı ${s.notFound}"><i class="b-ok" style="width:${W(s.relevant)}"></i><i class="b-crit" style="width:${W(s.irrelevant)}"></i><i class="b-warn" style="width:${W(s.notFound + s.review + s.unprocessed)}"></i></div>
+      <div class="kpis xl-kpis">${kpi('Relevant', N(s.relevant), 'Sistem buldu, YZ ilgili dedi', 'h-ok', 'relevant')}${kpi('Irrelevant', N(s.irrelevant), 'Sistem buldu, YZ eledi', 'crit', 'irrelevant')}${kpi('Eşleşme bulunamadı', N(s.notFound), 'Crawl edilmediğinin kesin kanıtı değildir', 'warn', 'unmatched')}${kpi('Aday incelemesi', N(s.review), 'Karşılaştırıp kabul edebilirsiniz', 'warn', 'review')}${kpi('Bulundu; YZ sonucu yok', N(s.unprocessed), 'İlk tarama veya işleme bekleyen', '', 'unprocessed')}</div>
+      <div class="xl-rates"><div><b class="num">%${P1(s.recall)}</b><span>İlgili bulunan / Excel toplamı</span></div><div><b class="num">%${P1(s.matchRate)}</b><span>Doğrulanan / onaylanan eşleşme · ilk tarama dahil</span></div><div><b class="num">${sa.exact == null ? '—' : '%' + P1(sa.exact)}</b><span>Risk seviyesi uyumu · ${N(sa.n)} eşleşen kayıt üzerinden</span></div></div></section>
     <section class="card xl-sec"><div class="sec-h"><h2>Portalda görünenler listede var mı?</h2><p>Gürültü</p></div>
       <div class="kpis xl-kpis">${kpi('Portalda görünen', N(pr.shown), pr.period && pr.period.from ? `${fD(pd(pr.period.from))} – ${fD(pd(pr.period.to))}` : '')}${kpi('Fazla uyarı', N(pr.extra), 'Portalda var, listede yok', '', 'fazla')}${kpi('Precision', pr.precision == null ? '—' : '%' + P1(pr.precision), 'Listede olan / görünen', pr.precision != null && pr.precision < .2 ? 'crit' : '')}</div>
       <p class="hint" style="margin:10px 0 0">Liste yalnızca Başkanlığın aksiyon aldığı düzenlemeleri içeriyorsa precision doğal olarak düşük çıkar. Fazla uyarıları inceleyip gerçekten gereksiz olanları belirlemek, ilgililik eşiğini ayarlamak için en iyi veridir.</p></section>
@@ -129,21 +147,26 @@ function admExcel() {
 function xlTable(res) {
   const x = S.xl; const q = lower(x.q.trim());
   const methods = [...new Set(res.items.map(i => i.methodLabel).filter(Boolean))];
-  const list = res.items.filter(r => x.tab === 'tum' || r.group === x.tab)
+  const list = res.items.filter(r => x.tab === 'tum' || r.group === x.tab || r.matchState === x.tab)
     .filter(r => x.method === 'tum' || (x.method === 'risk' ? r.regulation && r.severity && r.regulation.severity && r.severity !== r.regulation.severity : r.methodLabel === x.method))
     .filter(r => !q || lower(`${r.title} ${r.ref} ${r.issuer}`).includes(q));
   return `<div class="fbar"><label class="search" style="max-width:none"><span class="sr">Ara</span>${ic('search')}<input id="xlQ" type="search" placeholder="Konu, referans no veya kurum ara" value="${esc(x.q)}"></label>
     <select class="select" id="xlM" aria-label="Eşleşme yöntemi" style="width:auto"><option value="tum">Tüm eşleşme yöntemleri</option>${methods.map(v => `<option value="${esc(v)}" ${x.method === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}<option value="risk" ${x.method === 'risk' ? 'selected' : ''}>Risk seviyesi uyuşmayanlar</option></select>
     <span class="muted num" style="font-size:12.5px">${list.length} satır</span></div>
   ${list.length ? `<div class="tbl-wrap" style="margin-bottom:24px"><table class="tbl static xl-tbl"><thead><tr><th class="num">#</th><th>Excel satırı</th><th>Sonuç</th><th>Eşleşen sistem kaydı</th><th>Risk (Excel / sistem)</th><th style="text-align:right">Skor</th></tr></thead><tbody>
-  ${list.map(r => { const t = r.category === 'reference_review' ? ['tag-warn', 'İnceleme gerekli'] : r.category === 'reference_raw_only' ? ['tag-warn', 'Toplandı'] : XL_RES[r.group] || XL_RES.missing; const g = r.regulation; const same = r.severity && g && g.severity && r.severity === g.severity;
+  ${list.map(r => { const t = r.category === 'reference_review' ? ['tag-warn', r.matchState === 'unmatched' ? 'Eşleşme bulunamadı' : 'İnceleme gerekli'] : r.category === 'reference_raw_only' ? ['tag-warn', 'Toplandı'] : r.matchState === 'unprocessed' ? ['tag-warn', 'Bulundu; YZ sonucu yok'] : XL_RES[r.group] || XL_RES.missing; const g = r.regulation; const same = r.severity && g && g.severity && r.severity === g.severity;
     return `<tr><td class="num muted">${r.no}</td>
       <td style="min-width:260px"><div class="ttl" style="color:var(--fg);font-weight:500">${esc(r.title)}</div><div class="meta">${r.ref ? `<span class="mono">${esc(r.ref)}</span>` : ''}<span>${esc(r.issuer || '—')}</span>${r.createdAt ? `<span>${fD(pd(r.createdAt))}</span>` : ''}</div></td>
-      <td style="min-width:130px"><span class="tag ${t[0]}">${t[1]}</span><div class="u-s">${esc(r.categoryLabel || '')}</div>${xlReference(r.reference)}</td>
+      <td style="min-width:130px"><span class="tag ${t[0]}">${t[1]}</span><div class="u-s">${esc(r.categoryLabel || '')}</div>${xlReference(r.reference)}${(r.candidates || []).length ? `<button class="btn btn-sm" data-act="xl-review" data-no="${r.no}">Adayları karşılaştır (${r.candidates.length})</button>` : ''}${r.selectedRegulationId ? `<div class="u-s">Bu karşılaştırmada kullanıcı onaylı</div><button class="linkbtn" data-act="xl-unselect" data-no="${r.no}" ${x.running ? 'disabled' : ''}>Onayı geri al</button>` : ''}</td>
       <td style="min-width:240px">${g ? `<div style="font-size:13px">${esc(g.title)}</div><div class="u-s">#${g.id}${g.publishDate ? ' · ' + fD(pd(g.publishDate)) : ''}${g.relevanceScore != null && g.isRelevant === false ? ` · ilgililik ${dec(g.relevanceScore)}` : ''} · <button class="linkbtn" style="padding:0;font-size:11.5px" data-act="xl-open" data-id="${g.id}">Kaydı aç</button></div>` : `<span class="muted" style="font-size:12.5px">${r.rawDocumentId ? 'Ham belge #' + esc(r.rawDocumentId) + ' · sistem kaydı yok' : 'Eşleşen kayıt yok'}</span>`}</td>
       <td style="white-space:nowrap">${sevPill(r.severity)}${g && g.severity ? ` <span class="${same ? 'h-ok' : 'h-warn'}" title="${same ? 'Uyumlu' : 'Uyumsuz'}">${same ? '=' : '≠'}</span> ${sevPill(g.severity)}` : ''}</td>
-      <td style="text-align:right;white-space:nowrap"><b class="num">${r.score != null ? dec(r.score) : '—'}</b><div class="u-s">${esc(r.methodLabel || '')}</div></td></tr>`; }).join('')}
+      <td style="text-align:right;white-space:nowrap"><b class="num">${r.score != null ? dec(r.score) : '—'}</b><div class="u-s">${esc(r.methodLabel || '')}</div></td></tr>${x.reviewNo === r.no ? `<tr><td colspan="6">${xlComparison(r)}</td></tr>` : ''}`; }).join('')}
   </tbody></table></div>` : '<div class="empty card"><b>Bu süzgeçte satır yok</b></div>'}`;
+}
+function xlComparison(row) {
+  return `<section class="card" aria-label="Excel ve aday karşılaştırması"><h3>Excel satırı ${row.no} — aday karşılaştırması</h3><p class="hint">Numara, karar tarihi, konu ve kapsamı karşılaştırın. Kabul yalnız eşleşmeyi onaylar; YZ ilgililik etiketini değiştirmez.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:16px"><div style="flex:1 1 280px"><b>Excel: ${esc(row.title)}</b><p>${esc(row.issuer || '')} · ${esc(row.createdAt || '')}</p><pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(row.textExcerpt || 'Excel metni yok.')}</pre></div>
+    <div style="flex:1 1 360px">${(row.candidates || []).map(c => { const r = c.regulation; return `<article class="card" style="margin-bottom:12px;padding:12px"><b>#${r.id} · ${esc(r.title)}</b><p>${esc(r.issuer || 'Kurum bilinmiyor')} · Yayım: ${esc(r.publishDate || '—')} · ${esc(r.status)}</p><p class="hint">${c.evidence === 'similarity' ? 'Yalnız benzerlik adayı; belge kimliği doğrulanamadı.' : 'Numara adayı; birincil karar mı, atıf mı olduğunu kontrol edin.'}</p><pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(c.textExcerpt || 'Ham metin yok; kabul etmeden kaynağı kontrol edin.')}</pre><button class="linkbtn" data-act="xl-open" data-id="${r.id}">Kaydı aç</button> <button class="btn btn-primary" data-act="xl-select" data-no="${row.no}" data-id="${r.id}" ${S.xl.running || row.selectedRegulationId === r.id ? 'disabled' : ''}>${row.selectedRegulationId === r.id ? 'Bu aday kabul edildi' : 'Bu eşleşmeyi kabul et'}</button></article>`; }).join('')}</div></div></section>`;
 }
 function xlReference(ref) {
   if (!ref) return '';

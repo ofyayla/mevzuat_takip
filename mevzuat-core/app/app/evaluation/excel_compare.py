@@ -40,7 +40,7 @@ from app.evaluation.parallel import (
 from app.evaluation.references import ReferenceResult, match_reference
 from app.processing.normalize import ISSUERS, issuers_compatible, match_issuer, normalize_text, title_key
 from app.services.export import _cell
-from app.services.regulations import VISIBLE_STATUSES
+from app.services.regulations import VISIBLE_STATUSES, ApiError
 
 WINDOW = (timedelta(days=14), timedelta(days=2))   # (geriye, ileriye): kayıt tarihi yayımdan sonra gelir
 TEXT_THRESHOLD = 65
@@ -62,7 +62,7 @@ LABELS = {"detected": "İlgili (yakalandı)", "below_threshold": "İlgisiz (YZ e
           "reference_raw_only": "Ham belge bulundu; sistem kaydı yok"}
 METHODS = {"url": "Bağlantı", "exact_key": "Karar/sıra no", "fuzzy_title": "Başlık benzerliği",
            "fuzzy_title_raw": "Başlık (ham belge)", "fuzzy_text": "Metin benzerliği",
-           "exact_reference": "Kurum + belge numarası"}
+           "exact_reference": "Kurum + belge numarası", "manual_selection": "Kullanıcı onayı (bu karşılaştırma)"}
 
 
 # ------------------------------------------------------------------------------------------------ giriş
@@ -196,16 +196,60 @@ def _reg_out(reg: Regulation | None) -> dict | None:
             "severity": reg.severity, "rationale": rel.get("rationale")}
 
 
+def _review_candidates(session: Session, row: dict, reference: ReferenceResult,
+                       title_threshold: float, text_threshold: float) -> list[dict]:
+    ids = list(reference.candidates)
+    if not ids and reference.status == "unverified":
+        md = ManualDetection(title=row["title"], issuer=row["issuer"],
+                             publish_date=row["created"], url=row["url"])
+        match_detection(session, md, window=WINDOW, title_threshold=title_threshold)
+        if md.matched_regulation_id:
+            ids.append(md.matched_regulation_id)
+        elif row["text"]:
+            raw, _ = _match_text(session, row, issuer_code(row["issuer"]), text_threshold)
+            if raw is not None and raw.regulation_id:
+                ids.append(raw.regulation_id)
+    candidates = []
+    for rid in ids:
+        reg = session.get(Regulation, rid)
+        if reg is None:
+            continue
+        docs = session.scalars(select(RawDocument).where(
+            RawDocument.regulation_id == rid, RawDocument.is_latest.is_(True),
+            RawDocument.role != "listing").order_by(RawDocument.id)).all()
+        raw = max(docs, key=lambda d: (reference.reference.number in tr_lower(d.text or ""),
+                                      len(d.text or "")), default=None)
+        text = (raw.text or "") if raw is not None else ""
+        pos = tr_lower(text).find(reference.reference.number)
+        excerpt = text[:3000] if pos < 2500 else text[:1000] + "\n…\n" + text[max(0, pos - 700):pos + 1300]
+        candidates.append({"regulation": _reg_out(reg), "rawDocumentId": raw.id if raw else None,
+                           "textExcerpt": excerpt, "evidence": "reference" if rid in reference.candidates else "similarity"})
+    return candidates
+
+
 def compare(session: Session, rows: list[dict], *, title_threshold: float = TITLE_THRESHOLD,
             text_threshold: float = TEXT_THRESHOLD, date_from: date | None = None,
-            date_to: date | None = None) -> dict:
+            date_to: date | None = None, selections: dict[int, int] | None = None) -> dict:
+    selections = selections or {}
+    if any(no < 1 or no > len(rows) for no in selections):
+        raise ApiError(400, "invalid_selection", "Onaylanan Excel satırı dosyada bulunamadı.")
     items, matched_ids = [], set()
     by_issuer: dict[str, Counter] = {}
     sev_pairs = []
     for i, row in enumerate(rows, start=1):
         md, reference = match_row(session, row, title_threshold=title_threshold, text_threshold=text_threshold)
+        candidates = (_review_candidates(session, row, reference, title_threshold, text_threshold)
+                      if reference is not None and reference.status != "matched" else [])
+        if i in selections:
+            selected = next((c for c in candidates if c["regulation"]["id"] == selections[i]), None)
+            if selected is None:
+                raise ApiError(400, "invalid_selection",
+                               f"{i}. satırın onayı artık güncel adaylar arasında değil. Onayı geri alıp yeniden inceleyin.")
+            md.matched_regulation_id = selected["regulation"]["id"]
+            md.matched_raw_document_id = selected["rawDocumentId"]
+            md.match_method, md.match_score = "manual_selection", None
         cat, reg = classify_detection(session, md)
-        if reference is not None and reference.status != "matched":
+        if reference is not None and reference.status != "matched" and i not in selections:
             cat = "reference_review"
         elif reference is not None and reference.raw is not None and reg is None:
             cat = "reference_raw_only"
@@ -216,6 +260,9 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
             sev_pairs.append((row["severity"], reg.severity))
         code = issuer_code(row["issuer"]) or row["issuer"] or "—"
         by_issuer.setdefault(code, Counter())[group] += 1
+        state = ("review" if cat == "reference_review" and candidates else
+                 "unmatched" if cat in ("reference_review", "not_collected") else
+                 "matched" if group in ("relevant", "irrelevant") else "unprocessed")
         items.append({"no": i, "ref": row["ref"], "title": row["title"], "issuer": row["issuer"],
                       "requestType": row["request_type"], "severity": row["severity"],
                       "recipients": row["recipients"],
@@ -224,11 +271,15 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
                       "method": md.match_method, "methodLabel": METHODS.get(md.match_method or "", None),
                       "score": md.match_score, "rawDocumentId": md.matched_raw_document_id,
                       "reference": reference.output() if reference else None,
+                      "matchState": state, "candidates": candidates, "textExcerpt": row["text"][:4000],
+                      "selectedRegulationId": selections.get(i),
                       "regulation": _reg_out(reg)})
 
     total = len(items)
     groups = Counter(it["group"] for it in items)
     reasons = Counter(it["category"] for it in items if it["group"] == "missing")
+    states = Counter(it["matchState"] for it in items)
+    matched = sum(it["regulation"] is not None or it["rawDocumentId"] is not None for it in items)
 
     # ters yön: dönemde portalda görünen ama listedeki hiçbir satırla eşleşmeyen kayıtlar
     dates = [r["created"] for r in rows if r["created"]]
@@ -245,6 +296,8 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
     return {
         "summary": {"total": total, "relevant": groups["relevant"], "irrelevant": groups["irrelevant"],
                     "missing": groups["missing"], "missingByReason": dict(reasons),
+                    "notFound": states["unmatched"], "review": states["review"], "unprocessed": states["unprocessed"],
+                    "matched": matched, "matchRate": round(matched / total, 3) if total else None,
                     "recall": round(groups["relevant"] / total, 3) if total else None,
                     "foundRate": round((groups["relevant"] + groups["irrelevant"]) / total, 3) if total else None},
         "precision": {"period": {"from": lo.isoformat() if lo else None, "to": hi.isoformat() if hi else None},
@@ -273,7 +326,9 @@ ITEM_COLUMNS: list[tuple[str, int, callable]] = [
     ("Kurum", 28, lambda it: it["issuer"]),
     ("Oluşturulma", 12, lambda it: it["createdAt"]),
     ("Risk seviyesi", 12, lambda it: it["severity"]),
-    ("Sonuç", 20, lambda it: {"reference_review": "İnceleme gerekli", "reference_raw_only": "Toplandı"}.get(
+    ("Sonuç", 20, lambda it: "Bulundu; YZ sonucu yok" if it.get("matchState") == "unprocessed" else
+     {"reference_review": "İnceleme gerekli" if it.get("candidates") else "Eşleşme bulunamadı",
+                            "reference_raw_only": "Toplandı"}.get(
         it["category"], {"relevant": "Relevant", "irrelevant": "Irrelevant"}.get(it["group"], "Bulunamadı"))),
     ("Ayrıntı", 26, lambda it: it["categoryLabel"]),
     ("Eşleşme yöntemi", 18, lambda it: it["methodLabel"]),
@@ -281,7 +336,9 @@ ITEM_COLUMNS: list[tuple[str, int, callable]] = [
     ("Belge kimliği", 24, lambda it: (it.get("reference") or {}).get("number")),
     ("Karar tarihi", 14, lambda it: (it.get("reference") or {}).get("date")),
     ("Kimlik kontrolü", 18, lambda it: (it.get("reference") or {}).get("status")),
-    ("Aday kayıtlar", 24, lambda it: ", ".join(map(str, (it.get("reference") or {}).get("candidateIds", [])))),
+    ("Kullanıcı onaylı eşleşme", 18, lambda it: it.get("selectedRegulationId")),
+    ("Aday kayıtlar", 24, lambda it: ", ".join(map(str, [c["regulation"]["id"] for c in it.get("candidates", [])]
+                                               or (it.get("reference") or {}).get("candidateIds", [])))),
     ("Sistem kayıt no", 10, lambda it: (it["regulation"] or {}).get("id")),
     ("Ham belge no", 12, lambda it: it.get("rawDocumentId")),
     ("Sistem başlığı", 60, lambda it: (it["regulation"] or {}).get("title")),
@@ -323,9 +380,13 @@ def build_workbook(result: dict) -> bytes:
     ws = wb.active
     ws.title = "Özet"
     summary = [("Excel satırı", s["total"]), ("Relevant (sistem buldu, YZ ilgili dedi)", s["relevant"]),
-               ("Irrelevant (sistem buldu, YZ eledi)", s["irrelevant"]), ("Kesin eşleşme yok / inceleme", s["missing"])]
-    summary += [(f"  · {LABELS.get(k, k)}", v) for k, v in s["missingByReason"].items()]
-    summary += [("Recall (relevant / toplam)", pct(s["recall"])), ("Bulunma oranı", pct(s["foundRate"])),
+               ("Irrelevant (sistem buldu, YZ eledi)", s["irrelevant"]),
+               ("Eşleşme bulunamadı (crawl yokluğu kanıtı değildir)", s["notFound"]),
+               ("Aday incelemesi bekliyor", s["review"]), ("Bulundu; YZ sonucu yok", s["unprocessed"]),
+               ("Doğrulanan / kullanıcı onaylı eşleşme", s["matched"])]
+    summary += [("İlgili bulunan / Excel toplamı", pct(s["recall"])),
+                ("Doğrulanan/onaylanan eşleşme oranı", pct(s["matchRate"])),
+                ("YZ sonuçlu eşleşme oranı", pct(s["foundRate"])),
                 ("", None),
                 ("Ters yön dönemi", f'{p["period"]["from"] or "—"} – {p["period"]["to"] or "—"}'),
                 ("Portalda görünen kayıt", p["shown"]), ("Listede olan", p["inList"]),
