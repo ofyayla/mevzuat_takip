@@ -85,6 +85,15 @@ test('initial sort and defaults on field changes remain unchanged', () => {
   }
 });
 
+test('irrelevant sample sends the search query to its list endpoint', async () => {
+  const p = portal();
+  p.run("S.queue = 'ilgisiz'; S.q = 'bankacılık';");
+  await p.run('loadList()');
+  const request = p.requests.at(-1);
+  assert.equal(request.pathname, '/api/v1/regulations/irrelevant-sample');
+  assert.equal(request.searchParams.get('q'), 'bankacılık');
+});
+
 for (const [key, field, direction, label, cls] of [
   ['yururluk', 'effective_date', 'asc', 'Yürürlük', 'c-eff'],
   ['onem', 'severity', 'desc', 'Önem', 'c-sev'],
@@ -140,14 +149,27 @@ test('sort changes reset pagination and selection without dropping filters', () 
   }
 });
 
-test('all decision queues expose both sorting controls', () => {
+test('the combined decision queue exposes sorting and added-time filtering', () => {
   const p = portal();
-  for (const queue of ['yeni', 'birikim', 'tum']) {
-    p.run(`S.queue = '${queue}';`);
-    const html = p.run('chipsRow(0, 0, 0)');
-    assert.match(html, /id="sort"/);
-    assert.match(html, /id="sortDir"/);
-  }
+  p.run("S.queue = 'tum';");
+  const html = p.run('chipsRow(0, 0, 0)');
+  assert.match(html, /id="sort"/);
+  assert.match(html, /id="sortDir"/);
+  assert.match(p.run('qtabs()'), /Karar bekleyen/);
+  assert.doesNotMatch(p.run('qtabs()'), /Yeni|Birikim/);
+  assert.match(p.run('fbtns()'), /Eklenme zamanı/);
+  assert.match(p.run("filterPopHtml('added')"), /Son 7 gün/);
+  assert.match(p.run("filterPopHtml('added')"), /7 günden eski/);
+});
+
+test('added-time filter reaches the list API and survives list reloads', async () => {
+  const p = portal();
+  p.run("S.f.added.add('older');");
+  await p.run('loadList()');
+  const query = p.requests.at(-1).searchParams;
+  assert.equal(query.get('queue'), 'tum');
+  assert.equal(query.get('detected_period'), 'older');
+  assert.match(p.run('chipsRow(0, 0, 0)'), /Eklenme: 7 günden eski/);
 });
 
 test('preparing and irrelevant queues retain their fixed ordering', async () => {

@@ -67,10 +67,10 @@ görünür kayıtlar aktarılır. Tekrarlanan numaralar tekilleştirilir; boş v
 
 | Yöntem | Yol | Parametreler | Gövde | Açıklama |
 |---|---|---|---|---|
-| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction`, `queue`, `effective`, `needs_unit`, `unit_changed`, `edited` |  | Regulations |
+| `GET` | `/api/v1/regulations` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `page`, `page_size`, `sort`, `direction`, `queue`, `effective`, `detected_period`, `needs_unit`, `unit_changed`, `edited` |  | Regulations |
 | `GET` | `/api/v1/regulations/stats` |  |  | Regulation Stats |
-| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction`, `queue`, `effective`, `needs_unit`, `ids` |  | Regulations Export |
-| `GET` | `/api/v1/regulations/irrelevant-sample` | `page`, `page_size` |  | Irrelevant Sample List |
+| `GET` | `/api/v1/regulations/export` | `source`, `severity`, `status`, `unit`, `date_range`, `q`, `metric`, `sort`, `direction`, `queue`, `effective`, `detected_period`, `needs_unit`, `ids` |  | Regulations Export |
+| `GET` | `/api/v1/regulations/irrelevant-sample` | `page`, `page_size`, `q` |  | Irrelevant Sample List |
 | `POST` | `/api/v1/regulations/{reg_id}/irrelevant-review` | `reg_id` | evet | Irrelevant Review |
 | `POST` | `/api/v1/regulations/bulk-decision` |  | evet | Regulation Bulk Decision |
 | `GET` | `/api/v1/regulations/decision-stats` |  |  | Regulation Decision Stats |

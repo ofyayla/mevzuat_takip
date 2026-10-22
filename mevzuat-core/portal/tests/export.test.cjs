@@ -61,17 +61,17 @@ test('filtered export ignores selected IDs and exports all pages with filters an
   const p = portal();
   p.run(`
     S.selected.add('42'); S.page = 3; S.q = 'banka';
-    S.f.src.add('BDDK'); S.f.sev.add('Kritik'); S.f.eff.add('7');
+    S.f.src.add('BDDK'); S.f.sev.add('Kritik'); S.f.eff.add('7'); S.f.added.add('older');
     S.f.unit.add('RISK'); S.f.needUnit = true;
-    S.sort = 'yururluk'; S.sortDir = 'asc'; S.queue = 'birikim'; exportList();
+    S.sort = 'yururluk'; S.sortDir = 'asc'; S.queue = 'tum'; exportList();
   `);
   assert.equal(await p.submit('filtered'), 'wait');
   const result = JSON.parse(p.run('JSON.stringify(downloads[0])'));
   assert.equal(result.path, '/regulations/export');
   assert.equal(result.filename, 'mevzuat-liste.xlsx');
   assert.deepEqual(result.query, {
-    queue: 'birikim', sort: 'effective_date', direction: 'asc', q: 'banka',
-    source: ['BDDK'], severity: ['Kritik'], effective: ['7'], unit: ['RISK'], needs_unit: true,
+    queue: 'tum', sort: 'effective_date', direction: 'asc', q: 'banka',
+    source: ['BDDK'], severity: ['Kritik'], effective: ['7'], detected_period: ['older'], unit: ['RISK'], needs_unit: true,
   });
   assert.equal(p.run('closed'), true);
 });

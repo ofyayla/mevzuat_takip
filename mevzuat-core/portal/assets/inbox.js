@@ -3,24 +3,23 @@
    Gelen kutusu: durum, sunucudan liste/KPI yükleme ve liste/ayrıntı çizimi.
    ============================================================================================================ */
 const S = {
-  view: 'gelen', adminTab: 'genel', queue: 'yeni', q: '', sort: 'oncelik', sortDir: 'desc', page: 1, ps: 25,
-  f: { src: new Set(), sev: new Set(), eff: new Set(), unit: new Set(), needUnit: false },
+  view: 'gelen', adminTab: 'genel', queue: 'tum', q: '', sort: 'oncelik', sortDir: 'desc', page: 1, ps: 25,
+  f: { src: new Set(), sev: new Set(), eff: new Set(), added: new Set(), unit: new Set(), needUnit: false },
   selected: new Set(), openId: null, focusId: null, dTab: 'ozet', cite: null, rejecting: false, rejReason: 'not_banking_related',
   list: { ids: [], total: 0, loading: true, err: null }, kpi: null, busy: false,
   pop: null, edit: null, meta: null,
   arsivF: 'onay', arsivQ: '', arsivPage: 1, ar: { ids: [], total: 0, loading: true, err: null }, arStats: null,
 };
 const QUEUES = {
-  yeni: { label: 'Yeni', note: 'Son 7 günde tespit edilen, YZ işlemi tamamlanmış kayıtlar.' },
-  birikim: { label: 'Birikim', note: 'Baseline sonrası yayımlanan ve 7 günden uzun süredir bekleyen kayıtlar. Benzer kayıtları seçip toplu onaylayın ya da reddedin.' },
-  tum: { label: 'Tümü', note: 'Karar bekleyen tüm kayıtlar.' },
+  tum: { label: 'Karar bekleyen', note: 'YZ işlemi tamamlanmış, karar bekleyen tüm kayıtlar.' },
   hazirlaniyor: { label: 'YZ hazırlıyor', note: 'Özeti ya da birim önerisi henüz hazır olmayan kayıtlar. Hazır olunca Yeni kuyruğuna düşer; bu sırada karar verilemez.' },
   ilgisiz: { label: 'İlgisizler', note: 'YZ\'nin ilgisiz bulduğu tüm kayıtlar. Kaçırılan düzenleme riskine karşı her birinde YZ kararını onaylayın ya da düzeltin.' },
 };
-const DECISION_Q = ['yeni', 'birikim', 'tum'];
+const DECISION_Q = ['tum'];
 const SORTS = { oncelik: { sort: 'priority', direction: 'desc' }, tespit: { sort: 'detected_at', direction: 'desc' },
   yayim: { sort: 'publish_date', direction: 'desc' }, yururluk: { sort: 'effective_date', direction: 'asc' }, onem: { sort: 'severity', direction: 'desc' } };
 const EFF_OPTS = [['7', '7 gün içinde'], ['30', '30 gün içinde'], ['in', 'Yürürlükte'], ['none', 'Belirtilmemiş']];
+const ADDED_OPTS = [['recent', 'Son 7 gün'], ['older', '7 günden eski']];
 const EFF_API = { 7: '7', 30: '30', in: 'in_force', none: 'none' };
 
 /* ---------- türetilen değerler */
@@ -28,11 +27,11 @@ const curSev = r => r.sev;
 const needsUnit = r => r.sel.length === 0;
 function counts() {
   const q = (Boot.stats && Boot.stats.queues) || {};
-  return { yeni: q.yeni || 0, birikim: q.birikim || 0, tum: q.tum || 0, hazirlaniyor: q.hazirlaniyor || 0, ilgisiz: q.ilgisizOrneklem || 0, bekleyen: q.tum || 0 };
+  return { tum: q.tum || 0, hazirlaniyor: q.hazirlaniyor || 0, ilgisiz: q.ilgisizOrneklem || 0, bekleyen: q.tum || 0 };
 }
 const currentList = () => S.list.ids.map(byId).filter(Boolean);
 const effDays = r => r.eff instanceof Date ? dd(r.eff, NOW) : null;
-const anyFilter = () => S.q || S.f.src.size || S.f.sev.size || S.f.eff.size || S.f.unit.size || S.f.needUnit;
+const anyFilter = () => S.q || S.f.src.size || S.f.sev.size || S.f.eff.size || S.f.added.size || S.f.unit.size || S.f.needUnit;
 const isAdmin = () => !!(Boot.me && Boot.me.isAdmin);
 const canDecide = () => !!(Boot.me && Boot.me.canDecide);
 
@@ -41,7 +40,7 @@ function listParams(extra = {}) {
   const hz = S.queue === 'hazirlaniyor';
   const so = hz ? { sort: 'detected_at', direction: 'asc' } : { sort: SORTS[S.sort].sort, direction: S.sortDir };
   return { queue: S.queue, page: S.page, page_size: S.ps, ...so, q: S.q.trim(), source: [...S.f.src], severity: [...S.f.sev],
-    effective: [...S.f.eff].map(v => EFF_API[v]), unit: [...S.f.unit], needs_unit: S.f.needUnit, ...extra };
+    effective: [...S.f.eff].map(v => EFF_API[v]), detected_period: [...S.f.added], unit: [...S.f.unit], needs_unit: S.f.needUnit, ...extra };
 }
 let listSeq = 0;
 async function loadList() {
@@ -131,7 +130,7 @@ function kpis() {
   const n30 = k.n30, n7 = k.n7;
   const off = (label, note) => `<div class="kpi kpi-off"><span class="kpi-l">${label}</span><span class="kpi-v num">—</span><span class="kpi-s">${note}</span></div>`;
   return `<div class="kpis">
-    <div class="kpi"><span class="kpi-l">${QUEUES[S.queue].label} kuyruğu</span><span class="kpi-v num">${N(c[S.queue])}</span><span class="kpi-s">Toplam karar bekleyen ${N(c.bekleyen)}</span></div>
+    <div class="kpi"><span class="kpi-l">${S.queue === 'tum' ? 'Karar bekleyen' : `${QUEUES[S.queue].label} kuyruğu`}</span><span class="kpi-v num">${N(c[S.queue])}</span><span class="kpi-s">Toplam karar bekleyen ${N(c.bekleyen)}</span></div>
     ${dec_ ? `<button class="kpi" data-act="kpi-sev" aria-pressed="${sevOn}" title="Kritik ve Yüksek önemlileri göster"><span class="kpi-l">Kritik ve yüksek</span><span class="kpi-v num">${N(dist[0] + dist[1])}</span>
       <span class="dist" aria-label="Kritik ${dist[0]}, Yüksek ${dist[1]}, Orta ${dist[2]}, Düşük ${dist[3]}">${dist.map((n, i) => n ? `<i class="d-${'kyod'[i]}" style="width:${n / tot * 100}%" title="${SEVS[i]}: ${n}"></i>` : '').join('')}</span></button>`
       : off('Kritik ve yüksek', 'Bu kuyrukta hesaplanmaz')}
@@ -144,13 +143,13 @@ function kpis() {
 }
 function qtabs() {
   const c = counts(); const t = k => `<button class="tab" role="tab" data-act="queue" data-q="${k}" aria-selected="${S.queue === k}">${QUEUES[k].label}<span class="cnt">${N(c[k])}</span></button>`;
-  return `<div class="tabs qtabs" role="tablist" aria-label="Kuyruklar">${t('yeni')}${t('birikim')}${t('tum')}<span class="tab-sep" aria-hidden="true"></span>${t('hazirlaniyor')}${t('ilgisiz')}</div>`;
+  return `<div class="tabs qtabs" role="tablist" aria-label="Kuyruklar">${t('tum')}<span class="tab-sep" aria-hidden="true"></span>${t('hazirlaniyor')}${t('ilgisiz')}</div>`;
 }
 function fbtns() {
   const b = (k, l) => { const n = S.f[k].size; return `<button class="btn fbtn ${n ? 'on' : ''}" data-act="pop-filter" data-f="${k}" aria-expanded="${S.pop && S.pop.f === k}">${l}${n ? ` <b>${n}</b>` : ''}${ic('chev-d')}</button>`; };
   if (S.queue === 'ilgisiz') return '';
   const dec_ = DECISION_Q.includes(S.queue);
-  return b('src', 'Kaynak') + (dec_ ? b('sev', 'Önem') + b('eff', 'Yürürlük') + b('unit', 'Birim') +
+  return b('src', 'Kaynak') + (dec_ ? b('added', 'Eklenme zamanı') + b('sev', 'Önem') + b('eff', 'Yürürlük') + b('unit', 'Birim') +
     `<button class="btn fbtn ${S.f.needUnit ? 'on' : ''}" data-act="kpi-need" aria-pressed="${S.f.needUnit}">${ic('alert')}Birim atanmalı</button>` : '');
 }
 function chipsRow(total, start, n) {
@@ -159,6 +158,7 @@ function chipsRow(total, start, n) {
   S.f.src.forEach(v => chips.push(['src', v, srcOf(v).a]));
   S.f.sev.forEach(v => chips.push(['sev', v, v]));
   S.f.eff.forEach(v => chips.push(['eff', v, 'Yürürlük: ' + EFF_OPTS.find(o => o[0] === v)[1]]));
+  S.f.added.forEach(v => chips.push(['added', v, 'Eklenme: ' + ADDED_OPTS.find(o => o[0] === v)[1]]));
   S.f.unit.forEach(v => chips.push(['unit', v, trunc(unitName(v), 30)]));
   if (S.f.needUnit) chips.push(['needUnit', '', 'Birim atanmalı']);
   const sortable = DECISION_Q.includes(S.queue);
@@ -177,9 +177,7 @@ function listRegion() {
     ${total ? `<div class="tbl-wrap ${loading ? 'is-loading' : ''}" ${loading ? 'aria-busy="true"' : ''}>${table(rows)}</div>${pager(total, start, rows.length, pages)}` : emptyState()}${bulkbar()}`;
 }
 function emptyState() {
-  const c = counts();
   if (anyFilter()) return `<div class="empty card"><b>Bu filtrelerle kayıt yok</b><span>Filtreleri gevşetin ya da temizleyin.</span><button class="btn" data-act="clear-filters">Filtreleri temizle</button></div>`;
-  if (S.queue === 'yeni') return `<div class="empty card">${ic('check')}<b>Yeni kuyruk boş</b><span>Birikimde ${N(c.birikim)} kayıt bekliyor.</span><button class="btn" data-act="queue" data-q="birikim">Birikime geç</button></div>`;
   return `<div class="empty card"><b>Bu kuyrukta kayıt yok</b></div>`;
 }
 function sortTh(k, l, cls) {

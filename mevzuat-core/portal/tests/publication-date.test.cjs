@@ -43,7 +43,7 @@ function portal() {
   };
 }
 
-for (const queue of ['yeni', 'birikim', 'tum']) {
+for (const queue of ['tum']) {
   for (const direction of ['asc', 'desc']) {
     test(`${queue}: publication sorting sends ${direction} to the API and retains filters`, () => {
       const p = portal();

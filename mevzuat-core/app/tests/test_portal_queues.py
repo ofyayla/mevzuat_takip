@@ -30,25 +30,32 @@ def _add(sf, settings, title, *, severity="Orta", status="READY", effective=None
         return r.id
 
 
-def test_queues_split_new_backlog_and_preparing(settings, env, client):  # noqa: F811
+def test_pending_queue_added_time_filter_and_preparing(settings, env, client):  # noqa: F811
     _ready(settings, env)
     c, sf = client
     old = _add(sf, settings, "Eski kayıt", detected_days_ago=20)
+    recent = _add(sf, settings, "Yeni kayıt", detected_days_ago=2)
     prep = _add(sf, settings, "Özet bekleyen", status="RELEVANT", units=())
     failed = _add(sf, settings, "Hatalı", status="AI_FAILED", units=(),
                   extra={"ai_attempts": 3, "ai_stage": "summary", "ai_error": "zaman aşımı"})
 
-    def q(name):
-        return {i["id"] for i in c.get("/api/v1/regulations", params={"queue": name}).json()["items"]}
+    def ids(**params):
+        return {i["id"] for i in c.get("/api/v1/regulations", params=params).json()["items"]}
 
-    assert old in q("birikim") and old not in q("yeni") and old in q("tum")
-    assert q("hazirlaniyor") == {prep, failed} and not ({prep, failed} & q("tum"))
-    assert len(q("yeni")) == 1
+    pending = ids(queue="tum")
+    assert {old, recent} <= pending
+    assert ids(queue="tum", detected_period="older") == {old}
+    recently_added = ids(queue="tum", detected_period="recent")
+    assert recent in recently_added and old not in recently_added
+    exported = c.get("/api/v1/regulations/export", params={"queue": "tum", "detected_period": "older"})
+    assert exported.status_code == 200 and exported.headers["X-Export-Total"] == "1"
+    assert ids(queue="hazirlaniyor") == {prep, failed}
     assert c.get("/api/v1/regulations", params={"queue": "xx"}).json()["error"]["code"] == "validation_error"
+    assert c.get("/api/v1/regulations", params={"detected_period": "xx"}).json()["error"]["code"] == "invalid_detected_period"
     st = c.get("/api/v1/regulations/stats").json()
-    assert st["queues"] == {"yeni": 1, "birikim": 1, "tum": 2, "hazirlaniyor": 2, "ilgisizOrneklem": 0}
+    assert st["queues"] == {"tum": len(pending), "hazirlaniyor": 2, "ilgisizOrneklem": 0}
     assert st["preparing"]["failed"] == 1 and st["preparing"]["exhausted"] == 1 and st["preparing"]["retryable"] == 0
-    assert st["severityDistribution"]["tum"] == {"Orta": 2}
+    assert st["severityDistribution"] == {"tum": {"Orta": len(pending)}}
     items = {i["id"]: i for i in c.get("/api/v1/regulations", params={"queue": "hazirlaniyor"}).json()["items"]}
     assert items[prep]["aiStage"]["stage"] == "summary" and items[prep]["canDecide"] is False
     assert items[failed]["aiStage"]["stage"] == "failed" and items[failed]["aiStage"]["error"] == "zaman aşımı"

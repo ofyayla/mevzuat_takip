@@ -197,16 +197,18 @@ def regulations(session: SessionDep, settings: SettingsDep, actor: ActorDep,
                 sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status",
                               "priority", "detected_at", "decided_at"] | None = None,
                 direction: Literal["asc", "desc"] = "desc",
-                queue: Literal["yeni", "birikim", "tum", "hazirlaniyor"] | None = None,
-                effective: str | None = None, needs_unit: bool = False, unit_changed: bool = False,
+                queue: Literal["tum", "hazirlaniyor"] | None = None,
+                effective: str | None = None, detected_period: str | None = None,
+                needs_unit: bool = False, unit_changed: bool = False,
                 edited: bool = False):
-    """``source``/``severity``/``unit``/``effective`` virgülle çoklu değer alır (VEYA). ``queue``: portal kuyruğu."""
+    """``source``/``severity``/``unit``/``effective``/``detected_period`` virgülle çoklu değer alır (VEYA)."""
     require(actor, ROLE_VIEWER)
     if status and status not in REVIEW_STATUSES:
         raise ApiError(400, "invalid_status", f"status: {', '.join(REVIEW_STATUSES)}")
     return list_regulations(session, ListQuery(source, severity, status, unit, int(date_range) if date_range else None,
                                                q, metric, page, page_size, sort, direction, queue, effective,
-                                               needs_unit, unit_changed, edited), settings, actor.id)
+                                               needs_unit, unit_changed, edited,
+                                               detected_period=detected_period), settings, actor.id)
 
 
 @api.get("/regulations/stats")
@@ -226,8 +228,8 @@ def regulations_export(session: SessionDep, settings: SettingsDep, actor: ActorD
                        sort: Literal["issuer", "unit", "title", "publish_date", "effective_date", "severity", "status",
                                      "priority", "detected_at", "decided_at"] | None = None,
                        direction: Literal["asc", "desc"] = "desc",
-                       queue: Literal["yeni", "birikim", "tum", "hazirlaniyor"] | None = None,
-                       effective: str | None = None, needs_unit: bool = False,
+                       queue: Literal["tum", "hazirlaniyor"] | None = None,
+                       effective: str | None = None, detected_period: str | None = None, needs_unit: bool = False,
                        ids: Annotated[str | None, Query(max_length=100000)] = None):
     """Liste süzgeçlerine uyan kayıtları Excel (.xlsx) olarak indirir (sayfalamasız, en fazla ``MAX_EXPORT_ROWS``;
     fazlası varsa ``X-Export-Truncated: true`` başlığı döner). ``ids`` seçimi mevcut süzgeçlerle daraltır."""
@@ -243,7 +245,8 @@ def regulations_export(session: SessionDep, settings: SettingsDep, actor: ActorD
         if not all(0 < value <= 9223372036854775807 for value in selected_ids):
             raise ApiError(400, "invalid_ids", "ids: kayıt numaraları pozitif 64 bit tamsayı olmalıdır.")
     query = ListQuery(source, severity, status, unit, int(date_range) if date_range else None, q, metric,
-                      sort=sort, direction=direction, queue=queue, effective=effective, needs_unit=needs_unit,
+                      sort=sort, direction=direction, queue=queue, effective=effective,
+                      detected_period=detected_period, needs_unit=needs_unit,
                       ids=selected_ids)
     items, total = export_regulations(session, query, settings, MAX_EXPORT_ROWS)
     headers = {"Content-Disposition": f'attachment; filename="{export_filename(today(settings))}"',

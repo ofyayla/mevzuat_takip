@@ -83,8 +83,9 @@ function filterPopHtml(k) {
   if (k === 'src') opts = Boot.sources.map(s => [s.code, s.name]);
   if (k === 'sev') opts = SEVS.map(x => [x, x]);
   if (k === 'eff') opts = EFF_OPTS;
+  if (k === 'added') opts = ADDED_OPTS;
   if (k === 'unit') opts = UNITS.map(u => [u.code, u.name]);
-  const lbl = { src: 'Kaynak', sev: 'Önem derecesi', eff: 'Yürürlük', unit: 'Önerilen birim' }[k];
+  const lbl = { src: 'Kaynak', sev: 'Önem derecesi', eff: 'Yürürlük', added: 'Eklenme zamanı', unit: 'Önerilen birim' }[k];
   return `<div class="pop-h">${lbl}</div><div style="max-height:320px;overflow:auto">${opts.map(o => `<label class="opt"><input type="checkbox" data-change="fopt" data-f="${k}" value="${esc(o[0])}" ${S.f[k].has(o[0]) ? 'checked' : ''}>${k === 'sev' ? sevPill(o[1]) : esc(o[1])}</label>`).join('') || '<div class="opt muted">Seçenek yok</div>'}</div>
     <div class="pop-f"><button class="linkbtn" data-act="fclear" data-f="${k}">Temizle</button><button class="btn btn-sm" data-act="pop-close">Tamam</button></div>`;
 }
@@ -338,7 +339,7 @@ document.addEventListener('click', e => {
     case 'next': step(1); break;
     case 'dtab': S.dTab = t.dataset.t; repaint({ top: true }); if (S.dTab === 'belge') ensureDoc(byId(S.openId)); break;
     case 'cite': S.dTab = 'belge'; S.cite = t.dataset.c; repaint({ cite: true }); ensureDoc(byId(S.openId)); break;
-    case 'queue': S.queue = t.dataset.q; S.page = 1; S.openId = null; S.f.sev.clear(); S.f.eff.clear(); S.f.unit.clear(); S.f.needUnit = false; S.list = { ids: [], total: 0, loading: true, err: null }; S.kpi = null; if (S.view !== 'gelen') location.hash = 'gelen'; else { refreshInbox(); listChanged(); } break;
+    case 'queue': S.queue = t.dataset.q; S.page = 1; S.openId = null; S.f.sev.clear(); S.f.eff.clear(); S.f.added.clear(); S.f.unit.clear(); S.f.needUnit = false; S.list = { ids: [], total: 0, loading: true, err: null }; S.kpi = null; if (S.view !== 'gelen') location.hash = 'gelen'; else { refreshInbox(); listChanged(); } break;
     case 'goq': S.queue = t.dataset.q; S.page = 1; S.openId = null; S.list = { ids: [], total: 0, loading: true, err: null }; S.kpi = null; go('gelen'); break;
     case 'reload': if (S.view === 'arsiv') loadArchive(); else listChanged(); break;
     case 'kpi-sev': { const on = S.f.sev.size === 2 && S.f.sev.has('Kritik') && S.f.sev.has('Yüksek'); S.f.sev = on ? new Set() : new Set(['Kritik', 'Yüksek']); S.page = 1; refreshInbox(); listChanged(); break; }

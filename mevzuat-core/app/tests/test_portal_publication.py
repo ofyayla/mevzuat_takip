@@ -13,13 +13,12 @@ from tests.test_api import client  # noqa: F401
 from tests.test_processing import env  # noqa: F401
 
 
-@pytest.mark.parametrize("queue", ["yeni", "birikim", "tum"])
 @pytest.mark.parametrize("direction", ["asc", "desc"])
-def test_publication_order_across_pages_and_export(settings, env, client, queue, direction):  # noqa: F811
+def test_publication_order_across_pages_and_export(settings, env, client, direction):  # noqa: F811
     c, sf = client
     older = today(settings) - timedelta(days=400)
     newer = today(settings) - timedelta(days=1)
-    detected = utcnow() - timedelta(days=20 if queue == "birikim" else 0)
+    detected = utcnow()
     with sf() as session:
         records = [
             Regulation(title=title, canonical_key=f"publication:{title}", publish_date=published,
@@ -36,7 +35,7 @@ def test_publication_order_across_pages_and_export(settings, env, client, queue,
         session.commit()
 
     expected = [tie_id, old_id, new_id, null_id] if direction == "asc" else [new_id, tie_id, old_id, null_id]
-    query = {"queue": queue, "sort": "publish_date", "direction": direction, "severity": "Orta"}
+    query = {"queue": "tum", "sort": "publish_date", "direction": direction, "severity": "Orta"}
     items = []
     for page in (1, 2):
         response = c.get("/api/v1/regulations", params={**query, "page": page, "page_size": 2})

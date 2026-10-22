@@ -36,8 +36,9 @@ VISIBLE_STATUSES = ("RELEVANT", "SUMMARIZED", "READY", "AI_FAILED")
 SEVERITY_ORDER = {"Kritik": 4, "Yüksek": 3, "Orta": 2, "Düşük": 1}
 REVIEW_STATUSES = ("Bekliyor", "Onaylandı", "Reddedildi")
 PREPARING_STATUSES = ("RELEVANT", "SUMMARIZED", "AI_FAILED")   # YZ işlemi bitmemiş: görünür ama karar kilitli
-QUEUES = ("yeni", "birikim", "tum", "hazirlaniyor")
+QUEUES = ("tum", "hazirlaniyor")
 EFFECTIVE_FILTERS = ("7", "30", "in_force", "none")
+DETECTED_PERIODS = ("recent", "older")
 AI_MAX_ATTEMPTS = 3
 MANUAL_REASON = "Uzman tarafından manuel olarak atandı."
 AI_FIELDS = ["type", "severity", "confidence", "summary", "topics", "suggestedUnits", "effectiveDate"]
@@ -90,12 +91,13 @@ class ListQuery:
     page_size: int = 10
     sort: str | None = None
     direction: str = "desc"
-    queue: str | None = None            # yeni | birikim | tum | hazirlaniyor
+    queue: str | None = None            # tum | hazirlaniyor
     effective: str | None = None        # "7,30,in_force,none" (virgülle çoklu, VEYA)
     needs_unit: bool = False
     unit_changed: bool = False          # arşiv: onayda birim YZ önerisinden farklı
     edited: bool = False                # arşiv: bilgileri uzman tarafından düzenlenmiş
     ids: list[int] | None = None
+    detected_period: str | None = None  # recent | older
 
 
 def _csv(value: str | None) -> list[str]:
@@ -108,14 +110,17 @@ def _no_unit_cond(settings: Settings):
                            or_(UnitSuggestion.origin == "manual", UnitSuggestion.score >= settings.unit_weak_score))
 
 
-def _queue_cond(queue: str, settings: Settings):
+def _queue_cond(queue: str):
     if queue == "hazirlaniyor":
         return Regulation.processing_status.in_(PREPARING_STATUSES)
     ready = and_(Regulation.review_status == "Bekliyor", Regulation.processing_status == "READY")
-    if queue == "tum":
-        return ready
+    return ready
+
+
+def _detected_period_cond(values: list[str], settings: Settings):
     start, _ = _day_bounds_utc(today(settings) - timedelta(days=settings.new_window_days), settings)
-    return and_(ready, Regulation.detected_at >= start) if queue == "yeni" else and_(ready, Regulation.detected_at < start)
+    parts = {"recent": Regulation.detected_at >= start, "older": Regulation.detected_at < start}
+    return or_(*(parts[value] for value in values))
 
 
 def _effective_cond(values: list[str], settings: Settings):
@@ -146,7 +151,13 @@ def _filters(query: ListQuery, settings: Settings) -> list:
     if query.queue:
         if query.queue not in QUEUES:
             raise ApiError(400, "invalid_queue", f"queue: {', '.join(QUEUES)}")
-        conds.append(_queue_cond(query.queue, settings))
+        conds.append(_queue_cond(query.queue))
+    if query.detected_period:
+        values = _csv(query.detected_period)
+        bad = [value for value in values if value not in DETECTED_PERIODS]
+        if bad or not values:
+            raise ApiError(400, "invalid_detected_period", f"detected_period: {', '.join(DETECTED_PERIODS)}")
+        conds.append(_detected_period_cond(values, settings))
     if query.source:
         conds.append(exists().where(RegulationSourceLink.regulation_id == Regulation.id,
                                     RawDocument.id == RegulationSourceLink.raw_document_id,
@@ -282,23 +293,23 @@ def queue_stats(session: Session, settings: Settings) -> dict:
 
     from app.services.archive import sample_count
 
-    queues = {q: n(_queue_cond(q, settings)) for q in QUEUES}
+    queues = {q: n(_queue_cond(q)) for q in QUEUES}
     from app.ai.common import effective_settings
 
     queues["ilgisizOrneklem"] = sample_count(session, effective_settings(session, settings))
     dist = {}
-    for q in ("yeni", "birikim", "tum"):
+    for q in ("tum",):
         rows = session.execute(select(Regulation.severity, func.count()).where(
-            visible(), _queue_cond(q, settings)).group_by(Regulation.severity)).all()
+            visible(), _queue_cond(q)).group_by(Regulation.severity)).all()
         dist[q] = {sev or "": c for sev, c in rows}
-    prep = [_queue_cond("hazirlaniyor", settings)]
+    prep = [_queue_cond("hazirlaniyor")]
     attempts = func.coalesce(Regulation.extra["ai_attempts"].as_integer(), 0)
     failed = n(*prep, Regulation.processing_status == "AI_FAILED")
     exhausted = n(*prep, Regulation.processing_status == "AI_FAILED", attempts >= _max)
     oldest = session.scalar(select(func.min(Regulation.detected_at)).where(visible(), *prep))
     oldest_days = (datetime.now(ZoneInfo("UTC")) - (oldest if oldest.tzinfo else oldest.replace(
         tzinfo=ZoneInfo("UTC")))).days if oldest else 0
-    return {"queues": queues, "severityDistribution": dist, "needsUnit": n(_queue_cond("tum", settings),
+    return {"queues": queues, "severityDistribution": dist, "needsUnit": n(_queue_cond("tum"),
                                                                         _no_unit_cond(settings)),
             "preparing": {"count": queues["hazirlaniyor"], "failed": failed, "exhausted": exhausted,
                           "retryable": failed - exhausted, "oldestDays": oldest_days}}

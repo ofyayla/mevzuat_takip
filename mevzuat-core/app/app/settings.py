@@ -131,7 +131,7 @@ class Settings(BaseSettings):
     grounding_fuzzy_threshold: int = 90      # rapidfuzz partial_ratio alt sınırı
     summary_max_regenerations: int = 1
     effective_soon_days: int = 30
-    new_window_days: int = 7                 # portal "Yeni" kuyruğu: son N gün; daha eskisi "Birikim"
+    new_window_days: int = 7                 # portal eklenme zamanı filtresindeki gün eşiği
 
     # İK-5: birim eşleştirme
     units_file: Path = BACKEND_DIR / "config" / "units.yaml"
