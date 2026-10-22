@@ -831,6 +831,16 @@ Metin eşiğinin 65 olması, farklı biçimde özetlenmiş açıklamaların da e
 doğruluk olasılığı değildir. Düşük skorlu eşleşmeler belgeyle doğrulanmalı; daha sıkı karşılaştırma için
 `text_threshold=80` gibi bir değer gönderilebilir. Başlık eşiğinin varsayılanı 85 olarak korunur.
 
+Numaralı yayınlar önce kurum, belge türü ve tarih bağlamıyla doğrulanır (`exact_reference`).
+Satırın `reference` alanı `{kind, number, date, status, candidateIds}` biçimindedir; numara okunmadıysa `null` olur.
+`status`: `matched`, `ambiguous`, `citation`, `conflict` veya `unverified`. İlkinde kimlik doğrulanmıştır; diğerlerinde
+`category=reference_review`, `group=missing` döner ve otomatik bulanık eşleşme yapılmaz. Skor bu yöntemde `null`'dır,
+doğruluk olasılığı değildir. Portal ve Excel çıktısı kimliği, durumu ve aday kayıt numaralarını gösterir.
+Kimlikler ham belgenin başlığında/ilk 1600 karakterinde aranır; eski sürümler ve liste satırları dışarıda kalır.
+Bülten numarası eşleşmesi yalnızca bültenin bulunduğunu doğrular; her kararın ayrı analizi tamamlandı demek değildir.
+Kimliği doğrulanan ham belge henüz düzenleme kaydına bağlanmamışsa `category=reference_raw_only` döner;
+bu durum crawl yokluğu değildir. Başlıkla yapılandırılmış karar başlığı çelişirse otomatik bağlanmaz.
+
 ```bash
 curl -X POST 'http://localhost:8080/api/v1/evaluation/excel-compare?title_threshold=85' \
      -F 'file=@liste.xlsx'

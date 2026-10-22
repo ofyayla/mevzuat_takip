@@ -1,8 +1,9 @@
 """Başkanlık Excel listesi ↔ sistem kayıtları karşılaştırması (salt okunur; veritabanına yazmaz).
 
 Başkanlığın bankaya dağıttığı mevzuat listesi (Referans No, Konu, Talep Tipi, Gönderen/Düzenleyici Kurum, Risk
-Seviyesi, Alıcılar, Oluşturulma Tarihi, Metin) yüklenir; her satır İK-8 eşleştiricisiyle (``parallel.match_detection``)
-sistem kaydına bağlanır. Başlık tutmazsa Metin sütunu ham belge metinlerinde bulanık aranır.
+Seviyesi, Alıcılar, Oluşturulma Tarihi, Metin) yüklenir. Önce kurumla kapsamlanmış belge kimliği doğrulanır;
+belirsiz kimlikler incelemeye ayrılır. Kimlik tanınmazsa İK-8 eşleştiricisi (``parallel.match_detection``) ve
+ham belge metinlerinde bulanık arama kullanılır.
 
 İki yön ölçülür:
   Excel → sistem   relevant (YZ ilgili dedi) / irrelevant (YZ eledi) / bulunamadı (nedeniyle) — recall
@@ -36,6 +37,7 @@ from app.evaluation.parallel import (
     match_detection,
     read_records,
 )
+from app.evaluation.references import ReferenceResult, match_reference
 from app.processing.normalize import ISSUERS, issuers_compatible, match_issuer, normalize_text, title_key
 from app.services.export import _cell
 from app.services.regulations import VISIBLE_STATUSES
@@ -56,9 +58,11 @@ COLUMNS = {"referans no": "ref", "referans": "ref", "konu": "title", "başlık":
 GROUPS = {"detected": "relevant", "below_threshold": "irrelevant"}   # geri kalan kategoriler: missing
 LABELS = {"detected": "İlgili (yakalandı)", "below_threshold": "İlgisiz (YZ eledi)", "not_collected": "Toplanmadı",
           "not_processed": "İşlenmedi", "baseline": "İlk tarama (YZ'ye gitmedi)",
-          "dedupe_lost": "Birleştirmede kayboldu"}
+          "dedupe_lost": "Birleştirmede kayboldu", "reference_review": "Belge kimliği: inceleme gerekli",
+          "reference_raw_only": "Ham belge bulundu; sistem kaydı yok"}
 METHODS = {"url": "Bağlantı", "exact_key": "Karar/sıra no", "fuzzy_title": "Başlık benzerliği",
-           "fuzzy_title_raw": "Başlık (ham belge)", "fuzzy_text": "Metin benzerliği"}
+           "fuzzy_title_raw": "Başlık (ham belge)", "fuzzy_text": "Metin benzerliği",
+           "exact_reference": "Kurum + belge numarası"}
 
 
 # ------------------------------------------------------------------------------------------------ giriş
@@ -143,12 +147,24 @@ def _match_text(session: Session, row: dict, issuer: str | None, threshold: floa
 
 
 def match_row(session: Session, row: dict, *, title_threshold: float = TITLE_THRESHOLD,
-              text_threshold: float = TEXT_THRESHOLD) -> ManualDetection:
+              text_threshold: float = TEXT_THRESHOLD) -> tuple[ManualDetection, ReferenceResult | None]:
     """Oturuma eklenmeyen (kalıcı olmayan) bir ManualDetection üzerinde eşleştirir."""
     md = ManualDetection(title=row["title"], issuer=row["issuer"], publish_date=row["created"], url=row["url"])
+    if md.url:
+        match_detection(session, md, window=WINDOW, title_threshold=title_threshold)
+        if md.match_method == "url":
+            return md, None
+    reference = match_reference(session, row, WINDOW)
+    if reference is not None:
+        md.matched_raw_document_id = md.matched_regulation_id = None
+        md.match_method = md.match_score = None
+        if reference.raw is not None:
+            md.matched_raw_document_id, md.matched_regulation_id = reference.raw.id, reference.raw.regulation_id
+            md.match_method = "exact_reference"
+        return md, reference
     match_detection(session, md, window=WINDOW, title_threshold=title_threshold)
     if not row["text"]:
-        return md
+        return md, None
     issuer = issuer_code(row["issuer"]) or match_issuer(row["title"])
     if md.matched_regulation_id is None and md.matched_raw_document_id is None:
         raw, score = _match_text(session, row, issuer, text_threshold)
@@ -164,7 +180,7 @@ def match_row(session: Session, row: dict, *, title_threshold: float = TITLE_THR
             if raw is not None and raw.regulation_id and raw.regulation_id != md.matched_regulation_id:
                 md.matched_raw_document_id, md.matched_regulation_id = raw.id, raw.regulation_id
                 md.match_method, md.match_score = "fuzzy_text", round(score / 100, 3)
-    return md
+    return md, None
 
 
 # ------------------------------------------------------------------------------------------------ karşılaştırma
@@ -187,8 +203,12 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
     by_issuer: dict[str, Counter] = {}
     sev_pairs = []
     for i, row in enumerate(rows, start=1):
-        md = match_row(session, row, title_threshold=title_threshold, text_threshold=text_threshold)
+        md, reference = match_row(session, row, title_threshold=title_threshold, text_threshold=text_threshold)
         cat, reg = classify_detection(session, md)
+        if reference is not None and reference.status != "matched":
+            cat = "reference_review"
+        elif reference is not None and reference.raw is not None and reg is None:
+            cat = "reference_raw_only"
         group = GROUPS.get(cat, "missing")
         if reg is not None:
             matched_ids.add(reg.id)
@@ -203,6 +223,7 @@ def compare(session: Session, rows: list[dict], *, title_threshold: float = TITL
                       "category": cat, "categoryLabel": LABELS.get(cat, cat), "group": group,
                       "method": md.match_method, "methodLabel": METHODS.get(md.match_method or "", None),
                       "score": md.match_score, "rawDocumentId": md.matched_raw_document_id,
+                      "reference": reference.output() if reference else None,
                       "regulation": _reg_out(reg)})
 
     total = len(items)
@@ -252,11 +273,17 @@ ITEM_COLUMNS: list[tuple[str, int, callable]] = [
     ("Kurum", 28, lambda it: it["issuer"]),
     ("Oluşturulma", 12, lambda it: it["createdAt"]),
     ("Risk seviyesi", 12, lambda it: it["severity"]),
-    ("Sonuç", 14, lambda it: {"relevant": "Relevant", "irrelevant": "Irrelevant"}.get(it["group"], "Bulunamadı")),
+    ("Sonuç", 20, lambda it: {"reference_review": "İnceleme gerekli", "reference_raw_only": "Toplandı"}.get(
+        it["category"], {"relevant": "Relevant", "irrelevant": "Irrelevant"}.get(it["group"], "Bulunamadı"))),
     ("Ayrıntı", 26, lambda it: it["categoryLabel"]),
     ("Eşleşme yöntemi", 18, lambda it: it["methodLabel"]),
     ("Eşleşme skoru", 10, lambda it: it["score"]),
+    ("Belge kimliği", 24, lambda it: (it.get("reference") or {}).get("number")),
+    ("Karar tarihi", 14, lambda it: (it.get("reference") or {}).get("date")),
+    ("Kimlik kontrolü", 18, lambda it: (it.get("reference") or {}).get("status")),
+    ("Aday kayıtlar", 24, lambda it: ", ".join(map(str, (it.get("reference") or {}).get("candidateIds", [])))),
     ("Sistem kayıt no", 10, lambda it: (it["regulation"] or {}).get("id")),
+    ("Ham belge no", 12, lambda it: it.get("rawDocumentId")),
     ("Sistem başlığı", 60, lambda it: (it["regulation"] or {}).get("title")),
     ("Sistem yayım tarihi", 12, lambda it: (it["regulation"] or {}).get("publishDate")),
     ("İlgililik skoru", 10, lambda it: (it["regulation"] or {}).get("relevanceScore")),
@@ -296,7 +323,7 @@ def build_workbook(result: dict) -> bytes:
     ws = wb.active
     ws.title = "Özet"
     summary = [("Excel satırı", s["total"]), ("Relevant (sistem buldu, YZ ilgili dedi)", s["relevant"]),
-               ("Irrelevant (sistem buldu, YZ eledi)", s["irrelevant"]), ("Bulunamadı", s["missing"])]
+               ("Irrelevant (sistem buldu, YZ eledi)", s["irrelevant"]), ("Kesin eşleşme yok / inceleme", s["missing"])]
     summary += [(f"  · {LABELS.get(k, k)}", v) for k, v in s["missingByReason"].items()]
     summary += [("Recall (relevant / toplam)", pct(s["recall"])), ("Bulunma oranı", pct(s["foundRate"])),
                 ("", None),

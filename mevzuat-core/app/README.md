@@ -400,8 +400,20 @@ Dosya sütunları: `Başlık`, `Kurum` (kısaltma da olur: "BDDK", "Hazine ve Ma
 POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from&to][&format=xlsx]   multipart file
 ```
 
-- Her satır yukarıdaki eşleştiriciden geçer. Tek fark tarih penceresi: **14 gün geriye, 2 gün ileriye**. Bunun nedeni,
+- Numarası tanınmayan satırlar yukarıdaki eşleştiriciden geçer. Tarih penceresi: **14 gün geriye, 2 gün ileriye**. Bunun nedeni,
   "Oluşturulma Tarihi"nin yayım tarihi değil listeye giriş tarihi olması.
+- Excel başlığı ve metnin ilk 1600 karakterinden kurumla kapsamlanmış karar, SPK bülteni, GİB özelge,
+  genelge ve Takasbank genel mektup numaraları okunur. Başlıktaki kimlik önceliklidir. Güncel ham belgenin
+  başlığı/ilk 1600 karakterindeki birincil kimlik veya GİB `ozelge_no` alanı doğrulanır. Tarihli kararda aynı
+  karar tarihi şarttır; yayını kararın sonraki 7 günü veya Excel'in yukarıdaki tarih penceresinde aranır
+  (karar tarihiyle yayım tarihi farklı olabilir). Diğerlerinde Excel penceresi ve kayıt yılı kullanılır.
+  Aynı düzenlemenin kopyaları tek aday sayılır; tek aday `exact_reference` ile bağlanır. Bu yöntemde benzerlik
+  skoru verilmez. Birden çok aday, yalnızca atıf veya doğrulanamayan kimlik `reference_review` olur;
+  bulanık eşleştirmeyle otomatik kabul edilmez. Kimlik ve adaylar portalda ve Excel çıktısında gösterilir.
+  Açık URL eşleşmesi korunur; numarası tanınmayan satırlarda mevcut bulanık yöntem çalışmaya devam eder.
+  Yapılandırılmış karar başlığıyla çelişen numara/tarih `conflict` olur. Kimliği doğrulanmış ham belgenin
+  düzenleme kaydı yoksa `reference_raw_only` döner: bu durum “toplanmadı” değildir.
+  Bülten numarasıyla eşleşme bülten düzeyindedir; içindeki her kararın ayrı YZ analiz edildiği anlamına gelmez.
 - Başlık tutmazsa `Metin` sütunu kullanılır. Önce HTML ve `&nbsp;` temizlenir; "*****" ayracından sonraki asıl duyuru
   alınır. Bu metin, pencere içindeki ham belge metinlerinde (ekler dahil) `partial_ratio` ile aranır.
 - Varsayılan eşikler başlık için **85**, metin için **65**'tir. Daha düşük metin eşiği, farklı biçimde özetlenmiş
