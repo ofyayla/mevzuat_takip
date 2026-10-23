@@ -411,6 +411,17 @@ document.addEventListener('click', e => {
     case 'pe-open': openPromptExperiment(+id); break;
     case 'pe-export': exportPromptExperiment(+id); break;
     case 'pe-reload': loadPromptExperimentHome(); break;
+    case 'pe-mode': setPromptExperimentMode(t.dataset.m); peRefocus(`[data-act="pe-mode"][data-m="${t.dataset.m}"]`); break;
+    case 'pe-source': setPromptExperimentSource(t.dataset.s); peRefocus(`[data-act="pe-source"][data-s="${t.dataset.s}"]`); break;
+    case 'pe-pview': S.pe.promptView = t.dataset.v; renderAll(); peRefocus(`[data-act="pe-pview"][data-v="${t.dataset.v}"]`); break;
+    case 'pe-reset-b': changePromptB((S.pe.defaults || {}).systemPromptA || ''); break;
+    case 'pe-undo-b': Object.assign(S.pe, { promptB: S.pe.promptUndo, promptUndo: null, candidate: null }); renderAll(); break;
+    case 'pe-reuse': reusePromptExperiment(+id); break;
+    case 'pe-item': S.pe.itemOpen = S.pe.itemOpen === +id ? null : +id; renderAll(); peRefocus(`.pe-ibtn[data-id="${id}"]`); break;
+    case 'pe-ifilter': Object.assign(S.pe, { itemFilter: t.dataset.f, itemLimit: 50, itemOpen: null }); renderAll(); peRefocus(`[data-act="pe-ifilter"][data-f="${t.dataset.f}"]`); break;
+    case 'pe-lfilter': S.pe.labelFilter = S.pe.labelFilter === t.dataset.f ? 'all' : t.dataset.f; renderAll(); peRefocus(`.pe-stratum[data-f="${t.dataset.f}"]`); break;
+    case 'pe-more': S.pe.itemLimit += 100; renderAll(); break;
+    case 'pe-prompts': S.pe.showPrompts = !S.pe.showPrompts; renderAll(); peRefocus('[data-act="pe-prompts"]'); break;
     case 'edit-start': startEdit(S.openId); break;
     case 'edit-mode': S.edit.mode = t.dataset.m; { const w = $('#editWhy'); if (w) S.edit.why = w.value; } repaint(); { const b = document.querySelector('.seg-b[aria-checked=true]'); if (b) b.focus({ preventScroll: true }); } break;
     case 'edit-cancel': cancelEdit(); repaint(); break;
@@ -581,8 +592,12 @@ document.addEventListener('input', e => {
     peSearchTimer = setTimeout(searchPromptExperimentRecords, 300); return;
   }
   if (t.id === 'xlSetName') { S.xl.setName = t.value; return; }
-  if (t.id === 'pePromptB') { S.pe.promptB = t.value; S.pe.candidate = null; return; }
-  if (t.id === 'peTitle') { S.pe.title = t.value; return; }
+  if (t.id === 'pePromptB') { S.pe.promptB = t.value; S.pe.candidate = null; peLive(); return; }
+  if (t.id === 'peTitle') { S.pe.title = t.value; peLive(); return; }
+  if (t.id === 'peLabelQ' || t.id === 'peItemQ') {
+    if (t.id === 'peLabelQ') S.pe.labelQ = t.value; else Object.assign(S.pe, { itemQ: t.value, itemLimit: 50 });
+    const pos = t.selectionStart; renderAll(); const n = $('#' + t.id); n.focus(); n.setSelectionRange(pos, pos); return;
+  }
   if (t.id === 'blIn') {
     S.bl = t.value; S.blPlan = null; S.blErr = null;
     const card = t.closest('.mcard'); card.querySelector('[data-act="bl-apply"]').disabled = true;

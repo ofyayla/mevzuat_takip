@@ -32,7 +32,9 @@ test('Evaluation set card shows strata, label editors and escapes saved text', (
   assert.match(html, /data-change="pe-set-label" data-id="7"/);
   assert.match(html, /few-shot nedeniyle çıkarılan 2/);
   assert.match(html, /Setle A\/B deneyini çalıştır/);
-  assert.match(html, /\/200\)/);
+  assert.match(html, /1 kayıt, 1 etiketli/);
+  assert.match(html, /data-act="pe-set" data-id="3" aria-checked="true"/);
+  assert.doesNotMatch(html, /id="peSearch"/);
   assert.doesNotMatch(html, /<b>Ekim|<img/);
 });
 
@@ -60,13 +62,15 @@ test('Results show per-stratum rates, weighted precision, significance and chang
       items:[{regulationId:1,title:'<script>x</script>',stratum:'extra_alert',expectedRelevant:false,status:'completed',
         A:{is_relevant:true,score:.9,band:'Yüksek',uncertain:false,rationale:'a',cached:false},
         B:{is_relevant:false,score:.1,band:'Düşük',uncertain:false,rationale:'b',cached:true}}]};`, context);
+  vm.runInContext('S.pe.itemOpen = 1;', context);
   const html = vm.runInContext('promptExperimentResults(S.pe.detail)', context);
   assert.match(html, /Fazla uyarı \(Excel&#39;de yok\)/);
   assert.match(html, /beklenen: ilgisiz/);
-  assert.match(html, /%100 \(1\/1 · %95 aralık %21–%100\)/);
-  assert.match(html, /A %29 · B —/);
+  assert.match(html, /<b>%100<\/b> <span class="u-s">1\/1<\/span>\s*<div class="u-s">%95 aralık %21–%100/);
+  assert.match(html, /Tahmini precision \(alt sınır\)[\s\S]*?%29<\/td><td class="num">—/);
+  assert.match(html, /Berabere: B 1 kaydı düzeltti, 1 kaydı bozdu/);
   assert.match(html, /Fark gürültü olabilir/);
-  assert.match(html, /İlgili → İlgisiz · B doğru/);
+  assert.match(html, /B düzeltti/);
   assert.doesNotMatch(html, /<script>/);
 });
 

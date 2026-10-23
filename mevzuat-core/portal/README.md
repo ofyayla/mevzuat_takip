@@ -163,6 +163,25 @@ Dışa aktarma regresyon testleri (depo kökünden, ek paket gerektirmez):
 Regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
 `node --test mevzuat-core/portal/tests/pipeline.test.cjs`
 
+## Prompt deneyi
+
+**Sistem durumu → Prompt deneyi** (`/#prompt-deneyi`) üstteki anahtarla iki görünümdür:
+
+- **Yeni deney:** numaralı adımlar. **1 Örneklem:** Değerlendirme seti ya da Elle seçim (ikisi birbirini dışlar). Set
+  seçilince katman kutuları etiket tablosunun süzgecidir; tablo başlık veya kayıt no ile aranır, beklenen etiket
+  satırda düzeltilir. **2 B promptu:** deney adı, aday şablon ve üç görünüm: B'yi düzenle, A ile farkı (satır farkı;
+  değişmeyen bloklar katlanır), A · mevcut prompt. Sayaç A'ya göre eklenen/silinen satırı gösterir; şablon ya da
+  "A'ya sıfırla" B'nin üzerine yazınca "Önceki metne dön" bir adım geri alır. **3 Çalıştır:** geniş ekranda yapışkan
+  özet kartı; hazır olma listesi (LLM, örneklem, ad, B ≠ A), ayarlar ve en çok LLM çağrısı (kayıt × 2 × örnek).
+- **Sonuçlar:** solda deney listesi (dar ekranda yatay şerit; çalışan deneyde işlenen kayıt sayısı), sağda ayrıntı:
+  tek cümlelik sonuç bandı (B'nin düzelttiği/bozduğu etiketli kayıt ve McNemar p), A / B / Fark ölçü tablosu,
+  katman tablosu (Excel dışı katmanlarda ilgiliye geçiş kırmızıdır), kayıt tablosu (Karar değişen, B düzeltti,
+  B bozdu, Hatalı, Tümü; satıra tıklayınca A ve B gerekçeleri yan yana açılır; 50'şer kayıt), A→B prompt farkı.
+  **Bu B ile yeni deney** B metnini ve örneklemi yeni deneye kopyalar.
+- Çalışan deney 1,5 saniyede bir yoklanır; Yeni deney görünümünde yazılan B metni yoklamayla yeniden çizilmez.
+
+Regresyon testleri (depo kökünden): `node --test mevzuat-core/portal/tests/prompt-experiment.test.cjs mevzuat-core/portal/tests/evaluation-set.test.cjs`
+
 ## Sıralama
 
 - Gelen kutusunun Karar bekleyen kuyruğunda **Sırala** simgesinden öncelik, tespit tarihi, yayım tarihi, yürürlük tarihi
