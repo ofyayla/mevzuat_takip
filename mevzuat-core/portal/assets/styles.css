@@ -276,11 +276,8 @@ button.kpi:hover{border-color:var(--line-strong)}
 .tbl tr:last-child td{border-bottom:0}
 .tbl tbody tr{cursor:pointer}
 .tbl tbody tr:hover td{background:var(--surface-2)}
+.tbl tr.is-focus td{background:var(--surface-3)}
 .tbl tr.is-open td{background:var(--brand-soft)}
-.tbl tr.is-focus td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
-.tbl tr.sv-k td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
-.tbl tr.sv-y td:first-child{box-shadow:inset 3px 0 0 var(--warn-solid)}
-.tbl tr.is-focus.sv-k td:first-child,.tbl tr.is-focus.sv-y td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
 .c-cb{width:52px;padding-right:0!important}
 .c-cb input{width:17px;height:17px;margin:0;accent-color:var(--brand);cursor:pointer;vertical-align:middle}
 .c-go{width:44px;color:var(--fg-3);padding-left:0!important}

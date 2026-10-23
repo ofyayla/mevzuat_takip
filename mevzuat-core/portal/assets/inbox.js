@@ -195,7 +195,7 @@ function table(rows) {
   const q = S.queue; const pageIds = rows.map(r => r.id);
   const allSel = pageIds.length && pageIds.every(id => S.selected.has(id));
   const cb = r => `<td class="c-cb"><input type="checkbox" data-act="sel" data-id="${r.id}" ${S.selected.has(r.id) ? 'checked' : ''} aria-label="Seç: ${esc(trunc(r.title, 60))}"></td>`;
-  const cls = r => `${r.unread ? 'unread' : ''} ${S.openId === r.id ? 'is-open' : ''} ${S.focusId === r.id ? 'is-focus' : ''} ${curSev(r) === 'Kritik' ? 'sv-k' : curSev(r) === 'Yüksek' ? 'sv-y' : ''}`;
+  const cls = r => `${r.unread ? 'unread' : ''} ${S.openId === r.id ? 'is-open' : ''} ${S.focusId === r.id ? 'is-focus' : ''}`;
   const meta = (r, extra = '') => `<div class="meta">${srcAbbr(r.src)}${r.type && r.type !== '—' ? `<span>${esc(r.type)}</span>` : ''}${r.pub ? `<span class="${DECISION_Q.includes(q) ? 'pub-mobile' : ''}">Yayım ${fD(r.pub)}</span>` : ''}<span>Tespit ${rel(r.det)}</span>${extra}</div>`;
   if (q === 'hazirlaniyor') return `<table class="tbl"><thead><tr><th class="c-main">Düzenleme</th><th>YZ aşaması</th><th class="c-eff">Bekleme</th><th class="c-sev">Önem</th><th class="c-go"></th></tr></thead><tbody>
     ${rows.map(r => { const st = r.stage || {}; const w = dd(NOW, pdt(st.waitingSince) || r.det); const err = st.stage === 'retry' || st.stage === 'failed'; const n = { summary: 2, unit_match: 3, retry: 2, failed: 2 }[st.stage] || 2;
