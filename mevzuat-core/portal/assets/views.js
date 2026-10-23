@@ -14,7 +14,7 @@ const healthBad = () => ((Boot.health && Boot.health.sources) || []).filter(s =>
 
 function appbar() {
   const c = counts(); const me = Boot.me || { name: '—', title: '' };
-  const nav = [['gelen', 'Gelen kutusu', 'inbox', c.bekleyen], ['arsiv', 'Arşiv', 'archive'], ...(isAdmin() ? [['yonetim', 'Yönetim', 'settings']] : [])];
+  const nav = [['gelen', 'Gelen kutusu', 'inbox', c.bekleyen], ['arsiv', 'Arşiv', 'archive'], ...(isAdmin() ? [['yonetim', 'Sistem durumu', 'settings']] : [])];
   const bad = healthBad(); const al = openAlarms();
   return `<header class="appbar"><div class="appbar-in gut">
     <a class="brand" href="#gelen"><span class="brand-mark">${ic('shield')}</span><span class="brand-txt"><b>Mevzuat Takip</b><small>Mevzuat ve Uyum Başkanlığı</small></span></a>
@@ -49,26 +49,27 @@ async function loadArchiveStats() {
   } catch (_) { S.arStats = null; }
   if (S.view === 'arsiv') paintArchive();
 }
-function paintArchive() { if (S.view === 'arsiv' && $('#arsivMain')) { $('#arsivMain').innerHTML = arsivBody(); const det = $('#detail'); if (det) { det.hidden = !S.openId; det.innerHTML = S.openId ? detailHtml() : ''; } $('#inbox') && $('#inbox').classList.toggle('has-detail', !!S.openId); syncDetailSize(); } }
+function paintArchive() { if (S.view === 'arsiv' && $('#arsivMain')) { const ae = document.activeElement; const keep = ae && ae.id === 'arsivQ' ? ae.selectionStart : null; $('#arsivMain').innerHTML = arsivBody(); if (keep != null) { const q = $('#arsivQ'); if (q) { q.focus(); try { q.setSelectionRange(keep, keep); } catch (_) { /* tür desteklemiyor */ } } } const det = $('#detail'); if (det) { det.hidden = !S.openId; det.innerHTML = S.openId ? detailHtml() : ''; } $('#inbox') && $('#inbox').classList.toggle('has-detail', !!S.openId); syncDetailSize(); } }
 function arsivBody() {
   const af = S.arsivF; const st = S.arStats; const { ids, total, loading, err } = S.ar; const it = ids.map(byId).filter(Boolean);
   const tile = (l, v, s, cl = '') => `<div class="card"><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${s}</span></div>`;
   const acc = st && st.unitAccuracy != null ? Math.round(st.unitAccuracy * 100) : null;
   const num = { onay: st && st.approved, degisik: st && st.approvedWithChange, red: st && st.rejected, irr: st && st.irrAll, baseline: st && st.baselineAll };
-  const chip = (k, l) => `<button class="btn btn-sm ${af === k ? 'fbtn on' : ''}" data-act="arsivf" data-f="${k}">${l} ${num[k] != null ? `<span class="muted num">${N(num[k])}</span>` : ''}</button>`;
+  const chip = (k, l) => `<button class="tab" role="tab" data-act="arsivf" data-f="${k}" aria-selected="${af === k}">${l}${num[k] != null ? `<span class="cnt">${N(num[k])}</span>` : ''}</button>`;
   const pages = Math.max(1, Math.ceil(total / 25)); const start = (S.arsivPage - 1) * 25;
   const row = r => {
     let tg, a, b, who;
-    if (r.kind === 'irr') { tg = ['tag-plain', 'YZ eledi']; a = r.why ? trunc(r.why, 140) : 'Gerekçe kaydedilmemiş'; who = r.review ? [r.review.by, pdt(r.review.at)] : ['—', null]; if (r.review) tg = ['tag-ok', r.review.verdict === 'confirm' ? 'İlgisiz doğrulandı' : 'İlgili sayıldı']; b = `İlgililik skoru ${dec(r.relScore)}`; }
-    else if (r.kind === 'baseline') { tg = ['tag-plain', 'İlk tarama']; a = 'YZ ilgililik analizine girmedi'; b = 'Kanalın ilk taramasında zaten yayındaydı'; who = ['—', null]; }
-    else if (r.status === 'Onaylandı') { const ch = approvedChanged(r); tg = [ch ? 'tag-warn' : 'tag-ok', ch ? 'Değiştirilerek onaylandı' : 'Onaylandı']; a = r.units.map(u => u.n).join(', ') || 'Birim atanmadı'; b = ch ? `YZ önerisi: ${r.aiUnits.map(u => u.n).join(', ')}` : ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
-    else { tg = ['tag-crit', 'Reddedildi']; a = 'Gerekçe ayrıntıda'; b = ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
+    if (r.kind === 'irr') { tg = ['p-d', 'YZ eledi']; a = r.why ? trunc(r.why, 140) : 'Gerekçe kaydedilmemiş'; who = r.review ? [r.review.by, pdt(r.review.at)] : ['—', null]; if (r.review) tg = ['p-ok', r.review.verdict === 'confirm' ? 'İlgisiz doğrulandı' : 'İlgili sayıldı']; b = `İlgililik skoru ${dec(r.relScore)}`; }
+    else if (r.kind === 'baseline') { tg = ['p-d', 'İlk tarama']; a = 'YZ ilgililik analizine girmedi'; b = 'Kanalın ilk taramasında zaten yayındaydı'; who = ['—', null]; }
+    else if (r.status === 'Onaylandı') { const ch = approvedChanged(r); tg = [ch ? 'p-y' : 'p-ok', ch ? 'Değiştirilerek onaylandı' : 'Onaylandı']; a = r.units.map(u => u.n).join(', ') || 'Birim atanmadı'; b = ch ? `YZ önerisi: ${r.aiUnits.map(u => u.n).join(', ')}` : ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
+    else { tg = ['p-k', 'Reddedildi']; a = 'Gerekçe ayrıntıda'; b = ''; who = r.decided ? [r.decided.by, r.decided.at] : ['—', null]; }
     return `<tr class="${S.openId === r.id ? 'is-open' : ''}" data-act="open" data-id="${r.id}"><td class="c-main" style="min-width:240px"><div class="ttl" style="color:var(--fg)">${esc(r.title)}</div><div class="meta">${srcAbbr(r.src)}${r.type && r.type !== '—' ? `<span>${esc(r.type)}</span>` : ''}${r.pub ? `<span>Yayım ${fDs(r.pub)}</span>` : ''}${r.revCount ? `<span class="tag tag-plain" title="Karar sonradan değiştirildi">Düzenlendi${r.revCount > 1 ? ' ×' + r.revCount : ''}</span>` : ''}${r.sev ? `<span class="m-only">${sevPill(r.sev)}</span>` : ''}</div></td>
-      <td><span class="tag ${tg[0]}">${tg[1]}</span></td><td class="c-unit" style="font-size:13px"><span class="u-n" style="white-space:normal">${esc(a)}</span>${b ? `<div class="u-s">${esc(b)}</div>` : ''}</td>
+      <td><span class="pill ${tg[0]}">${tg[1]}</span></td><td class="c-unit" style="font-size:13px"><span class="u-n" style="white-space:normal">${esc(a)}</span>${b ? `<div class="u-s">${esc(b)}</div>` : ''}</td>
       <td class="c-eff" style="font-size:13px">${esc(who[0] || '—')}<div class="u-s">${who[1] ? fDT(who[1]) : ''}</div></td><td class="c-go">${ic('chev-r')}</td></tr>`;
   };
   return `<div class="tk-kpis">${tile('Onaylanan', st ? N(st.approved) : '…', 'birim önerisi onaylandı')}${tile('Birim önerisi isabeti', acc == null ? '—' : '%' + acc, st ? `${N(st.approvedWithChange)} kayıtta uzman birimi değiştirdi` : '', acc != null && acc < 70 ? 'warn' : '')}${tile('Reddedilen', st ? N(st.rejected) : '…', 'kayıt reddedildi')}${tile('İlgisiz doğrulandı', st ? N(st.irrelevantConfirmed) : '…', 'örneklem kontrolünden')}</div>
-    <div class="fbar"><label class="search"><span class="sr">Arşivde ara</span>${ic('search')}<input id="arsivQ" type="search" placeholder="Arşivde ara" value="${esc(S.arsivQ)}"></label><div class="fbtns">${ARSIV_FILTERS.map(f => chip(f[0], f[1])).join('')}</div></div>
+    <div class="toolbar"><div class="tabs segtabs" role="tablist" aria-label="Arşiv süzgeci">${ARSIV_FILTERS.map(f => chip(f[0], f[1])).join('')}</div>
+      <div class="tools"><label class="search"><span class="sr">Arşivde ara</span>${ic('search')}<input id="arsivQ" type="search" placeholder="Arşivde ara" value="${esc(S.arsivQ)}" autocomplete="off"></label></div></div>
     ${err ? `<div class="empty card"><b>Liste yüklenemedi</b><span>${esc(err)}</span><button class="btn" data-act="reload">Yeniden dene</button></div>` :
       loading && !it.length ? '<div class="empty card" aria-busy="true"><b>Yükleniyor…</b></div>' :
       it.length ? `<div class="tbl-wrap ${loading ? 'is-loading' : ''}" style="margin-bottom:12px"><table class="tbl"><thead><tr><th class="c-main">Düzenleme</th><th>${af === 'baseline' ? 'Durum' : 'Karar'}</th><th class="c-unit">${af === 'irr' ? 'YZ gerekçesi' : af === 'baseline' ? 'Açıklama' : 'Birim / gerekçe'}</th><th class="c-eff">Karar veren</th><th class="c-go"></th></tr></thead><tbody>${it.map(row).join('')}</tbody></table></div>
@@ -206,7 +207,7 @@ function admExcel() {
       <label class="field">Fazla uyarı örneklemi<span class="xl-num"><input class="input num" id="xlSetExtra" value="${esc(x.setExtra)}" inputmode="numeric"></span></label>
       <label class="field">İlgisiz kontrol örneklemi<span class="xl-num"><input class="input num" id="xlSetControl" value="${esc(x.setControl)}" inputmode="numeric"></span></label>
       <button class="btn" data-act="xl-set" ${x.setBusy ? 'disabled' : ''}>${x.setBusy ? 'Oluşturuluyor…' : 'Değerlendirme seti oluştur'}</button>
-      <p class="hint" style="margin:0;flex:1 1 260px">Onayladığınız eşleşmeler dahil. Excel'deki eşleşmeler ilgili, Excel'de olmayan fazla uyarılar ve ilgisiz örneklem ilgisiz sayılır; set kaydedilir ve Prompt deneyi sekmesinde etiketleri düzeltilebilir.</p></div>` : '';
+      <span style="flex:1 1 260px">${tipBtn("Onayladığınız eşleşmeler dahil. Excel'deki eşleşmeler ilgili, Excel'de olmayan fazla uyarılar ve ilgisiz örneklem ilgisiz sayılır; set kaydedilir ve Prompt deneyi sekmesinde etiketleri düzeltilebilir.", 'Değerlendirme seti')}</span></div>` : '';
   const upload = `<section class="card xl-up"><div class="xl-drop ${x.drag ? 'drag' : ''}" id="xlDrop">${ic('download')}<div><b>${x.file ? esc(x.file.name) : 'Excel dosyasını sürükleyin ya da seçin'}</b><span>${x.file ? `${(x.file.size / 1024).toFixed(0)} KB · dosya yalnızca karşılaştırma için gönderilir, kaydedilmez` : 'Beklenen sütunlar: Referans No, Konu, Gönderen/Düzenleyici Kurum, Risk Seviyesi, Oluşturulma Tarihi, Metin (.xlsx, .csv; en fazla 5 MB)'}</span></div>
       <label class="btn btn-sm" for="xlFile">${x.file ? 'Başka dosya seç' : 'Dosya seç'}</label><input type="file" id="xlFile" accept=".xlsx,.xlsm,.csv,.txt" ${x.running ? 'disabled' : ''} hidden></div>
     <div class="xl-ctl"><label class="field">Başlık eşiği<span class="xl-num"><input class="input num" id="xlT" value="${x.tTitle}" inputmode="numeric"><span>%</span></span></label>
@@ -269,14 +270,13 @@ function xlExtra(res) {
 }
 
 /* ---------- yönetim kabuğu */
-const ADM = [['genel', 'Genel bakış', 'yonetim'], ['hat', 'İşleme hattı', 'hat'], ['kaynaklar', 'Kaynaklar ve taramalar', 'kaynaklar'], ['ayarlar', 'YZ ayarları', 'ayarlar'], ['excel', 'Excel karşılaştırma', 'karsilastirma'], ['deney', 'Prompt deneyi', 'prompt-deneyi'], ['bakim', 'Bakım ve denetim', 'bakim']];
+const ADM = [['genel', 'Genel bakış', 'yonetim'], ['hat', 'İşleme hattı', 'hat'], ['kaynaklar', 'Kaynaklar', 'kaynaklar'], ['ayarlar', 'Ayarlar', 'ayarlar'], ['excel', 'Excel karşılaştırma', 'karsilastirma'], ['deney', 'Prompt deneyi', 'prompt-deneyi'], ['bakim', 'Bakım ve denetim', 'bakim']];
 const ADM_LEDE = { genel: 'Sistem sağlığı, açık alarmlar ve kaynak durumu. Bu bölümü yalnızca yönetici rolündekiler görür.', hat: 'Kayıtların toplama aşamasından uzman kararına kadar geçtiği adımlar. Kutudaki büyük sayı, o adımda şu an bekleyen kayıt sayısıdır.', kaynaklar: 'Her kaynağın son taraması, sağlığı ve sonraki planı. Taramayı elle başlatabilir ya da geçmiş tarih aralığını yeniden tarayabilirsiniz.', ayarlar: 'İlgililik, güven ve mükerrer tespiti eşikleri. Değişiklikler gerekçesiyle kaydedilir ve etkisi önceden gösterilir.', excel: 'Başkanlığın mevzuat listesini yükleyin; her satır sistem kayıtlarıyla eşleştirilir. Ters yönde, aynı dönemde portalda görünüp listede olmayan kayıtlar da listelenir. Karşılaştırma hiçbir şeyi kaydetmez.', deney: 'Aynı kayıtları ve ayarları mevcut A promptu ile düzenlenebilir B promptunda çalıştırın. Deney sonuçları kalıcı saklanır; canlı ilgililik etiketleri değişmez.', bakim: 'Yeniden işleme, başarısız YZ kayıtları, baseline sınırı ve denetim izi.' };
 function viewYonetim() {
   const t = ADM.find(a => a[0] === S.adminTab) || ADM[0];
   const body = S.admErr ? `<div class="empty card"><b>Veri yüklenemedi</b><span>${esc(S.admErr)}</span><button class="btn" data-act="adm-reload">Yeniden dene</button></div>` : !S.adm[t[0]] && t[0] !== 'excel' && t[0] !== 'deney' ? '<div class="empty card" aria-busy="true"><b>Yükleniyor…</b></div>' : { genel: admGenel, hat: admHat, kaynaklar: admKaynak, ayarlar: admAyar, excel: admExcel, deney: admPromptExperiment, bakim: admBakim }[t[0]]();
-  return `<div class="page gut"><div class="crumb"><a href="#yonetim">Yönetim</a>${t[0] !== 'genel' ? ` › ${t[1]}` : ''}</div>
-    <div class="ph"><div class="ph-t"><h1>${t[0] === 'genel' ? 'Yönetim' : t[1]}</h1>${tipBtn(ADM_LEDE[t[0]], 'Bu bölüm hakkında')}</div></div>
-    <div class="tabs adm-tabs">${ADM.map(a => `<a class="tab" href="#${a[2]}" ${a[0] === t[0] ? 'aria-current="page"' : ''}>${a[1]}${a[0] === 'genel' && openAlarms() ? `<span class="cnt h-crit">${openAlarms()}</span>` : ''}</a>`).join('')}</div>${body}</div>`;
+  return `<div class="page gut"><div class="ph"><div class="ph-t"><h1>Sistem durumu</h1>${tipBtn(ADM_LEDE[t[0]], `${t[1]} hakkında`)}</div></div>
+    <div class="toolbar"><div class="tabs segtabs adm-tabs" role="tablist" aria-label="Sistem durumu bölümleri">${ADM.map(a => `<a class="tab" role="tab" href="#${a[2]}" aria-selected="${a[0] === t[0]}" ${a[0] === t[0] ? 'aria-current="page"' : ''}>${a[1]}${a[0] === 'genel' && openAlarms() ? `<span class="cnt h-crit">${openAlarms()}</span>` : ''}</a>`).join('')}</div></div>${body}</div>`;
 }
 const SEV_TAG = { critical: 'tag-crit', high: 'tag-crit', warning: 'tag-warn', medium: 'tag-warn', info: 'tag-plain', low: 'tag-plain', Yüksek: 'tag-crit', Orta: 'tag-warn', Düşük: 'tag-plain' };
 const SEV_TXT = { critical: 'Kritik', high: 'Yüksek', warning: 'Uyarı', medium: 'Orta', info: 'Bilgi', low: 'Düşük' };
@@ -317,17 +317,23 @@ function admGenel() {
   const queueTone = pr.failed || growing ? 'warn' : 'ok'; const ingestTone = m.pendingIngest > 0 ? 'warn' : 'ok';
   const scanPct = v => '%' + dec(v, 1);
   const chart = (series, label, tone, extra = {}) => healthChart(series, { label, tone, ...extra });
-  return `<div class="stack"><section><div class="sec-h"><h2>Açık alarmlar <span class="muted num">${al.length}</span>${tipBtn('Kapatılan alarmlar adınızla denetim izine yazılır.')}</h2></div>
-    <div class="card alarms">${al.length ? al.map(x => `<div class="alarm-row"><span class="tag ${SEV_TAG[x.severity] || 'tag-plain'}">${esc(SEV_TXT[x.severity] || x.severity)}</span><div class="msg">${esc(x.message)}<small>${esc(x.type)}${x.source ? ' · ' + esc(srcOf(x.source).a) : ''} · ${fDT(pdt(x.openedAt))}</small></div>
-      <div class="acts"><a class="btn btn-sm" href="#${esc(x.link || 'yonetim')}">İncele</a><button class="btn btn-sm btn-ghost" data-act="alarm-close" data-id="${x.id}">Kapat</button></div></div>`).join('') : `<div class="empty">${ic('check')}<b>Açık alarm yok</b></div>`}</div></section>
-    <section><div class="sec-h"><h2>Sistem sağlığı${tipBtn('Kesikli çizgi hedef değeri gösterir.')}</h2></div><div class="tiles">
-      <div class="card tile"><div class="tl-h">LLM gecikmesi (P95, son ${llm.windowHours || 24} saat)<span class="hstat h-${llmTone}">${llm.p95Ms > llmTarget ? 'Hedefin üstünde' : llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'}</span></div><span class="v num">${sec(llm.p95Ms)}</span><span class="t">Hedef ≤ ${sec(llmTarget)} · ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata</span>${chart(llm.series, 'Saatlik LLM gecikmesi P95', llmTone, { target: llmTarget, format: sec })}</div>
-      <div class="card tile"><div class="tl-h">Tarama başarısı (${scans.windowDays || 7} gün)<span class="hstat h-${scanTone}">${scans.successRate == null ? 'Tarama yok' : scanTone === 'warn' ? 'Dikkat' : 'Normal'}</span></div><span class="v num">${scans.successRate == null ? '—' : scanPct(scans.successRate)}</span><span class="t">Hedef ≥ %${N(scanTarget)} · ${N(scans.total)} taramadan ${N(scans.failed)}'ü başarısız / kısmi</span>${chart(scans.series, 'Günlük tarama başarısı', scanTone, { target: scanTarget, percent: true, format: scanPct })}</div>
-      <div class="card tile"><div class="tl-h">YZ kuyruğu (${queue.windowDays || 14} gün)<span class="hstat h-${queueTone}">${pr.failed ? 'Hata var' : growing ? 'Büyüyor' : 'Normal'}</span></div><span class="v num">${N(queue.count ?? pr.count)} kayıt</span><span class="t">En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)</span>${chart(queue.series, 'Saatlik YZ kuyruğu', queueTone)}</div>
-      <div class="card tile"><div class="tl-h">Bekleyen aktarım (son ${ingest.windowHours || 24} saat)<span class="hstat h-${ingestTone}">${m.pendingIngest == null ? (m.crawlMode === 'remote' ? 'Ölçülemiyor' : 'Uygulanmaz') : m.pendingIngest > 0 ? 'Bekliyor' : 'Normal'}</span></div><span class="v num">${m.pendingIngest == null ? '—' : N(m.pendingIngest) + ' belge'}</span><span class="t">${m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor'}</span>${m.crawlMode !== 'remote' ? '<div class="spark-empty">Yerel toplamada aktarım kuyruğu yok</div>' : chart(ingest.series, 'Saatlik bekleyen aktarım', ingestTone)}</div></div></section>
-    <section><div class="sec-h"><h2>Kaynaklar</h2><a class="btn btn-sm" href="#kaynaklar">Tümünü gör</a></div>
-      <div class="card alarms"><div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'ok').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
-      ${bad.map(s => `<div class="alarm-row"><span class="hstat ${(H_ST[s.status] || H_ST.down)[0]}">${(H_ST[s.status] || H_ST.down)[1]}</span><div class="msg"><b>${esc(s.name)}</b><small>${esc(s.message || '')}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</small></div><div class="acts"><button class="btn btn-sm" data-act="scan" data-k="${esc(s.code)}">Şimdi tara</button></div></div>`).join('')}</div></section></div>`;
+  const ALARM_PILL = { critical: 'p-k', high: 'p-k', warning: 'p-y', medium: 'p-y', info: 'p-d', low: 'p-d' };
+  const pill = (tone, text) => `<span class="pill ${tone === 'crit' ? 'p-k' : tone === 'warn' ? 'p-y' : 'p-ok'}">${text}</span>`;
+  const metric = (title, tip, st, value, sub, body) => `<div class="card metric"><span class="metric-h">${title}${tipBtn(tip, title)}${st}</span><span class="kpi-v num">${value}</span><span class="kpi-s">${sub}</span>${body}</div>`;
+  return `<div class="metrics">
+    ${metric('LLM gecikmesi (P95)', `Son ${llm.windowHours || 24} saatin saatlik P95 değerleri. Kesikli çizgi hedeftir; başarısız çağrılar gecikme yüzdeliğine katılmaz.`, pill(llmTone, llm.p95Ms > llmTarget ? 'Hedefin üstünde' : llm.calls ? (llm.failed ? 'Hatalı çağrı var' : 'Normal') : 'Çağrı yok'), sec(llm.p95Ms), `Hedef ≤ ${sec(llmTarget)} · ortanca ${sec(llm.p50Ms)} · ${N(llm.calls)} çağrı, ${N(llm.failed)} hata`, chart(llm.series, 'Saatlik LLM gecikmesi P95', llmTone, { target: llmTarget, format: sec }))}
+    ${metric('Tarama başarısı', `Son ${scans.windowDays || 7} günün günlük başarı yüzdeleri; hedef en az %${N(scanTarget)}. Kısmi taramalar başarılı sayılmaz.`, pill(scanTone, scans.successRate == null ? 'Tarama yok' : scanTone === 'warn' ? 'Dikkat' : 'Normal'), scans.successRate == null ? '—' : scanPct(scans.successRate), `Hedef ≥ %${N(scanTarget)} · ${N(scans.total)} taramadan ${N(scans.failed)}'ü başarısız / kısmi`, chart(scans.series, 'Günlük tarama başarısı', scanTone, { target: scanTarget, percent: true, format: scanPct }))}
+    ${metric('YZ kuyruğu', `Son ${queue.windowDays || 14} günün saatlik son ölçümleri; gelen kutusundaki YZ hazırlıyor kuyruğuyla aynı kapsam.`, pill(queueTone, pr.failed ? 'Hata var' : growing ? 'Büyüyor' : 'Normal'), `${N(queue.count ?? pr.count)} kayıt`, `En eski ${N(pr.oldestDays)} gün · ${N(pr.failed)} hatalı (${N(pr.exhausted)} deneme hakkı bitti)`, chart(queue.series, 'Saatlik YZ kuyruğu', queueTone))}
+    ${metric('Bekleyen aktarım', `Son ${ingest.windowHours || 24} saatin saatlik son ölçümleri; yalnız uzak crawler kurulumunda uygulanır.`, pill(ingestTone, m.pendingIngest == null ? (m.crawlMode === 'remote' ? 'Ölçülemiyor' : 'Uygulanmaz') : m.pendingIngest > 0 ? 'Bekliyor' : 'Normal'), m.pendingIngest == null ? '—' : `${N(m.pendingIngest)} belge`, m.crawlMode === 'remote' ? "Crawler'dan veritabanına aktarılmayı bekleyen" : 'Toplama bu sunucuda çalışıyor', m.crawlMode !== 'remote' ? '<div class="spark-empty">Yerel toplamada aktarım kuyruğu yok</div>' : chart(ingest.series, 'Saatlik bekleyen aktarım', ingestTone))}
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="panel-h">Açık alarmlar<span class="muted num">${al.length}</span>${tipBtn('Kapatılan alarmlar adınızla denetim izine yazılır.')}</div>
+      ${al.length ? al.map(x => `<div class="alarm-row"><span class="pill ${ALARM_PILL[x.severity] || 'p-d'}">${esc(SEV_TXT[x.severity] || x.severity)}</span><div class="msg">${esc(x.message)}<small>${esc(x.type)}${x.source ? ' · ' + esc(srcOf(x.source).a) : ''} · ${fDT(pdt(x.openedAt))}</small></div>
+        <div class="acts"><a class="btn btn-sm" href="#${esc(x.link || 'yonetim')}">İncele</a><button class="btn btn-sm btn-ghost" data-act="alarm-close" data-id="${x.id}">Kapat</button></div></div>`).join('') : `<div class="empty">${ic('check')}<b>Açık alarm yok</b></div>`}</section>
+    <section class="panel"><div class="panel-h">Kaynaklar<a class="btn btn-sm r" href="#kaynaklar">Tümünü gör</a></div>
+      <div class="alarm-row"><span class="hstat h-ok">${hs.length - bad.length} sağlıklı</span><div class="msg">${hs.filter(s => s.status === 'ok').map(s => esc(srcOf(s.code).a)).join(', ') || '—'}</div><div></div></div>
+      ${bad.map(s => `<div class="alarm-row"><span class="hstat ${(H_ST[s.status] || H_ST.down)[0]}">${(H_ST[s.status] || H_ST.down)[1]}</span><div class="msg"><b>${esc(s.name)}</b><small>${esc(s.message || '')}${s.lastFetch ? ' · son başarılı tarama ' + esc(s.lastFetch) : ''}</small></div><div class="acts"><button class="btn btn-sm" data-act="scan" data-k="${esc(s.code)}">Şimdi tara</button></div></div>`).join('')}</section>
+  </div>`;
 }
 
 /* ---------- işleme hattı: /pipeline düğümleri; "bekleyen" sayısı düğümün kayıt sayısıdır */
@@ -494,8 +500,8 @@ function admAyar() {
       <div class="row"><span>İlgisiz → ilgili</span><b class="num">${N(pv.relevance.toRelevant)}</b></div><div class="row"><span>İlgili → ilgisiz</span><b class="num">${N(pv.relevance.toIrrelevant)}</b></div><div class="row"><span>Değişmeyen</span><b class="num">${N(pv.relevance.unchanged)}</b></div>
       <div class="row"><span>Otomatik birleşecek mükerrer adayı</span><b class="num">${N(pv.dedupe.wouldAutoMerge)} / ${N(pv.dedupe.pendingReview)}</b></div>
       <div class="row"><span>İlgililik çağrısı / gün</span><b class="num">${dec(pv.llm.relevanceCallsPerDay.current, 1)} → ${dec(pv.llm.relevanceCallsPerDay.projected, 1)}</b></div>`;
-  return `<div class="grid2"><div class="stack">${groups.map(g => `<section class="card setg"><h3>${g.g}</h3>${g.d ? `<p class="muted" style="font-size:13px">${g.d}</p>` : ''}${g.keys.map(ctl).join('')}
-    ${g.weights ? `<div class="set" style="grid-template-columns:minmax(0,1fr)"><label>İlgililik skorunun bileşenleri</label><p>Skor bu üç bileşenin ağırlıklı toplamıdır; toplam 1,00 olmalı.</p>
+  return `<div class="grid2"><div class="stack">${groups.map(g => `<section class="card setg"><h3>${g.g}${g.d ? tipBtn(g.d, g.g) : ''}</h3>${g.keys.map(ctl).join('')}
+    ${g.weights ? `<div class="set" style="grid-template-columns:minmax(0,1fr)"><label>İlgililik skorunun bileşenleri ${tipBtn('Skor bu üç bileşenin ağırlıklı toplamıdır; toplam 1,00 olmalı.', 'Bileşenler')}</label>
       <div class="wbar">${g.weights.map(k => `<i style="width:${S.set[k] * 100}%;background:${W_COL[k]}" title="${SET_LBL[k]}"></i>`).join('')}</div>
       <div class="frow" style="grid-template-columns:repeat(3,minmax(0,1fr))">${g.weights.map(k => `<label class="field"><span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${W_COL[k]};margin-right:5px"></i>${SET_LBL[k]}</span><input class="input ${e.weights ? 'err' : ''}" data-set="${k}" value="${dec(S.set[k])}" inputmode="decimal"><span class="mono">${k}</span></label>`).join('')}</div>
       ${e.weights ? `<span class="field-err">${e.weights}</span>` : `<span class="hstat h-ok">Toplam 1,00</span>`}</div>` : ''}</section>`).join('')}
@@ -510,7 +516,7 @@ const RB_ACT = { covered: 'Arşiv sınıra kadar uzanıyor', crawl: 'Sınıra ka
 function admBakim() {
   const b = S.adm.bakim; const rp = S.rp || {}; const failed = b.failed || []; const pr = (Boot.stats || {}).preparing || {}; const pl = S.blPlan;
   return `<div class="cards">
-  <section class="card mcard"><h3>Yeniden işleme</h3><p>Seçilen tarih aralığındaki kayıtları seçilen adımdan başlayarak yeniden işler. Uzman kararları korunur.</p>
+  <section class="card mcard"><h3>Yeniden işleme${tipBtn('Seçilen tarih aralığındaki kayıtları seçilen adımdan başlayarak yeniden işler. Uzman kararları korunur.', 'Yeniden işleme')}</h3>
     <label class="field">Kaynak<select class="select" id="rpSrc"><option value="">Tüm kaynaklar</option>${Boot.sources.map(s => `<option value="${esc(s.code)}" ${rp.source === s.code ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
     <div class="frow"><label class="field">Başlangıç<input class="input" id="rpFrom" placeholder="gg.aa.yyyy" value="${esc(rp.from ?? fTR(new Date(NOW.getTime() - 7 * DAY)))}"></label><label class="field">Bitiş<input class="input" id="rpTo" placeholder="gg.aa.yyyy" value="${esc(rp.to ?? fTR(NOW))}"></label></div>
     <label class="field">Başlanacak adım<select class="select" id="rpStep">${RP_STAGES.map(s => `<option value="${s[0]}" ${rp.stage === s[0] ? 'selected' : ''}>${s[1]}</option>`).join('')}</select></label>
@@ -520,15 +526,15 @@ function admBakim() {
   <section class="card mcard"><h3>Başarısız YZ kayıtları</h3><p>${N(pr.retryable)} kayıt otomatik olarak yeniden denenecek. Deneme hakkı tükenen ${N(pr.exhausted)} kayıt elle yeniden denenebilir.</p>
     ${failed.length ? `<ul class="rlist">${failed.map(r => `<li style="grid-template-columns:minmax(0,1fr) auto;display:grid;gap:8px;align-items:center"><span>${esc(trunc(r.title, 90))}<small style="display:block">${esc(srcOf(r.source).a)} · ${esc(r.error || 'hata ayrıntısı yok')}</small></span><button class="btn btn-sm" data-act="retry-one" data-id="${r.regulationId}">${ic('retry')}Yeniden dene</button></li>`).join('')}</ul>` : `<div class="result">${ic('check')} Hatalı kayıt yok.</div>`}
     <div class="ph-act"><button class="btn" data-act="retry-all" ${pr.failed ? '' : 'disabled'}>Tüm hatalı ${N(pr.failed)} kaydı şimdi dene</button></div></section>
-  <section class="card mcard"><h3>Baseline sınırı</h3><p>Bu tarihten önce yayımlanan ilk tarama kayıtları YZ hattına alınmaz. Sınırı geriye çekmek maliyetli olabilir; önce etkisini görün.</p>
+  <section class="card mcard"><h3>Baseline sınırı${tipBtn('Bu tarihten önce yayımlanan ilk tarama kayıtları YZ hattına alınmaz. Sınırı geriye çekmek maliyetli olabilir; önce etkisini görün.', 'Baseline sınırı')}</h3>
     <div class="frow"><label class="field">Uygulanan sınır<input class="input" value="${b.baseline && b.baseline.current ? fTR(pd(b.baseline.current)) : 'Tanımlı değil'}" disabled></label><label class="field">Yeni sınır<input class="input" type="date" id="blIn" value="${esc(S.bl || '')}"></label></div>
     ${S.blErr ? `<span class="field-err">${esc(S.blErr)}</span>` : ''}
     ${pl ? `<div class="result"><b>${N(pl.converted)} kayıt hatta alınacak</b><span>${pl.crawl.length ? `${pl.crawl.length} kaynak sınıra kadar taranacak.` : 'Ek tarama gerekmiyor.'}</span><ul class="plist">${pl.sources.map(s => `<li>${esc(srcOf(s.source).a)}: ${RB_ACT[s.action] || s.action}${s.converted ? ` · ${N(s.converted)} kayıt` : ''}${s.range ? ` · ${esc(s.range.from)} – ${esc(s.range.to)}` : ''}</li>`).join('')}</ul></div>` : ''}
     <div class="ph-act"><button class="btn" data-act="bl-preview">Önizle</button><button class="btn btn-primary" data-act="bl-apply" ${pl ? '' : 'disabled'}>Uygula</button></div></section>
-  <section class="card mcard"><h3>Denetim izi</h3><p>Her karar ve ayar değişikliği, kurumsal hesapla ve bir önceki olayın özetiyle zincirlenerek kaydedilir. Tek kaydın olayları ayrıntı bölmesinin Geçmiş sekmesinde görünür.</p>
+  <section class="card mcard"><h3>Denetim izi${tipBtn('Her karar ve ayar değişikliği, kurumsal hesapla ve bir önceki olayın özetiyle zincirlenerek kaydedilir. Tek kaydın olayları ayrıntı bölmesinin Geçmiş sekmesinde görünür.', 'Denetim izi')}</h3>
     ${S.chain ? `<div class="result" style="color:${S.chain.ok ? 'var(--ok)' : 'var(--crit)'}">${ic(S.chain.ok ? 'check' : 'alert')}<b>${esc(S.chain.text)}</b></div>${S.chain.problems.length ? `<ul class="rlist">${S.chain.problems.slice(0, 8).map(p => `<li>${esc(JSON.stringify(p))}</li>`).join('')}</ul>` : ''}` : ''}
     <div class="ph-act"><button class="btn" data-act="chain">${ic('check')}Zinciri doğrula</button></div></section>
-  <section class="card mcard"><h3>Kimlik ve yetki</h3><p>Kararlar kullanıcı adıyla kaydedilir. Kurumsal tek oturum açma (SSO) ayrı fazda eklenecek; o zamana kadar ad, istek başlığıyla gelir.</p>
+  <section class="card mcard"><h3>Kimlik ve yetki${tipBtn('Kararlar kullanıcı adıyla kaydedilir. Kurumsal tek oturum açma (SSO) ayrı fazda eklenecek; o zamana kadar ad, istek başlığıyla gelir.', 'Kimlik ve yetki')}</h3>
     <div class="result"><b>${esc(Boot.me.name)}</b><span>${esc(Boot.me.title || '')}</span><span class="muted">Roller: ${esc((Boot.me.roles || []).join(', '))}</span></div></section></div>`;
 }
 
@@ -750,11 +756,11 @@ function admPromptExperiment() {
       <option value="true" ${l.expectedRelevant === true ? 'selected' : ''}>İlgili</option>
       <option value="false" ${l.expectedRelevant === false ? 'selected' : ''}>İlgisiz</option>
     </select><button class="btn btn-sm" data-act="pe-set-remove" data-id="${l.regulationId}">Çıkar</button></div>`).join('') : '';
-  const setSection = `<section class="card mcard"><h3>Değerlendirme seti</h3><p>Excel karşılaştırma ekranında oluşturulur. Set seçilirse deney kayıtları ve etiketleri setten gelir; aynı set farklı B promptlarıyla tekrarlanabilir.</p>
+  const setSection = `<section class="card mcard"><h3>Değerlendirme seti${tipBtn('Excel karşılaştırma ekranında oluşturulur. Set seçilirse deney kayıtları ve etiketleri setten gelir; aynı set farklı B promptlarıyla tekrarlanabilir.', 'Değerlendirme seti')}</h3>
       <div class="frow">${setButtons || '<div class="result">Henüz set yok. Excel karşılaştırma ekranından oluşturun.</div>'}</div>
       ${sd ? `<div class="result"><b>${esc(sd.name)}</b><span>${Object.keys(PE_STRATA).map(k => `${esc(PE_STRATA[k][0])}: ${N((sd.counts || {})[k] || 0)}`).join(' · ')}</span>
         <span class="muted">Seed ${N(sp.seed)} · fazla uyarı ${N((sp.populations.extra_alert || {}).sampled)}/${N((sp.populations.extra_alert || {}).population)} · kontrol ${N((sp.populations.system_irrelevant || {}).sampled)}/${N((sp.populations.system_irrelevant || {}).population)} · few-shot nedeniyle çıkarılan ${N(sp.leakageExcluded)}</span></div>
-        <p class="muted">Excel'de olmayan kayıtlar ilgisiz sayıldı; Excel'in kaçırdığını fark ederseniz etiketi düzeltin. "Emin değilim" kayıtlar doğruluk metriğine girmez.</p>
+        <p class="muted">Excel'de olmayan kayıtlar ilgisiz sayıldı. ${tipBtn(`Excel'in kaçırdığını fark ederseniz etiketi düzeltin. "Emin değilim" kayıtlar doğruluk metriğine girmez.`, 'Etiketler hakkında')}</p>
         <div class="stack" style="max-height:360px;overflow:auto">${setRows}</div>` : ''}</section>`;
   return `<div class="cards">${setSection}
     <section class="card mcard"><h3>Test kayıtları</h3><p>${p.setId ? 'Değerlendirme seti seçili; elle seçilen kayıtlar kullanılmaz. Seti kaldırmak için set düğmesine tekrar basın.' : 'Mevcut kayıtları seçin.'} Beklenen ilgililik etiketi yalnızca bu deneyin ölçümünde kullanılır; seçilmezse doğruluk metriğine katılmaz.</p>
@@ -762,13 +768,13 @@ function admPromptExperiment() {
       <div class="stack" style="max-height:320px;overflow:auto">${recordRows || '<div class="result">Kayıt bulunamadı.</div>'}</div>
       <h3>Deney örneklemi (${N(selected.length)}/${N(d.maxRecords || 200)})</h3><div class="stack">${selectedRows || '<div class="result">Henüz kayıt seçilmedi.</div>'}</div>
     </section>
-    <section class="card mcard"><h3>A/B ayarları</h3><p>A: kayıt oluşturulurken anlık görüntüsü alınan mevcut sistem promptu. B: düzenlenebilir tam sistem promptu.</p>
+    <section class="card mcard"><h3>A/B ayarları${tipBtn('A: kayıt oluşturulurken anlık görüntüsü alınan mevcut sistem promptu. B: düzenlenebilir tam sistem promptu.', 'A/B ayarları')}</h3>
       <div class="result"><b>${esc(d.provider || 'LLM kapalı')} · ${esc(d.model || '—')}</b><span>Eşik ${dec(settings.relevanceThreshold, 2)} · ağırlıklar ${dec(settings.relevanceWeightModel, 2)} / ${dec(settings.relevanceWeightVotes, 2)} / ${dec(settings.relevanceWeightRules, 2)} · örnek ${N(settings.relevanceSamples)} · sıcaklık ${dec(settings.sampleTemperature, 2)}</span><span>A ve B aynı belge girdisi, model ve ayarlarla çalışır. Yeni çağrı gerektiğinde iki promptun her biri için en çok ${N(selected.length * 2 * (settings.relevanceSamples || 1))} örnek çağrısı yapılır; eşleşen sonuçlar önbellekten gelir.</span></div>
       <label class="field">Deney adı<input class="input" id="peTitle" maxlength="200" placeholder="Örn. İşveren ve veri sorumlusu rolleri" value="${esc(p.title || '')}"></label>
       <label class="field">B · taslak sistem promptu<textarea class="input" id="pePromptB" rows="16" maxlength="30000">${esc(p.promptB || d.systemPromptA || '')}</textarea></label>
       ${p.error ? `<span class="field-err">${esc(p.error)}</span>` : ''}
       <div class="ph-act"><button class="btn btn-primary" data-act="pe-start" ${!provider || p.loading || (p.setId ? !(sd && sd.labels.length) : !selected.length) ? 'disabled' : ''}>${p.loading ? 'Kaydediliyor…' : p.setId ? 'Setle A/B deneyini çalıştır' : 'A/B deneyini çalıştır'}</button><button class="btn" data-act="pe-reload">Deneyleri yenile</button></div>
-      <p class="muted">Promptlar ve sonuçlar kalıcı olarak saklanır. Deney canlı ilgililik etiketlerini değiştirmez. Sadece aynı prompt, belge girdisi, model ve örnekleme ayarlarında önbellek kullanılır.</p>
+      <p class="muted">Deney canlı ilgililik etiketlerini değiştirmez. ${tipBtn('Promptlar ve sonuçlar kalıcı olarak saklanır. Sadece aynı prompt, belge girdisi, model ve örnekleme ayarlarında önbellek kullanılır.', 'Deney kayıtları')}</p>
     </section></div>
     ${runs ? `<section class="card mcard" style="margin-top:16px"><h3>Kaydedilmiş deneyler</h3><div class="frow">${runs}</div></section>` : ''}
     ${promptExperimentResults(p.detail)}`;

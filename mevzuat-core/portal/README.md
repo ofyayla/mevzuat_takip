@@ -8,7 +8,7 @@ yoktur.
 | `Mevzuat Takip Portali.dc.html` | Sayfa kabuğu (`/`): simge sprite'ı + `assets/` betikleri |
 | `assets/api.js` | **Tek sunucu katmanı**: `API_BASE=/api/v1`, `X-Demo-User` (URL kodlamalı; ad `localStorage['mtp_user']`), `If-Match`/`ETag`, `{error:{code,message,details}}` hata biçimi, API ↔ ekran kayıt dönüşümü (`upsert`) |
 | `assets/inbox.js` | Gelen kutusu: kuyruklar, süzgeçler, liste, ayrıntı bölmesi, bilgi düzenleme formu |
-| `assets/views.js` | Uygulama çubuğu, Arşiv, Excel karşılaştırma, Yönetim sekmeleri |
+| `assets/views.js` | Uygulama çubuğu, Arşiv, Excel karşılaştırma, Sistem durumu sekmeleri |
 | `assets/app.js` | Çizim, tıklama/klavye olayları, API'ye yazma işlemleri, yönlendirme (`#gelen`, `#arsiv`, `#hat`, …) |
 | `assets/styles.css` | Stiller |
 | `eski/` | Önceki React arayüzü (bir sürüm yedek): `/eski`, `/eski/surec`, `/eski/arsiv`, `/eski/karsilastirma`. `support.js` ve `vendor/` yalnızca bunlar içindir |
@@ -20,8 +20,14 @@ Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç 
 
 ## Tasarım dili
 
-- **Üst çubuk:** marka, ekranlar (Gelen kutusu, Arşiv, Yönetim), alarm zili ve hesap tek çubukta durur. Kuyruklar, arşiv
-  süzgeçleri ve yönetim bölümleri sayfa içinde sekmedir.
+- **Üst çubuk:** marka, ekranlar (Gelen kutusu, Arşiv, Sistem durumu), alarm zili ve hesap tek çubukta durur. Kuyruklar,
+  arşiv süzgeçleri ve Sistem durumu bölümleri (Genel bakış, İşleme hattı, Kaynaklar, Ayarlar, Excel karşılaştırma,
+  Prompt deneyi, Bakım ve denetim) sayfa içinde bölümlü sekmedir. Klavye kısayolları hesap menüsündedir.
+- **Araç çubuğu:** sekmeler solda; arama, tek **Filtrele** düğmesi ve **Sırala** simgesi sağda. Filtrele açılır
+  penceresi Önem, Kaynak, Yürürlük, Eklenme zamanı ve Birim gruplarını ve "yalnız birim seçilmesi gerekenler" anahtarını
+  içerir; seçili süzgeçler listenin üstünde çıkarılabilir etiketler olarak görünür.
+- **Özet kartları:** Karar bekleyen kuyruğunda dört kart (Karar bekleyen, Kritik ve yüksek, Yürürlüğe 30 gün içinde,
+  Birim seçilmeli). YZ hazırlıyor sayısı ve hata bilgisi ilk kartta ve kuyruk sekmesindedir.
 - **Yazı ve boşluk:** sistem yazı tipi kullanılır (dışarıdan yazı tipi yüklenmez); gövde metni 15 px, en küçük metin 13 px.
   Tablo satırları ve kartlar geniş boşluklu, ayrım çizgiden çok yumuşak zemin ve gölgeyle yapılır.
 - **Renk:** tek vurgu rengi teal. Kırmızı ve sarı yalnız dikkat isteyen yerlerde; önem ve karar durumları çerçeveli, noktalı
@@ -45,7 +51,7 @@ Regresyon testleri: `node --test mevzuat-core/portal/tests/detail-resize.test.cj
 
 ## Baseline sınırı
 
-- **Yönetim → Bakım ve denetim → Baseline sınırı → Yeni sınır** alanında tarih, takvim simgesinden
+- **Sistem durumu → Bakım ve denetim → Baseline sınırı → Yeni sınır** alanında tarih, takvim simgesinden
   seçilebilir veya klavyeyle girilebilir. Görünen tarih biçimi tarayıcının dil ayarını izler.
 - **Önizle** seçilen tarihin etkisini hesaplar; **Uygula** mevcut onay penceresinden sonra işlemi kuyruğa alır.
   Tarih değiştirilir veya temizlenirse eski önizleme kaldırılır; uygulamadan önce yeniden önizleme gerekir.
@@ -55,7 +61,7 @@ Baseline tarih alanı regresyon testleri (depo kökünden, ek paket gerektirmez)
 
 ## Sistem sağlığı grafikleri
 
-**Yönetim → Genel bakış** dört kartta gerçek veriye dayalı çizgi/alan grafikleri gösterir:
+**Sistem durumu → Genel bakış** dört kartta gerçek veriye dayalı çizgi/alan grafikleri gösterir:
 
 - **LLM gecikmesi:** son 24 saatin saatlik P95 değerleri; kesikli hedef çizgisi 60 saniye.
   Kartın büyük değeri tüm 24 saatin P95'idir; başarısız çağrılar gecikme yüzdeliğine katılmaz.
@@ -84,7 +90,7 @@ ve `cd mevzuat-core/app && python -m pytest tests/test_admin_health.py tests/tes
 
 ## Bildirimler
 
-- Sağ üstteki zil menüsünde bir bildirime tıklamak, açık alarmların listelendiği **Yönetim → Genel bakış**
+- Sağ üstteki zil menüsünde bir bildirime tıklamak, açık alarmların listelendiği **Sistem durumu → Genel bakış**
   sayfasına (`#yonetim`) yönlendirir. Bildirim bağlantıları klavyeyle de açılabilir.
 - Bildirime veya **Tümünü gör** bağlantısına basınca menü kapanır; aynı sayfadayken de açık kalmaz.
 
@@ -119,7 +125,7 @@ Arşiv arayüz regresyon testi (depo kökünden, Node.js ile):
 
 - Gelen kutusunun Yeni, Birikim ve Tümü kuyruklarında **Yayım tarihi** ayrı bir sütundur; yıl dahil gösterilir.
   Tarihi bulunmayan kayıtlarda `—` görünür. Dar ekranlarda tarih, düzenleme başlığının altına taşınır.
-- **Sırala → Yayım tarihi** ile yayın tarihini seçip **Yön** alanından artan (eskiden yeniye) veya
+- **Sırala** simgesinden Yayım tarihini seçip **Yön** bölümünden artan (eskiden yeniye) veya
   azalan (yeniden eskiye) sıralayabilirsiniz. Sütun başlığına tıklamak da yönü değiştirir; ilk seçim azalandır.
 - Sıralama yalnızca açık sayfaya değil, filtrelenmiş listenin tamamına sunucuda uygulanır.
   Sayfa değişiminde ve Excel'e aktarımda aynı yayın tarihi sırası kullanılır; tarihi olmayanlar sonda kalır.
@@ -143,7 +149,7 @@ Dışa aktarma regresyon testleri (depo kökünden, ek paket gerektirmez):
 
 ## İşleme hattı
 
-- Konumu değişmez: **Yönetim → İşleme hattı**, doğrudan `/#hat`.
+- Konumu değişmez: **Sistem durumu → İşleme hattı**, doğrudan `/#hat`.
 - Eski süreç haritasının beş katmanlı SVG görünümü kullanılır: toplama, ham belge, düzenleme kaydı,
   YZ analizi ve portal incelemesi. Düğümler, canlı sayılar ve oklar `GET /pipeline` yanıtından çizilir;
   kesikli oklar yeniden deneme / işleme yollarını gösterir.
@@ -159,8 +165,8 @@ Regresyon testleri (depo kökünden, Node.js ile, ek paket gerektirmez):
 
 ## Sıralama
 
-- Gelen kutusunun Yeni, Birikim ve Tümü kuyruklarında öncelik, tespit tarihi, yürürlük tarihi ve önem için
-  **Küçükten büyüğe / Büyükten küçüğe** yönü seçilebilir. Tarihlerde küçükten büyüğe eskiden yeniye sıralar.
+- Gelen kutusunun Karar bekleyen kuyruğunda **Sırala** simgesinden öncelik, tespit tarihi, yayım tarihi, yürürlük tarihi
+  ve önem için **Küçükten büyüğe / Büyükten küçüğe** yönü seçilebilir. Tarihlerde küçükten büyüğe eskiden yeniye sıralar.
 - Yürürlük veya Önem sütun başlığına tekrar tıklamak aynı sütunun sıralama yönünü tersine çevirir;
   ok ve erişilebilir sütun bilgisi geçerli yönü gösterir.
 - Ölçüt değiştiğinde mevcut varsayılanlar korunur: yürürlük tarihi artan, diğer ölçütler azalan.
@@ -187,7 +193,7 @@ Uydurma veri bırakılmadı; aşağıdakiler ya hiç gösterilmez ya da API'nin 
 | Arşiv listesinde ret gerekçesi | Liste yanıtında yok; kayıt açılınca denetim izinden gösterilir |
 | Arşivde "Tümü" (onay + ret birlikte) | `status` tek değer alır; Onaylanan / Reddedilen ayrı sekmeler |
 | Süzgeç açılırlarında seçenek başına kayıt sayısı | Çok boyutlu sayım ucu yok; seçenekler sayısız listelenir |
-| KPI "Birim atanmalı / 30 gün içinde" | Kuyruk için `needs_unit` / `effective` süzgeçli `page_size=1` çağrılarının `total` değeri |
+| KPI "Birim seçilmeli / 30 gün içinde" | Kuyruk için `needs_unit` / `effective` süzgeçli `page_size=1` çağrılarının `total` değeri |
 | Yönetim: LLM gecikmesi **hedef çizgisi ve zaman serisi grafikleri** | Zaman serisi ve hedef değeri yok; P95/ortanca/çağrı/hata sayısı gösterilir |
 | Yönetim: **tarama başarı oranı**, "bekleyen aktarım" geçmişi | Oran ucu yok; kaynak sağlığı (`/sources/health`) ve `pendingIngest` gösterilir |
 | İşleme hattı: yeniden deneme yolları anahtarı, hatta kayıt başına "sonraki deneme saati" | Yok; hat `GET /pipeline` düğümleri ve `reviewFlow` ile çizilir, düğüm renkleri **arayüz eşiğidir** (en eski bekleyen ≥ 3 gün dikkat, ≥ 7 gün darboğaz; `HAT_WARN_DAYS`/`HAT_CRIT_DAYS`) |

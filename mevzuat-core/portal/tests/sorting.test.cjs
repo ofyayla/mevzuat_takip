@@ -37,7 +37,8 @@ function portal() {
   run('refreshInbox = () => {}; paintList = () => {}; paintAll = () => {}; loadKpi = async () => {};');
   return {
     run, requests,
-    change(id, value) { events.get('change')({ target: { id, value, dataset: {} } }); },
+    sortKey(key) { events.get('click')({ target: { closest: () => ({ dataset: { act: 'sort-key', s: key } }) } }); },
+    sortDir(direction) { events.get('click')({ target: { closest: () => ({ dataset: { act: 'sort-dir', d: direction } }) } }); },
     click(key) {
       const target = { dataset: { act: 'sort', s: key } };
       events.get('click')({ target: { closest: () => target } });
@@ -56,15 +57,15 @@ for (const [key, field] of sorts) {
   for (const direction of ['asc', 'desc']) {
     test(`${key} sends ${direction} to the list API`, () => {
       const p = portal();
-      p.change('sort', key);
-      p.change('sortDir', direction);
+      p.sortKey(key);
+      p.sortDir(direction);
       const query = p.requests.at(-1).searchParams;
       assert.equal(query.get('sort'), field);
       assert.equal(query.get('direction'), direction);
       assert.equal(query.get('page'), '1');
-      const html = p.run('chipsRow(0, 0, 0)');
-      assert.match(html, new RegExp(`<option value="${key}" selected>`));
-      assert.match(html, new RegExp(`<option value="${direction}" selected>`));
+      const html = p.run('sortPopHtml()');
+      assert.match(html, new RegExp(`data-act="sort-key" data-s="${key}" aria-checked="true"`));
+      assert.match(html, new RegExp(`aria-checked="true" data-act="sort-dir" data-d="${direction}"`));
       assert.match(html, /Küçükten büyüğe/);
       assert.match(html, /Büyükten küçüğe/);
       assert.doesNotMatch(html, /Tespit \(yeniden eskiye\)|Yürürlük \(yakın önce\)/);
@@ -77,11 +78,11 @@ test('initial sort and defaults on field changes remain unchanged', () => {
   assert.equal(p.run('listParams().sort'), 'priority');
   assert.equal(p.run('listParams().direction'), 'desc');
   for (const [key, field, direction] of sorts) {
-    p.change('sort', key);
+    p.sortKey(key);
     assert.equal(p.run('S.sort'), key);
     assert.equal(p.run('listParams().sort'), field);
     assert.equal(p.run('listParams().direction'), direction);
-    p.change('sortDir', direction === 'asc' ? 'desc' : 'asc');
+    p.sortDir(direction === 'asc' ? 'desc' : 'asc');
   }
 });
 
@@ -112,7 +113,7 @@ for (const [key, field, direction, label, cls] of [
       assert.match(html, new RegExp(`<th class="${cls}" aria-sort="${expected === 'asc' ? 'ascending' : 'descending'}">`));
       assert.match(html, new RegExp(`href="#i-chev-${expected === 'asc' ? 'u' : 'd'}"`));
       assert.match(html, new RegExp(`aria-label="${label} sütununa göre ${expected === 'asc' ? 'büyükten küçüğe' : 'küçükten büyüğe'} sırala"`));
-      assert.match(p.run('chipsRow(0, 0, 0)'), new RegExp(`<option value="${expected}" selected>`));
+      assert.match(p.run('sortPopHtml()'), new RegExp(`aria-checked="true" data-act="sort-dir" data-d="${expected}"`));
       expected = expected === 'asc' ? 'desc' : 'asc';
     }
   });
@@ -120,8 +121,8 @@ for (const [key, field, direction, label, cls] of [
 
 test('dropdown direction and column clicks share the same state', () => {
   const p = portal();
-  p.change('sort', 'onem');
-  p.change('sortDir', 'asc');
+  p.sortKey('onem');
+  p.sortDir('asc');
   p.click('onem');
   assert.equal(p.run('S.sortDir'), 'desc');
   p.click('yururluk');
@@ -134,8 +135,8 @@ test('dropdown direction and column clicks share the same state', () => {
 test('sort changes reset pagination and selection without dropping filters', () => {
   const p = portal();
   for (const change of [
-    () => p.change('sort', 'tespit'),
-    () => p.change('sortDir', 'asc'),
+    () => p.sortKey('tespit'),
+    () => p.sortDir('asc'),
     () => p.click('onem'),
   ]) {
     p.run("S.page = 4; S.selected.add('42'); S.q = 'test'; S.f.src.add('BDDK'); S.f.sev.add('Kritik');");
@@ -152,12 +153,14 @@ test('sort changes reset pagination and selection without dropping filters', () 
 test('the combined decision queue exposes sorting and added-time filtering', () => {
   const p = portal();
   p.run("S.queue = 'tum';");
-  const html = p.run('chipsRow(0, 0, 0)');
-  assert.match(html, /id="sort"/);
-  assert.match(html, /id="sortDir"/);
+  assert.match(p.run('fbtns()'), /data-act="pop-filter"/);
+  assert.match(p.run('fbtns()'), /data-act="pop-sort"/);
+  assert.match(p.run('sortPopHtml()'), /data-act="sort-key"/);
+  assert.match(p.run('sortPopHtml()'), /data-act="sort-dir"/);
+  assert.doesNotMatch(p.run('chipsRow(0, 0, 0)'), /<select/);
   assert.match(p.run('qtabs()'), /Karar bekleyen/);
   assert.doesNotMatch(p.run('qtabs()'), /Yeni|Birikim/);
-  assert.match(p.run('fbtns()'), /Eklenme zamanı/);
+  assert.match(p.run('filterPopHtml()'), /Eklenme zamanı/);
   assert.match(p.run("filterPopHtml('added')"), /Son 7 gün/);
   assert.match(p.run("filterPopHtml('added')"), /7 günden eski/);
 });
@@ -174,15 +177,16 @@ test('added-time filter reaches the list API and survives list reloads', async (
 
 test('preparing and irrelevant queues retain their fixed ordering', async () => {
   const p = portal();
-  p.change('sort', 'onem');
-  p.change('sortDir', 'desc');
+  p.sortKey('onem');
+  p.sortDir('desc');
   p.run("S.queue = 'hazirlaniyor';");
-  assert.doesNotMatch(p.run('chipsRow(0, 0, 0)'), /id="sort(?:Dir)?"/);
+  assert.doesNotMatch(p.run('fbtns()'), /pop-sort/);
+  assert.match(p.run('fbtns()'), /pop-filter/);
   await p.run('loadList()');
   assert.equal(p.requests.at(-1).searchParams.get('sort'), 'detected_at');
   assert.equal(p.requests.at(-1).searchParams.get('direction'), 'asc');
   p.run("S.queue = 'ilgisiz';");
-  assert.doesNotMatch(p.run('chipsRow(0, 0, 0)'), /id="sort(?:Dir)?"/);
+  assert.equal(p.run('fbtns()'), '');
   await p.run('loadList()');
   assert.equal(p.requests.at(-1).pathname, '/api/v1/regulations/irrelevant-sample');
   assert.equal(p.requests.at(-1).searchParams.has('sort'), false);
@@ -201,8 +205,8 @@ test('Excel export uses the selected sort and direction for every field', async 
   `);
   for (const [key, field] of sorts) {
     for (const direction of ['asc', 'desc']) {
-      p.change('sort', key);
-      p.change('sortDir', direction);
+      p.sortKey(key);
+      p.sortDir(direction);
       p.run('S.page = 3; exportList();');
       await p.run("exportDialog.onOk({ querySelector: () => ({ value: 'filtered' }) })");
       assert.equal(p.run('exported.path'), '/regulations/export');

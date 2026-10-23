@@ -35,7 +35,8 @@ function portal() {
   run('refreshInbox = () => {}; paintList = () => {}; paintAll = () => {}; loadKpi = async () => {};');
   return {
     run, requests,
-    change(id, value) { events.get('change')({ target: { id, value, dataset: {} } }); },
+    sortKey(key) { events.get('click')({ target: { closest: () => ({ dataset: { act: 'sort-key', s: key } }) } }); },
+    sortDir(direction) { events.get('click')({ target: { closest: () => ({ dataset: { act: 'sort-dir', d: direction } }) } }); },
     click() {
       const target = { dataset: { act: 'sort', s: 'yayim' } };
       events.get('click')({ target: { closest: () => target } });
@@ -48,9 +49,9 @@ for (const queue of ['tum']) {
     test(`${queue}: publication sorting sends ${direction} to the API and retains filters`, () => {
       const p = portal();
       p.run(`S.queue = '${queue}'; S.q = 'banka'; S.f.src.add('BDDK'); S.f.sev.add('Kritik');`);
-      p.change('sort', 'yayim');
+      p.sortKey('yayim');
       p.run("S.page = 4; S.selected.add('42');");
-      p.change('sortDir', direction);
+      p.sortDir(direction);
       const query = p.requests.at(-1).searchParams;
       assert.equal(query.get('queue'), queue);
       assert.equal(query.get('sort'), 'publish_date');
@@ -60,7 +61,7 @@ for (const queue of ['tum']) {
       assert.equal(query.get('source'), 'BDDK');
       assert.equal(query.get('severity'), 'Kritik');
       assert.equal(p.run('S.selected.size'), 0);
-      assert.match(p.run('chipsRow(0, 0, 0)'), /<option value="yayim" selected>Yayım tarihi<\/option>/);
+      assert.match(p.run('sortPopHtml()'), /data-act="sort-key" data-s="yayim" aria-checked="true"/);
       p.run('S.page = 2;');
       assert.equal(p.run('listParams().sort'), 'publish_date');
       assert.equal(p.run('listParams().direction'), direction);
@@ -78,9 +79,9 @@ test('publication header starts newest-first and toggles with accessible directi
     const html = p.run('table([])');
     assert.match(html, new RegExp(`<th class="c-pub" aria-sort="${direction === 'asc' ? 'ascending' : 'descending'}">`));
     assert.match(html, new RegExp(`href="#i-chev-${direction === 'asc' ? 'u' : 'd'}"`));
-    assert.match(p.run('chipsRow(0, 0, 0)'), new RegExp(`<option value="${direction}" selected>`));
+    assert.match(p.run('sortPopHtml()'), new RegExp(`aria-checked="true" data-act="sort-dir" data-d="${direction}"`));
   }
-  p.change('sortDir', 'desc');
+  p.sortDir('desc');
   p.click();
   assert.equal(p.run('listParams().direction'), 'asc');
 });
@@ -105,7 +106,7 @@ test('publication column renders the full year, missing dates and the mobile dat
     const special = p.run('table(rows)');
     assert.match(special, /Yayım 1 Eki 2026/);
     assert.doesNotMatch(special, /pub-mobile/);
-    assert.doesNotMatch(p.run('chipsRow(0, 0, 0)'), /id="sort"/);
+    assert.doesNotMatch(p.run('fbtns()'), /pop-sort/);
   }
 });
 
@@ -120,8 +121,8 @@ test('filtered Excel export preserves both publication directions without pagina
     };
   `);
   for (const direction of ['asc', 'desc']) {
-    p.change('sort', 'yayim');
-    p.change('sortDir', direction);
+    p.sortKey('yayim');
+    p.sortDir(direction);
     p.run('S.page = 3; exportList();');
     await p.run("exportDialog.onOk({ querySelector: () => ({ value: 'filtered' }) })");
     assert.equal(p.run('exported.path'), '/regulations/export');

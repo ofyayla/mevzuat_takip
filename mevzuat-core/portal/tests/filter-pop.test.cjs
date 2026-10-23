@@ -6,26 +6,24 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-test('opening another filter positions its popup next to the current filter button', () => {
+/** Tek "Filtrele" penceresi: açılır, seçim yapılınca yerinde yenilenir ve yeniden çizilen düğmeye bağlı kalır. */
+function portal() {
   const events = new Map();
   const app = {};
   let pop = null;
-  let anchors = new Map();
-  const makeAnchor = (key, left) => {
-    const anchor = {
-      dataset: { act: 'pop-filter', f: key },
+  let anchor = null;
+  const makeAnchor = left => {
+    const el = {
+      dataset: { act: 'pop-filter' },
       isConnected: true,
-      getBoundingClientRect: () => ({ left: anchor.isConnected ? left : 0, bottom: 100 }),
+      getBoundingClientRect: () => ({ left: el.isConnected ? left : 0, bottom: 100 }),
       setAttribute() {},
     };
-    return anchor;
+    return el;
   };
   const renderFilterButtons = () => {
-    for (const anchor of anchors.values()) anchor.isConnected = false;
-    anchors = new Map([
-      ['src', makeAnchor('src', 100)],
-      ['sev', makeAnchor('sev', 300)],
-    ]);
+    if (anchor) anchor.isConnected = false;
+    anchor = makeAnchor(300);
   };
   renderFilterButtons();
   const filterButtons = {};
@@ -38,13 +36,14 @@ test('opening another filter positions its popup next to the current filter butt
         if (selector === '#app') return app;
         if (selector === '#pop') return pop;
         if (selector === '#fbtns') return filterButtons;
-        const match = selector.match(/data-f="(src|sev)"/);
-        return match ? anchors.get(match[1]) : null;
+        return selector.includes('pop-filter') ? anchor : null;
       },
+      querySelectorAll: () => [],
       createElement: () => ({
         style: {},
         offsetWidth: 240,
         offsetHeight: 160,
+        scrollTop: 0,
         contains: () => false,
         remove() { pop = null; },
       }),
@@ -61,13 +60,59 @@ test('opening another filter positions its popup next to the current filter butt
   }
   run('loadRefs = () => new Promise(() => {});');
   vm.runInContext(readFileSync(path.join(__dirname, '..', 'assets', 'app.js'), 'utf8'), context, { filename: 'app.js' });
+  run("refreshInbox = () => { document.querySelector('#fbtns').innerHTML = fbtns(); }; listChanged = () => {}; Boot.sources = [{ code: 'BDDK', name: 'BDDK' }, { code: 'TCMB', name: 'TCMB' }];");
+  return {
+    run,
+    pop: () => pop,
+    anchor: () => anchor,
+    click: target => events.get('click')({ target: { closest: () => target } }),
+    change: target => events.get('change')({ target }),
+  };
+}
 
-  const click = anchor => events.get('click')({ target: { closest: () => anchor } });
-  click(anchors.get('src'));
-  const secondFilter = anchors.get('sev');
-  click(secondFilter);
+test('the filter button opens one popup with every filter group next to it', () => {
+  const p = portal();
+  p.click(p.anchor());
+  assert.ok(p.pop());
+  assert.equal(p.pop().style.left, '300px');   // pencere düğmenin soluna hizalanır
+  assert.equal(p.pop().anchor, p.anchor());
+  for (const group of ['Önem derecesi', 'Kaynak', 'Yürürlük', 'Eklenme zamanı', 'Önerilen birim']) {
+    assert.match(p.pop().innerHTML, new RegExp(group));
+  }
+  assert.match(p.pop().innerHTML, /data-change="needUnit"/);
+});
 
-  assert.equal(pop.style.left, '300px');
-  assert.equal(pop.anchor, anchors.get('sev'));
-  assert.equal(pop.anchor.isConnected, true);
+test('choosing an option refreshes the open popup in place and keeps it tied to the redrawn button', () => {
+  const p = portal();
+  p.click(p.anchor());
+  const firstAnchor = p.anchor();
+  p.run("S.f.src.add('BDDK');");
+  p.change({ dataset: { change: 'fopt', f: 'src' }, checked: true, value: 'BDDK' });
+  assert.ok(p.pop());
+  assert.match(p.pop().innerHTML, /value="BDDK" checked/);
+  assert.notEqual(p.anchor(), firstAnchor);
+  p.run('closePop()');
+  p.click(p.anchor());
+  p.change({ dataset: { change: 'fopt', f: 'src' }, checked: true, value: 'TCMB' });
+  assert.equal(p.run('S.f.src.has("TCMB")'), true);
+  assert.equal(p.pop().anchor.isConnected, true);
+});
+
+test('the unit-needed switch and clear-all work from the same popup', () => {
+  const p = portal();
+  p.click(p.anchor());
+  p.change({ dataset: { change: 'needUnit' }, checked: true });
+  assert.equal(p.run('S.f.needUnit'), true);
+  assert.match(p.pop().innerHTML, /data-change="needUnit" checked/);
+  p.click({ dataset: { act: 'fclear-all' } });
+  assert.equal(p.run('S.f.needUnit'), false);
+  assert.equal(p.run('S.f.src.size + S.f.sev.size'), 0);
+});
+
+test('clicking the filter button again closes the popup', () => {
+  const p = portal();
+  p.click(p.anchor());
+  assert.ok(p.pop());
+  p.click(p.anchor());
+  assert.equal(p.pop(), null);
 });

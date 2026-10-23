@@ -11,7 +11,7 @@ const ic = n => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 /** Açıklama ve ek uyarı metni: ⓘ düğmesi; metin araç ipucunda (fare, klavye odağı ve dokunmayla) açılır. */
 const tipBtn = (t, label = 'Bilgi') => `<button type="button" class="info" data-tip="${esc(t)}" aria-label="${esc(label + ': ' + t)}">${ic('info')}</button>`;
 /** Tek satırlık durum satırı: başlık (HTML), isteğe bağlı kısa ek metin, ayrıntı araç ipucunda, eylem düğmeleri sağda. */
-const banner = (kind, icon, title, { tip = '', act = '', sub = '' } = {}) => `<div class="banner banner-${kind}">${ic(icon)}<div>${title ? `<b>${title}</b>` : ''}${sub ? `<span class="b-sub">${sub}</span>` : ''}${tip ? tipBtn(tip) : ''}</div>${act}</div>`;
+const banner = (kind, icon, title, { tip = '', act = '', sub = '' } = {}) => `<div class="banner banner-${kind}">${ic(icon)}<div>${title ? `<b>${title}</b>` : ''}${tip ? tipBtn(tip) : ''}${sub ? `<span class="b-sub">${sub}</span>` : ''}</div>${act}</div>`;
 const AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 const DAY = 864e5;
 let NOW = new Date();

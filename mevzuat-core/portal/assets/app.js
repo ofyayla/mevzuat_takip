@@ -80,16 +80,32 @@ function openPop(anchor, html, info) {
   p.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
   p.anchor = anchor;
 }
-function filterPopHtml(k) {
-  let opts;
-  if (k === 'src') opts = Boot.sources.map(s => [s.code, s.name]);
-  if (k === 'sev') opts = SEVS.map(x => [x, x]);
-  if (k === 'eff') opts = EFF_OPTS;
-  if (k === 'added') opts = ADDED_OPTS;
-  if (k === 'unit') opts = UNITS.map(u => [u.code, u.name]);
-  const lbl = { src: 'Kaynak', sev: 'Önem derecesi', eff: 'Yürürlük', added: 'Eklenme zamanı', unit: 'Önerilen birim' }[k];
-  return `<div class="pop-h">${lbl}</div><div style="max-height:320px;overflow:auto">${opts.map(o => `<label class="opt"><input type="checkbox" data-change="fopt" data-f="${k}" value="${esc(o[0])}" ${S.f[k].has(o[0]) ? 'checked' : ''}>${k === 'sev' ? sevPill(o[1]) : esc(o[1])}</label>`).join('') || '<div class="opt muted">Seçenek yok</div>'}</div>
-    <div class="pop-f"><button class="linkbtn" data-act="fclear" data-f="${k}">Temizle</button><button class="btn btn-sm" data-act="pop-close">Tamam</button></div>`;
+function filterOpts(k) {
+  if (k === 'src') return Boot.sources.map(s => [s.code, s.name]);
+  if (k === 'sev') return SEVS.map(x => [x, x]);
+  if (k === 'eff') return EFF_OPTS;
+  if (k === 'added') return ADDED_OPTS;
+  return UNITS.map(u => [u.code, u.name]);
+}
+const FILTER_LBL = { src: 'Kaynak', sev: 'Önem derecesi', eff: 'Yürürlük', added: 'Eklenme zamanı', unit: 'Önerilen birim' };
+/** Tek "Filtrele" açılır penceresi: her boyut açılır bir grup; seçili olanlar ve Önem varsayılan açıktır. */
+function filterPopHtml(openKeys) {
+  const dec_ = DECISION_Q.includes(S.queue);
+  const keys = dec_ ? ['sev', 'src', 'eff', 'added', 'unit'] : ['src'];
+  const open = Array.isArray(openKeys) ? openKeys : ['sev', 'src'];
+  const grp = k => {
+    const n = S.f[k].size;
+    return `<details class="fgrp" data-k="${k}" ${n || open.includes(k) ? 'open' : ''}><summary>${FILTER_LBL[k]}${n ? `<span class="cnt">${n}</span>` : ''}${ic('chev-d')}</summary><div class="fopts">${filterOpts(k).map(o => `<label class="opt"><input type="checkbox" data-change="fopt" data-f="${k}" value="${esc(o[0])}" ${S.f[k].has(o[0]) ? 'checked' : ''}>${k === 'sev' ? sevPill(o[1]) : esc(o[1])}</label>`).join('') || '<div class="opt muted">Seçenek yok</div>'}</div></details>`;
+  };
+  return keys.map(grp).join('') + (dec_ ? `<label class="opt fneed"><input type="checkbox" data-change="needUnit" ${S.f.needUnit ? 'checked' : ''}>Yalnız birim seçilmesi gerekenler</label>` : '')
+    + `<div class="pop-f"><button class="linkbtn" data-act="fclear-all">Temizle</button><button class="btn btn-sm" data-act="pop-close">Tamam</button></div>`;
+}
+/** Açık filtre/sıralama penceresinin içeriğini yerinde yeniler (kaydırma ve açık gruplar korunur). */
+function refreshPop() {
+  const p = $('#pop'); if (!p || !S.pop || !(S.pop.f || S.pop.s)) return;
+  const open = [...document.querySelectorAll('#pop details[open]')].map(d => d.dataset.k); const sc = p.scrollTop;
+  p.innerHTML = S.pop.s ? sortPopHtml() : filterPopHtml(open); p.scrollTop = sc;
+  const a = document.querySelector(`#fbtns [data-act="${S.pop.s ? 'pop-sort' : 'pop-filter'}"]`); if (a) p.anchor = a;
 }
 
 /* ---------- araç ipucu: [data-tip] öğeleri ve .info düğmeleri; fare, klavye odağı ve dokunmayla açılır */
@@ -349,7 +365,7 @@ document.addEventListener('click', e => {
   if (tipOwner && !e.target.closest('[data-tip]')) hideTip();
   const t = e.target.closest('[data-act]');
   const pop = $('#pop');
-  if (pop && !pop.contains(e.target) && !(t && ['pop-filter', 'pop-bell', 'pop-user', 'pop-hat'].includes(t.dataset.act) && pop.anchor === t)) closePop();
+  if (pop && !pop.contains(e.target) && !(t && ['pop-filter', 'pop-sort', 'pop-bell', 'pop-user', 'pop-hat'].includes(t.dataset.act) && pop.anchor === t)) closePop();
   if (!t) return;
   const a = t.dataset.act, id = t.dataset.id;
   switch (a) {
@@ -367,7 +383,10 @@ document.addEventListener('click', e => {
     case 'kpi-sev': { const on = S.f.sev.size === 2 && S.f.sev.has('Kritik') && S.f.sev.has('Yüksek'); S.f.sev = on ? new Set() : new Set(['Kritik', 'Yüksek']); S.page = 1; refreshInbox(); listChanged(); break; }
     case 'kpi-eff': { const on = S.f.eff.size === 1 && S.f.eff.has('30'); S.f.eff = on ? new Set() : new Set(['30']); S.page = 1; refreshInbox(); listChanged(); break; }
     case 'kpi-need': S.f.needUnit = !S.f.needUnit; S.page = 1; refreshInbox(); listChanged(); break;
-    case 'pop-filter': { const k = t.dataset.f; if (S.pop && S.pop.f === k) { closePop(); break; } closePop(); const anchor = document.querySelector(`#fbtns [data-act="pop-filter"][data-f="${k}"]`); openPop(anchor, filterPopHtml(k), { f: k }); anchor.setAttribute('aria-expanded', 'true'); break; }
+    case 'pop-filter': case 'pop-sort': { const key = a === 'pop-filter' ? 'f' : 's'; if (S.pop && S.pop[key]) { closePop(); break; } closePop(); const anchor = document.querySelector(`#fbtns [data-act="${a}"]`); if (!anchor) break; openPop(anchor, a === 'pop-filter' ? filterPopHtml() : sortPopHtml(), { [key]: 1 }); anchor.setAttribute('aria-expanded', 'true'); break; }
+    case 'sort-key': changeSort(t.dataset.s, SORTS[t.dataset.s].direction); refreshPop(); break;
+    case 'sort-dir': changeSort(S.sort, t.dataset.d); refreshPop(); break;
+    case 'fclear-all': Object.values(S.f).forEach(v => v instanceof Set && v.clear()); S.f.needUnit = false; S.page = 1; refreshInbox(); listChanged(); refreshPop(); break;
     case 'pop-close': closePop(); break;
     case 'fclear': S.f[t.dataset.f].clear(); S.page = 1; refreshInbox(); closePop(); listChanged(); break;
     case 'unchip': { const k = t.dataset.k; if (k === 'q') { S.q = ''; $('#q').value = ''; } else if (k === 'needUnit') S.f.needUnit = false; else S.f[k].delete(t.dataset.v); S.page = 1; refreshInbox(); listChanged(); break; }
@@ -418,10 +437,10 @@ document.addEventListener('click', e => {
     case 'bulk-approve': bulkApprove(); break;
     case 'bulk-rej': bulkReject(); break;
     case 'export': exportList(); break;
-    case 'shortcuts': showShortcuts(); break;
+    case 'shortcuts': closePop(); showShortcuts(); break;
     case 'pop-bell': if (S.pop && S.pop.b) { closePop(); break; } openPop(t, `<div class="pop-h">Açık alarmlar</div>${(S.alerts || []).map(x => `<a class="alarm" href="#yonetim" data-act="pop-close"><span><span class="tag ${SEV_TAG[x.severity] || 'tag-plain'}">${esc(SEV_TXT[x.severity] || x.severity)}</span> <span class="muted">${esc(x.type)} · ${fDs(pdt(x.openedAt))}</span></span>${esc(trunc(x.message, 120))}</a>`).join('') || '<div class="opt muted">Açık alarm yok</div>'}<div class="pop-f"><span></span><a class="btn btn-sm" href="#yonetim" data-act="pop-close">Tümünü gör</a></div>`, { b: 1 }); break;
     case 'pop-user': { if (S.pop && S.pop.u) { closePop(); break; } const me = Boot.me; openPop(t, `<div class="who-card"><b>${esc(me.name)}</b><span>${esc(me.title || '')}</span><span>Roller: ${esc((me.roles || []).join(', '))}</span><span class="muted">Oturum: ${Sess.user ? 'kullanıcı adı elle ayarlandı' : 'varsayılan demo kullanıcısı'} (SSO henüz yok)</span>
-      <label class="field" style="margin-top:8px">Kullanıcı adı<input class="input" id="demoUser" value="${esc(Sess.user)}" placeholder="Ad Soyad"></label><div class="pop-f"><button class="linkbtn" data-act="user-reset">Varsayılana dön</button><button class="btn btn-sm" data-act="user-set">Değiştir</button></div></div>`, { u: 1 }); break; }
+      <button type="button" class="opt" data-act="shortcuts">${ic('kbd')}Klavye kısayolları<span class="c">?</span></button><label class="field" style="margin-top:8px">Kullanıcı adı<input class="input" id="demoUser" value="${esc(Sess.user)}" placeholder="Ad Soyad"></label><div class="pop-f"><button class="linkbtn" data-act="user-reset">Varsayılana dön</button><button class="btn btn-sm" data-act="user-set">Değiştir</button></div></div>`, { u: 1 }); break; }
     case 'user-set': Sess.user = ($('#demoUser').value || '').trim(); location.reload(); break;
     case 'user-reset': Sess.user = ''; location.reload(); break;
     case 'pop-hat': openPop(t, `<button class="opt" data-act="mermaid">${ic('copy')}Mermaid olarak kopyala</button>`, { h: 1 }); break;
@@ -538,14 +557,13 @@ document.addEventListener('change', e => {
     return;
   }
   if (t.dataset.change === 'pe-set-label') { patchEvaluationLabel(+t.dataset.id, t.value === 'unknown' ? null : t.value === 'true'); return; }
-  if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; const k = t.dataset.f; refreshInbox(); listChanged(); const nb = document.querySelector(`[data-act=pop-filter][data-f=${k}]`); if (nb) openPop(nb, filterPopHtml(k), { f: k }); return; }
+  if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; refreshInbox(); listChanged(); refreshPop(); return; }
+  if (t.dataset.change === 'needUnit') { S.f.needUnit = t.checked; S.page = 1; refreshInbox(); listChanged(); refreshPop(); return; }
   if (t.id === 'xlFile' && t.files[0] && !S.xl.running) { xlSetFile(t.files[0]); return; }
   if (t.id === 'xlM') { S.xl.method = t.value; renderAll(); return; }
   if (t.id === 'm-type') { syncDraft(); S.meta.draft.type = t.value; refreshInbox(); const el = $('#m-type'); if (el) el.focus(); return; }
   if (t.dataset.change === 'unit') { const r = byId(S.openId); const u = t.dataset.u; r.sel = t.checked ? [...r.sel, u] : r.sel.filter(x => x !== u); r.touched = true; repaint(); return; }
   if (t.id === 'addUnit' && t.value) { const r = byId(S.openId); r.sel = [...r.sel, t.value]; r.touched = true; repaint(); return; }
-  if (t.id === 'sort') { changeSort(t.value, SORTS[t.value].direction); return; }
-  if (t.id === 'sortDir') { changeSort(S.sort, t.value); return; }
   if (t.id === 'ps') { S.ps = +t.value; S.page = 1; refreshInbox(); listChanged(); return; }
   if (t.id === 'techT') { S.tech = t.checked; renderAll(); return; }
   if (t.id === 'hatLabelsT') { S.hatLabels = t.checked; renderAll(); return; }
@@ -658,7 +676,8 @@ addEventListener('resize', () => { closePop(); endDetailResize(); syncDetailSize
   z.classList.toggle('drag', ev === 'dragover');
   if (ev === 'drop' && e.dataTransfer.files[0] && !S.xl.running) { const f = e.dataTransfer.files[0]; if (!/\.(xlsx|xlsm|csv|txt)$/i.test(f.name)) { toast('Yalnızca .xlsx ya da .csv dosyası yükleyin.', { err: true }); return; } xlSetFile(f); }
 }));
-addEventListener('scroll', () => { hideTip(); if (S.pop) closePop(); }, { passive: true, capture: true });
+/* Araç ipucu her kaydırmada kapanır; açılır pencere yalnız sayfa kaydırılınca (kendi içindeki kaydırma sayılmaz). */
+addEventListener('scroll', e => { hideTip(); if (S.pop && (!e.target || e.target === document || e.target === document.documentElement)) closePop(); }, { passive: true, capture: true });
 setInterval(() => { if (S.view === 'yonetim' && S.adminTab === 'hat' && S.auto && !document.hidden && !$('#dlg')) loadAdmin('hat'); }, 30000);
 
 /* ---------- yönlendirme ve açılış */

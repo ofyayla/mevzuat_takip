@@ -98,7 +98,7 @@ function effCell(r, compact) {
 }
 function unitCell(r) {
   const weak = r.units[0];
-  if (!r.sel.length) return `<span class="need">${ic('alert')}Birim atanmalı</span>${weak ? `<div class="u-s">Zayıf öneri: ${esc(trunc(weak.n, 26))}</div>` : ''}`;
+  if (!r.sel.length) return `<span class="need">${ic('alert')}Birim seçilmeli</span>${weak ? `<div class="u-s">Zayıf öneri: ${esc(trunc(weak.n, 26))}</div>` : ''}`;
   const u = r.units.find(x => x.code === r.sel[0]);
   const names = r.sel.map(unitName2(r));
   return `<div class="unit"><span class="u-n" title="${esc(names.join(', '))}">${esc(names[0])}</span><span class="u-s">${u && u.s != null && u.origin !== 'manual' ? `Uyum ${pct(u.s)}` : 'Elle seçildi'}${r.sel.length > 1 ? ` · +${r.sel.length - 1} birim` : ''}</span></div>`;
@@ -110,10 +110,10 @@ function viewGelen() {
   return `<div class="inbox gut ${S.openId ? 'has-detail' : ''}" id="inbox">
     <section class="list-pane" aria-label="Kayıt listesi">
       <div class="ph"><div class="ph-t"><h1>Gelen kutusu</h1>${tipBtn('YZ\'nin tespit ettiği düzenlemeleri inceleyin; önerilen birimi onaylayın ya da kaydı reddedin.', 'Gelen kutusu hakkında')}</div>
-        <div class="ph-act"><button class="btn" data-act="export">${ic('download')}Excel'e aktar</button><button class="btn btn-ghost" data-act="shortcuts">${ic('kbd')}Kısayollar <span class="kbd">?</span></button></div></div>
+        <div class="ph-act"><button class="btn" data-act="export">${ic('download')}Excel'e aktar</button></div></div>
       <div id="kpis">${kpis()}</div>
-      <div id="qtabs">${qtabs()}</div>
-      <div class="fbar"><label class="search"><span class="sr">Ara</span>${ic('search')}<input id="q" type="search" placeholder="${S.queue === 'ilgisiz' ? 'Başlık veya YZ gerekçesi içinde ara' : 'Başlık veya özet içinde ara'}" value="${esc(S.q)}" autocomplete="off"><span class="kbd">/</span></label><div class="fbtns" id="fbtns">${fbtns()}</div></div>
+      <div class="toolbar"><div id="qtabs">${qtabs()}</div>
+        <div class="tools"><label class="search"><span class="sr">Ara</span>${ic('search')}<input id="q" type="search" placeholder="${S.queue === 'ilgisiz' ? 'Başlık veya YZ gerekçesi içinde ara' : 'Başlık veya özet içinde ara'}" value="${esc(S.q)}" autocomplete="off"><span class="kbd">/</span></label><div class="fbtns" id="fbtns">${fbtns()}</div></div></div>
       <div id="listRegion">${listRegion()}</div>
     </section>
     <button class="scrim" data-act="close" aria-label="Ayrıntıyı kapat" tabindex="-1"></button>
@@ -121,37 +121,45 @@ function viewGelen() {
   </div>`;
 }
 function kpis() {
+  if (!DECISION_Q.includes(S.queue)) return '';
   const st = Boot.stats || {}; const c = counts(); const k = S.kpi || {};
-  const dec_ = DECISION_Q.includes(S.queue);
   const d = (st.severityDistribution || {})[S.queue] || {};
   const dist = SEVS.map(s => d[s] || 0); const tot = Math.max(1, dist.reduce((a, b) => a + b, 0) + (d[''] || 0));
   const pr = st.preparing || {};
   const sevOn = S.f.sev.size === 2 && S.f.sev.has('Kritik') && S.f.sev.has('Yüksek');
   const effOn = S.f.eff.size === 1 && S.f.eff.has('30');
   const n30 = k.n30, n7 = k.n7;
-  const off = (label, note) => `<div class="kpi kpi-off"><span class="kpi-l">${label}</span><span class="kpi-v num">—</span><span class="kpi-s">${note}</span></div>`;
   return `<div class="kpis">
-    <div class="kpi"><span class="kpi-l">${S.queue === 'tum' ? 'Karar bekleyen' : `${QUEUES[S.queue].label} kuyruğu`}</span><span class="kpi-v num">${N(c[S.queue])}</span><span class="kpi-s">Toplam karar bekleyen ${N(c.bekleyen)}</span></div>
-    ${dec_ ? `<button class="kpi" data-act="kpi-sev" aria-pressed="${sevOn}" title="Kritik ve Yüksek önemlileri göster"><span class="kpi-l">Kritik ve yüksek</span><span class="kpi-v num">${N(dist[0] + dist[1])}</span>
-      <span class="dist" aria-label="Kritik ${dist[0]}, Yüksek ${dist[1]}, Orta ${dist[2]}, Düşük ${dist[3]}">${dist.map((n, i) => n ? `<i class="d-${'kyod'[i]}" style="width:${n / tot * 100}%" title="${SEVS[i]}: ${n}"></i>` : '').join('')}</span></button>`
-      : off('Kritik ve yüksek', 'Bu kuyrukta hesaplanmaz')}
-    ${dec_ ? `<button class="kpi" data-act="kpi-eff" aria-pressed="${effOn}"><span class="kpi-l">Yürürlüğe 30 gün içinde</span><span class="kpi-v num ${n30 ? 'warn' : ''}">${n30 == null ? '…' : N(n30)}</span><span class="kpi-s">${n7 == null ? '' : n7 ? `${n7} tanesi 7 gün içinde` : '7 gün içinde yok'}</span></button>`
-      : off('Yürürlüğe 30 gün içinde', 'Bu kuyrukta hesaplanmaz')}
-    ${dec_ ? `<button class="kpi" data-act="kpi-need" aria-pressed="${S.f.needUnit}"><span class="kpi-l">Birim atanmalı</span><span class="kpi-v num">${k.need == null ? '…' : N(k.need)}</span><span class="kpi-s">YZ güvenli öneri yapamadı</span></button>`
-      : off('Birim atanmalı', 'Bu kuyrukta hesaplanmaz')}
-    <button class="kpi" data-act="queue" data-q="hazirlaniyor" aria-pressed="${S.queue === 'hazirlaniyor'}"><span class="kpi-l">YZ hazırlıyor</span><span class="kpi-v num">${N(pr.count)}</span><span class="kpi-s ${pr.failed ? 'h-crit' : ''}">${N(pr.failed)} hata · en eski ${N(pr.oldestDays)} gün</span></button>
+    <div class="kpi"><span class="kpi-l">Karar bekleyen</span><span class="kpi-v num">${N(c.tum)}</span><span class="kpi-s">${N(pr.count)} kayıt YZ hazırlıyor${pr.failed ? ` · <b class="h-crit">${N(pr.failed)} hata</b>` : ''}</span></div>
+    <button class="kpi" data-act="kpi-sev" aria-pressed="${sevOn}" data-tip="Kritik ve Yüksek önemlileri listele"><span class="kpi-l">Kritik ve yüksek</span><span class="kpi-v num">${N(dist[0] + dist[1])}</span>
+      <span class="dist" aria-label="Kritik ${dist[0]}, Yüksek ${dist[1]}, Orta ${dist[2]}, Düşük ${dist[3]}">${dist.map((n, i) => n ? `<i class="d-${'kyod'[i]}" style="width:${n / tot * 100}%" title="${SEVS[i]}: ${n}"></i>` : '').join('')}</span></button>
+    <button class="kpi" data-act="kpi-eff" aria-pressed="${effOn}"><span class="kpi-l">Yürürlüğe 30 gün içinde</span><span class="kpi-v num ${n30 ? 'warn' : ''}">${n30 == null ? '…' : N(n30)}</span><span class="kpi-s">${n7 == null ? '' : n7 ? `${n7} tanesi 7 gün içinde` : '7 gün içinde yok'}</span></button>
+    <button class="kpi" data-act="kpi-need" aria-pressed="${S.f.needUnit}"><span class="kpi-l">Birim seçilmeli</span><span class="kpi-v num">${k.need == null ? '…' : N(k.need)}</span><span class="kpi-s">YZ güvenli öneri yapamadı</span></button>
   </div>`;
 }
 function qtabs() {
-  const c = counts(); const t = k => `<button class="tab" role="tab" data-act="queue" data-q="${k}" aria-selected="${S.queue === k}" data-tip="${esc(QUEUES[k].note)}">${QUEUES[k].label}<span class="cnt">${N(c[k])}</span></button>`;
-  return `<div class="tabs qtabs" role="tablist" aria-label="Kuyruklar">${t('tum')}<span class="tab-sep" aria-hidden="true"></span>${t('hazirlaniyor')}${t('ilgisiz')}</div>`;
+  const c = counts(); const pr = (Boot.stats || {}).preparing || {};
+  const t = k => {
+    const bad = k === 'hazirlaniyor' && pr.failed;
+    const tip = QUEUES[k].note + (bad ? ` ${N(pr.failed)} kayıt hatada, en eski ${N(pr.oldestDays)} gün.` : '');
+    return `<button class="tab" role="tab" data-act="queue" data-q="${k}" aria-selected="${S.queue === k}" data-tip="${esc(tip)}">${QUEUES[k].label}<span class="cnt ${bad ? 'h-crit' : ''}">${N(c[k])}</span></button>`;
+  };
+  return `<div class="tabs segtabs" role="tablist" aria-label="Kuyruklar">${t('tum')}${t('hazirlaniyor')}${t('ilgisiz')}</div>`;
 }
+const SORT_OPTS = [['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit tarihi'], ['yayim', 'Yayım tarihi'], ['yururluk', 'Yürürlük tarihi'], ['onem', 'Önem']];
+const sortLabel = () => (SORT_OPTS.find(o => o[0] === S.sort) || SORT_OPTS[0])[1];
+/** "Sırala" açılır penceresi: ölçüt ve yön; seçim hemen uygulanır. */
+function sortPopHtml() {
+  return `<div class="pop-h">Sırala</div>${SORT_OPTS.map(o => `<button type="button" class="opt" role="menuitemradio" data-act="sort-key" data-s="${o[0]}" aria-checked="${S.sort === o[0]}">${o[1]}${S.sort === o[0] ? `<span class="c">${ic('check')}</span>` : ''}</button>`).join('')}
+    <div class="pop-h">Yön</div><div class="seg pop-seg" role="radiogroup" aria-label="Sıralama yönü">${[['asc', 'Küçükten büyüğe'], ['desc', 'Büyükten küçüğe']].map(o => `<button type="button" class="seg-b" role="radio" aria-checked="${S.sortDir === o[0]}" data-act="sort-dir" data-d="${o[0]}">${o[1]}</button>`).join('')}</div>`;
+}
+/** Araç çubuğunun sağı: tek "Filtrele" düğmesi ve (karar kuyruğunda) sıralama simgesi. */
 function fbtns() {
-  const b = (k, l) => { const n = S.f[k].size; return `<button class="btn fbtn ${n ? 'on' : ''}" data-act="pop-filter" data-f="${k}" aria-expanded="${S.pop && S.pop.f === k}">${l}${n ? ` <b>${n}</b>` : ''}${ic('chev-d')}</button>`; };
   if (S.queue === 'ilgisiz') return '';
   const dec_ = DECISION_Q.includes(S.queue);
-  return b('src', 'Kaynak') + (dec_ ? b('added', 'Eklenme zamanı') + b('sev', 'Önem') + b('eff', 'Yürürlük') + b('unit', 'Birim') +
-    `<button class="btn fbtn ${S.f.needUnit ? 'on' : ''}" data-act="kpi-need" aria-pressed="${S.f.needUnit}">${ic('alert')}Birim atanmalı</button>` : '');
+  const n = S.f.src.size + (dec_ ? S.f.sev.size + S.f.eff.size + S.f.added.size + S.f.unit.size + (S.f.needUnit ? 1 : 0) : 0);
+  return `<button class="btn fbtn ${n ? 'on' : ''}" data-act="pop-filter" aria-haspopup="dialog" aria-expanded="${!!(S.pop && S.pop.f)}">${ic('filter')}Filtrele${n ? ` <b>${n}</b>` : ''}</button>`
+    + (dec_ ? `<button class="btn fbtn icon-btn" data-act="pop-sort" aria-haspopup="menu" aria-expanded="${!!(S.pop && S.pop.s)}" aria-label="Sırala: ${esc(sortLabel())}" data-tip="Sıralama: ${esc(sortLabel())}">${ic('sort')}</button>` : '');
 }
 function chipsRow(total, start, n) {
   const chips = [];
@@ -161,13 +169,10 @@ function chipsRow(total, start, n) {
   S.f.eff.forEach(v => chips.push(['eff', v, 'Yürürlük: ' + EFF_OPTS.find(o => o[0] === v)[1]]));
   S.f.added.forEach(v => chips.push(['added', v, 'Eklenme: ' + ADDED_OPTS.find(o => o[0] === v)[1]]));
   S.f.unit.forEach(v => chips.push(['unit', v, trunc(unitName(v), 30)]));
-  if (S.f.needUnit) chips.push(['needUnit', '', 'Birim atanmalı']);
-  const sortable = DECISION_Q.includes(S.queue);
+  if (S.f.needUnit) chips.push(['needUnit', '', 'Birim seçilmeli']);
+  if (!chips.length) return '';
   return `<div class="chiprow">${chips.map(c => `<span class="chip">${esc(c[2])}<button data-act="unchip" data-k="${c[0]}" data-v="${esc(c[1])}" aria-label="${esc(c[2])} filtresini kaldır">${ic('x')}</button></span>`).join('')}
-    ${chips.length ? '<button class="linkbtn" data-act="clear-filters">Filtreleri temizle</button>' : ''}
-    <div class="chiprow-r"><span class="num">${total ? `${N(start + 1)}–${N(start + n)} / ${N(total)}` : '0 kayıt'}</span>
-    ${sortable ? `<label>Sırala <select class="select" id="sort" aria-label="Sıralama">${[['oncelik', 'Öncelik (önem × yürürlük)'], ['tespit', 'Tespit tarihi'], ['yayim', 'Yayım tarihi'], ['yururluk', 'Yürürlük tarihi'], ['onem', 'Önem']].map(o => `<option value="${o[0]}" ${S.sort === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
-    <label>Yön <select class="select" id="sortDir" aria-label="Sıralama yönü">${[['asc', 'Küçükten büyüğe'], ['desc', 'Büyükten küçüğe']].map(o => `<option value="${o[0]}" ${S.sortDir === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>` : ''}</div></div>`;
+    <button class="linkbtn" data-act="clear-filters">Filtreleri temizle</button></div>`;
 }
 function listRegion() {
   const { total, loading, err } = S.list; const rows = currentList();
@@ -202,9 +207,9 @@ function table(rows) {
       <td class="c-sev"><span class="tag ${r.relScore != null && r.threshold != null && r.threshold - r.relScore < .05 ? 'tag-warn' : 'tag-plain'}">${dec(r.relScore)} / eşik ${dec(r.threshold)}</span></td><td class="c-unit"><span class="u-s">${esc(trunc(r.why || 'Gerekçe kaydedilmemiş.', 180))}</span></td>
       <td><div class="row-acts"><button class="btn btn-sm" data-act="irr-ok" data-id="${r.id}">İlgisiz, doğru</button><button class="btn btn-sm" data-act="irr-back" data-id="${r.id}">İlgili</button></div></td></tr>`).join('')}</tbody></table>`;
   return `<table class="tbl"><thead><tr><th class="c-cb"><input type="checkbox" data-act="selall" ${allSel ? 'checked' : ''} aria-label="Bu sayfadaki tüm kayıtları seç"></th><th class="c-main">Düzenleme</th>${sortTh('yayim', 'Yayım tarihi', 'c-pub')}${sortTh('yururluk', 'Yürürlük', 'c-eff')}${sortTh('onem', 'Önem', 'c-sev')}<th class="c-unit">Önerilen birim</th><th class="c-go"></th></tr></thead><tbody>
-    ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}">${cb(r)}<td class="c-main"><div class="ttl">${esc(r.title)}</div>${meta(r,
-      (r.dup ? '<span class="tag tag-warn">Olası mükerrer</span>' : '') + (r.draftDue ? `<span class="tag tag-brand">Görüş son günü ${fDs(r.draftDue)}</span>` : '') + (r.conflict ? '<span class="tag tag-warn">Tarih çelişkisi</span>' : '') +
-      `<span class="m-only">${sevPill(curSev(r))}</span>` + (needsUnit(r) ? `<span class="m-only m-unit need">${ic('alert')}Birim atanmalı</span>` : ''))}</td>
+    ${rows.map(r => `<tr class="${cls(r)}" data-act="open" data-id="${r.id}">${cb(r)}<td class="c-main"><div class="ttl">${r.unread ? '<span class="udot" aria-label="Okunmadı"></span>' : ''}${esc(r.title)}</div>${meta(r,
+      (r.dup ? `<span class="flag">${ic('copy')}Olası mükerrer</span>` : '') + (r.draftDue ? `<span class="flag brand">${ic('clock')}Görüş son günü ${fDs(r.draftDue)}</span>` : '') + (r.conflict ? `<span class="flag">${ic('alert')}Tarih çelişkisi</span>` : '') +
+      `<span class="m-only">${sevPill(curSev(r))}</span>` + (needsUnit(r) ? `<span class="m-only m-unit need">${ic('alert')}Birim seçilmeli</span>` : ''))}</td>
       <td class="c-pub">${r.pub ? fD(r.pub) : '<span class="muted">—</span>'}</td><td class="c-eff">${effCell(r, true)}</td><td class="c-sev">${sevPill(curSev(r))}</td><td class="c-unit">${unitCell(r)}</td><td class="c-go">${ic('chev-r')}</td></tr>`).join('')}</tbody></table>`;
 }
 function pager(total, start, n, pages) {
@@ -264,11 +269,11 @@ function detailHtml() {
     <div class="d-head"><div class="d-pos"><span>${esc(queueLabel(r))}</span>${inL ? `<b class="num">${N(pos)} / ${N(total)}</b>` : ''}</div>
     <div class="d-nav"><button class="btn btn-ghost icon-btn" data-act="prev" ${!inL || idx <= 0 || S.meta ? 'disabled' : ''} title="Önceki (K)" aria-label="Önceki kayıt">${ic('chev-u')}</button>
     <button class="btn btn-ghost icon-btn" data-act="next" ${!inL || idx >= list.length - 1 || S.meta ? 'disabled' : ''} title="Sonraki (J)" aria-label="Sonraki kayıt">${ic('chev-d')}</button>
-    <button class="btn btn-ghost icon-btn" data-act="close" title="Kapat (Esc)" aria-label="Kapat">${ic('x')}</button></div></div>
+    ${r.kind === 'reg' && canDecide() && !metaOn(r) ? `<button class="btn btn-ghost icon-btn" data-act="meta-start" aria-label="Bilgileri düzenle" ${canMeta(r) && !S.edit ? 'data-tip="Bilgileri düzenle"' : `disabled title="${S.edit ? 'Önce karar düzenlemesini bitirin' : 'YZ işlemi sürerken düzenlenemez'}"`}>${ic('edit')}</button>` : ''}<button class="btn btn-ghost icon-btn" data-act="close" title="Kapat (Esc)" aria-label="Kapat">${ic('x')}</button></div></div>
   <div class="d-scroll" id="dScroll">
     ${metaOn(r) ? `<div class="d-top"><div class="d-chips"><span class="d-src">${esc(srcOf(r.src).n)}</span><span class="mono muted">#${r.num}</span></div><h2 class="d-title">Bilgileri düzenle</h2></div>${metaForm(r)}` : `
     <div class="d-top"><div class="d-chips">${sev ? sevPill(sev) : ''}${r.type && r.type !== '—' ? `<span class="tag tag-plain">${esc(r.type)}</span>` : ''}<span class="d-src">${esc(srcOf(r.src).n)}</span>
-      ${r.kind === 'reg' && canDecide() ? `<button class="btn btn-sm btn-ghost" style="margin-left:auto" data-act="meta-start" ${canMeta(r) && !S.edit ? '' : `disabled title="${S.edit ? 'Önce karar düzenlemesini bitirin' : 'YZ işlemi sürerken düzenlenemez'}"`}>${ic('edit')}Bilgileri düzenle</button>` : ''}</div>
+      </div>
       <h2 class="d-title">${esc(r.title)}</h2>
       <div class="d-meta">${r.pub ? `<span>Yayım ${fD(r.pub)}</span>` : ''}<span>Tespit ${rel(r.det)}</span><span class="mono">#${r.num}</span>${edTag(r, 'title')}${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Orijinal belge${ic('ext')}</a>` : ''}</div></div>
     ${banners(r)}
@@ -403,7 +408,7 @@ function unitSection(r) {
   const opts = [...r.units]; r.sel.forEach(c => { if (!opts.find(u => u.code === c)) opts.push({ code: c, n: unitName(c), s: null, why: 'Uzman tarafından eklendi.' }); });
   const top = r.units[0];
   const changed = r.sug.length && r.sel.length && !sameSet(r.sel, r.sug);
-  return `<section class="d-sec"><h3>Birim önerisi <span class="ai">${ic('spark')}YZ önerisi</span>${tipBtn('Onaylamadan önce birimi değiştirebilir ya da birden fazla birim seçebilirsiniz. Değişiklikler modele geri bildirim olarak kaydedilir.')}${changed ? '<span class="tag tag-warn">Öneri değiştirildi</span>' : ''}</h3>
+  return `<section class="d-sec"><h3>Birim <span class="ai">${ic('spark')}YZ önerisi</span>${tipBtn('Onaylamadan önce birimi değiştirebilir ya da birden fazla birim seçebilirsiniz. Değişiklikler modele geri bildirim olarak kaydedilir.')}${changed ? '<span class="tag tag-warn">Öneri değiştirildi</span>' : ''}</h3>
     
     ${!r.units.length || r.needsUnit ? `<div class="banner banner-warn" style="margin-bottom:10px">${ic('alert')}<div><b>Birimi siz seçin</b>${tipBtn(`YZ güvenli bir öneri yapamadı${top ? ` (en yüksek uyum ${pct(top.s || 0)})` : ''}. Aşağıdan birim seçin ya da ekleyin.`)}</div></div>` : ''}
     <div class="uopts">${opts.map(u => { const on = r.sel.includes(u.code); return `<label class="uopt ${on ? 'on' : ''}"><input type="checkbox" data-change="unit" data-u="${esc(u.code)}" ${on ? 'checked' : ''}>
