@@ -131,7 +131,9 @@ def _strata_summary(items: list[PromptExperimentItem]) -> dict:
             done = [r for r in (_result(item, side) for item in rows) if r is not None]
             relevant = sum(bool(r["is_relevant"]) for r in done)
             entry[side] = {"n": len(done), "relevant": relevant,
-                           "rate": round(relevant / len(done), 3) if done else None, "ci": wilson(relevant, len(done))}
+                           "rate": round(relevant / len(done), 3) if done else None, "ci": wilson(relevant, len(done)),
+                           # tereddüt tek başına kaydı portala düşürür; kapsam kuralının etkisi burada görünür
+                           "uncertain": sum(bool(r.get("uncertain")) for r in done)}
         both = [item for item in rows if item.result_a is not None and item.result_b is not None]
         entry["gained"] = sum(not item.result_a["is_relevant"] and item.result_b["is_relevant"] for item in both)
         entry["lost"] = sum(item.result_a["is_relevant"] and not item.result_b["is_relevant"] for item in both)

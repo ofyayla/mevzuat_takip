@@ -556,6 +556,7 @@ document.addEventListener('change', e => {
     if (item) item.expectedRelevant = t.value === 'unknown' ? null : t.value === 'true';
     return;
   }
+  if (t.id === 'peCandidate') { applyPromptCandidate(t.value); return; }
   if (t.dataset.change === 'pe-set-label') { patchEvaluationLabel(+t.dataset.id, t.value === 'unknown' ? null : t.value === 'true'); return; }
   if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; refreshInbox(); listChanged(); refreshPop(); return; }
   if (t.dataset.change === 'needUnit') { S.f.needUnit = t.checked; S.page = 1; refreshInbox(); listChanged(); refreshPop(); return; }
@@ -579,7 +580,7 @@ document.addEventListener('input', e => {
     peSearchTimer = setTimeout(searchPromptExperimentRecords, 300); return;
   }
   if (t.id === 'xlSetName') { S.xl.setName = t.value; return; }
-  if (t.id === 'pePromptB') { S.pe.promptB = t.value; return; }
+  if (t.id === 'pePromptB') { S.pe.promptB = t.value; S.pe.candidate = null; return; }
   if (t.id === 'peTitle') { S.pe.title = t.value; return; }
   if (t.id === 'blIn') {
     S.bl = t.value; S.blPlan = null; S.blErr = null;

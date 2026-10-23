@@ -90,11 +90,40 @@ def relevance_messages(ctx: RegulationContext, kn: Knowledge, examples: list[dic
     return result
 
 
-def relevance_system_prompt(kn: Knowledge) -> str:
+def _system_context(kn: Knowledge) -> dict:
     tx = kn.taxonomy
-    return render(f"relevance.{PROMPT}.system.j2",
-                  institution=tx["institution"], guide=kn.guide, topics=tx.get("topics", []),
-                  clearly_irrelevant=tx.get("clearly_irrelevant", []), reg_types=REG_TYPES)
+    return {"institution": tx["institution"], "guide": kn.guide, "topics": tx.get("topics", []),
+            "clearly_irrelevant": tx.get("clearly_irrelevant", []), "reg_types": REG_TYPES}
+
+
+def relevance_system_prompt(kn: Knowledge) -> str:
+    return render(f"relevance.{PROMPT}.system.j2", **_system_context(kn))
+
+
+# Prompt deneyinde B tarafını dolduran aday şablon ve ablasyon varyantları. Kural grupları ayrı ayrı açılarak hangi
+# grubun hangi katmanı etkilediği ölçülür; "kontrol" anlamsız bir cümle ekler ve önbelleği atlayarak aynı promptun
+# koşudan koşuya ne kadar oynadığını (gürültü tabanı) gösterir.
+CANDIDATE_PROMPT = "v2"
+CANDIDATES = {
+    "v2-tam": ("Rol + kapsam ilkeleri (tam)", "Banka rolleri, grup şirketleri listesi ve kapsam/tereddüt sınırları birlikte.",
+               {"roles": True, "scope": True, "control": False}),
+    "v2-roller": ("Yalnız banka rolleri", "İşveren, veri sorumlusu, vergi mükellefi ve raporlama rolleri; rehber ve "
+                  "taslaklar; gerekçede rol ve süreç. Hedef: Excel'de olup sistemin kaçırdıkları.",
+                  {"roles": True, "scope": False, "control": False}),
+    "v2-kapsam": ("Yalnız grup ve kapsam sınırı", "Doğrulanmış grup şirketleri, başka kuruluşu iştirak sayma yasağı ve "
+                  "kapsam dışı içerikte tereddüt sınırı. Hedef: fazla uyarılar.",
+                  {"roles": False, "scope": True, "control": False}),
+    "v1-kontrol": ("Kontrol (gürültü tabanı)", "Mevcut promptla aynı ölçütler, yalnızca nötr bir cümle eklenir. A ile "
+                   "arasındaki fark, aynı promptun koşudan koşuya oynamasıdır.",
+                   {"roles": False, "scope": False, "control": True}),
+}
+
+
+def candidate_system_prompts(kn: Knowledge) -> list[dict]:
+    ctx = _system_context(kn)
+    return [{"key": key, "title": title, "description": description,
+             "systemPrompt": render(f"relevance.{CANDIDATE_PROMPT}.system.j2", variant=variant, **ctx)}
+            for key, (title, description, variant) in CANDIDATES.items()]
 
 
 def assess(llm: LLM, ctx: RegulationContext, kn: Knowledge, settings: Settings, *, session=None,

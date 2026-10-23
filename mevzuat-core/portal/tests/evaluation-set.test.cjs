@@ -87,6 +87,23 @@ test('Creating a set posts the file, approvals, name and sample sizes', async ()
   assert.equal(vm.runInContext('S.xl.setBusy', context), false);
 });
 
+test('Choosing a candidate template fills prompt B and an empty title', () => {
+  const context = loadContext();
+  vm.runInContext(`var renderAll = () => {};
+    S.pe.defaults = {provider:'vllm',model:'m',systemPromptA:'A',settings:{},
+      candidates:[{key:'v2-kapsam',title:'<i>Kapsam</i>',description:'Fazla uyarılar',systemPrompt:'B kapsam'}]};
+    applyPromptCandidate('v2-kapsam');`, context);
+  assert.equal(vm.runInContext('S.pe.promptB', context), 'B kapsam');
+  assert.equal(vm.runInContext('S.pe.title', context), '<i>Kapsam</i>');
+  const html = vm.runInContext('admPromptExperiment()', context);
+  assert.match(html, /id="peCandidate"/);
+  assert.match(html, /value="v2-kapsam" selected/);
+  assert.match(html, /Fazla uyarılar/);
+  assert.doesNotMatch(html, /<i>Kapsam/);
+  vm.runInContext(`S.pe.title = 'Kendi adım'; applyPromptCandidate('v2-kapsam');`, context);
+  assert.equal(vm.runInContext('S.pe.title', context), 'Kendi adım');
+});
+
 test('Creating a set rejects an empty name or out-of-range samples without calling the API', async () => {
   const context = loadContext();
   vm.runInContext(`var called = false; var renderAll = () => {}; var toast = () => {};

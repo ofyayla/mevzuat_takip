@@ -485,6 +485,32 @@ Setle koşulan deneyin özeti katman bazında A/B "ilgili" oranlarını (Wilson 
 sayılarını, etiketli kayıtlarda tam McNemar p-değerini ve örneklenen katmanları nüfusa ağırlıklandıran tahmini
 precision'ı içerir. Küçük örneklemde 1–2 kayıtlık farklar gürültü olabilir.
 
+**Aday prompt şablonu ve deney protokolü.** `app/ai/prompts/relevance.v2.system.j2`, v1'e açılıp kapanan kural
+blokları ekler. Bloklar kapalıyken çıktısı v1 ile birebir aynıdır (test edilir). Prompt deneyi ekranındaki "B'yi aday
+şablondan doldur" listesi dört varyant sunar (`relevance.CANDIDATES`):
+
+| Varyant | İçerik | Beklenen etki |
+|---|---|---|
+| `v1-kontrol` | v1 + nötr bir cümle | A ile farkı gürültü tabanıdır (aynı prompt, yeni örnekleme) |
+| `v2-roller` | işveren / veri sorumlusu / vergi mükellefi / raporlama rolleri, rehber ve taslaklar, gerekçede rol ve süreç | `excel_irrelevant` katmanında kazanılan ↑ |
+| `v2-kapsam` | Albaraka Türk grup şirketleri listesi, başka kuruluşu iştirak sayma yasağı, kapsam dışında tereddüt sınırı | `extra_alert` ve `system_irrelevant` katmanlarında ilgili oranı ve tereddüt ↓ |
+| `v2-tam` | ikisi birlikte | ikisinin toplamı; çatışma varsa burada görünür |
+
+Önerilen sıra:
+
+1. Excel'den bir set kurun. Kurallar LLM çıktıları incelenerek yazıldığı için, mümkünse **başka bir ayın Excel'inden**
+   ikinci bir set (holdout) de kurun. Nihai karar bu sette verilir.
+2. Aynı sette dört deneyi koşun. A tarafı önbellekten gelir; her deney yalnızca B için kayıt × örnek sayısı kadar çağrı yapar.
+3. Kararı koşmadan önce sabitleyin. Bir varyant şu durumda kabul edilir:
+   - `excel_relevant` katmanında kaybedilen sayısı, kontrol koşusundaki oynamadan fazla değil.
+   - `excel_irrelevant` katmanında kazanılan sayısı, kontrol koşusundaki oynamadan belirgin biçimde fazla.
+   - `extra_alert` ve `system_irrelevant` katmanlarında ilgili oranı A'dan yüksek değil (kontrol oynaması hariç).
+   - Holdout sette de aynı yön görülüyor.
+   McNemar p-değeri destekleyici bilgidir; bu örneklem boyutunda tek başına karar ölçütü değildir.
+4. `v2-roller` için "Karar değiştiren kayıtlar" listesinden gerekçeleri okuyun: rol, süreç ve dayanak yazılıyor mu?
+5. Kazanan varyant ayrı bir PR'da sabit bir production şablonuna dönüştürülür ve `PROMPT` güncellenir.
+   `relevance.v2.system.j2` `variant` parametresi beklediği için `PROMPT = "v2"` yapmak tek başına yetmez.
+
 Rapor: **kaçırma oranı** ve nedenleri — `not_collected` (hiç toplanmadı, İK-1), `not_processed` (toplandı, işlenmedi,
 İK-2), `baseline` (ilk taramada zaten sitedeydi), `below_threshold` (YZ ilgisiz buldu, İK-3), `dedupe_lost` (portalda
 olmayan bir kayda birleştirildi); **gereksiz bildirim oranı** (reddedilen / karar verilen), önem derecesi uyumu,

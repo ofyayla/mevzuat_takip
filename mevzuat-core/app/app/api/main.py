@@ -993,13 +993,14 @@ class PromptExperimentCreate(BaseModel):
 @evaluation.get("/prompt-experiments/defaults")
 def prompt_experiment_defaults(session: SessionDep, settings: SettingsDep, actor: ActorDep):
     from app.ai.common import effective_settings, knowledge
-    from app.ai.relevance import load_fewshot, relevance_system_prompt
+    from app.ai.relevance import candidate_system_prompts, load_fewshot, relevance_system_prompt
 
     require(actor, ROLE_EXPERT)
     current = effective_settings(session, settings)
     kn = knowledge(current)
     return {
         "systemPromptA": relevance_system_prompt(kn),
+        "candidates": candidate_system_prompts(kn),
         "provider": current.llm_provider,
         "model": current.llm_model,
         "settings": {

@@ -689,7 +689,15 @@ const pePct = v => v == null ? '—' : '%' + Math.round(v * 100);
 
 function peRate(side) {
   if (!side || side.rate == null) return '—';
-  return `${pePct(side.rate)} (${N(side.relevant)}/${N(side.n)}${side.ci ? ` · %95 aralık ${pePct(side.ci[0])}–${pePct(side.ci[1])}` : ''})`;
+  return `${pePct(side.rate)} (${N(side.relevant)}/${N(side.n)}${side.ci ? ` · %95 aralık ${pePct(side.ci[0])}–${pePct(side.ci[1])}` : ''})${side.uncertain ? `<div class="muted">${N(side.uncertain)} tereddüt</div>` : ''}`;
+}
+
+function applyPromptCandidate(key) {
+  const p = S.pe; const candidate = ((p.defaults || {}).candidates || []).find(c => c.key === key);
+  if (!candidate) return;
+  p.promptB = candidate.systemPrompt; p.candidate = key;
+  if (!(p.title || '').trim()) p.title = candidate.title;
+  p.error = null; renderAll();
 }
 
 function peStrata(summary) {
@@ -771,6 +779,10 @@ function admPromptExperiment() {
     <section class="card mcard"><h3>A/B ayarları${tipBtn('A: kayıt oluşturulurken anlık görüntüsü alınan mevcut sistem promptu. B: düzenlenebilir tam sistem promptu.', 'A/B ayarları')}</h3>
       <div class="result"><b>${esc(d.provider || 'LLM kapalı')} · ${esc(d.model || '—')}</b><span>Eşik ${dec(settings.relevanceThreshold, 2)} · ağırlıklar ${dec(settings.relevanceWeightModel, 2)} / ${dec(settings.relevanceWeightVotes, 2)} / ${dec(settings.relevanceWeightRules, 2)} · örnek ${N(settings.relevanceSamples)} · sıcaklık ${dec(settings.sampleTemperature, 2)}</span><span>A ve B aynı belge girdisi, model ve ayarlarla çalışır. Yeni çağrı gerektiğinde iki promptun her biri için en çok ${N(selected.length * 2 * (settings.relevanceSamples || 1))} örnek çağrısı yapılır; eşleşen sonuçlar önbellekten gelir.</span></div>
       <label class="field">Deney adı<input class="input" id="peTitle" maxlength="200" placeholder="Örn. İşveren ve veri sorumlusu rolleri" value="${esc(p.title || '')}"></label>
+      ${(d.candidates || []).length ? `<label class="field">B'yi aday şablondan doldur<select class="select" id="peCandidate">
+        <option value="">Seçin (B metni elle de düzenlenebilir)</option>
+        ${d.candidates.map(c => `<option value="${esc(c.key)}" ${p.candidate === c.key ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></label>
+        ${p.candidate ? `<p class="muted">${esc((d.candidates.find(c => c.key === p.candidate) || {}).description || '')}</p>` : ''}` : ''}
       <label class="field">B · taslak sistem promptu<textarea class="input" id="pePromptB" rows="16" maxlength="30000">${esc(p.promptB || d.systemPromptA || '')}</textarea></label>
       ${p.error ? `<span class="field-err">${esc(p.error)}</span>` : ''}
       <div class="ph-act"><button class="btn btn-primary" data-act="pe-start" ${!provider || p.loading || (p.setId ? !(sd && sd.labels.length) : !selected.length) ? 'disabled' : ''}>${p.loading ? 'Kaydediliyor…' : p.setId ? 'Setle A/B deneyini çalıştır' : 'A/B deneyini çalıştır'}</button><button class="btn" data-act="pe-reload">Deneyleri yenile</button></div>

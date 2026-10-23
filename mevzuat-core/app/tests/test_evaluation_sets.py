@@ -116,6 +116,34 @@ def test_summary_reports_strata_significance_and_weighted_precision():
     assert build_summary(items)["estimatedPrecision"] is None
 
 
+def test_candidate_template_without_rules_is_the_production_prompt(settings):
+    from app.ai.common import knowledge, render
+    from app.ai.relevance import _system_context, candidate_system_prompts, relevance_system_prompt
+
+    kn = knowledge(settings)
+    plain = render("relevance.v2.system.j2", variant={"roles": False, "scope": False, "control": False},
+                   **_system_context(kn))
+    assert plain == relevance_system_prompt(kn)   # v2 = v1 + açılıp kapanan kural blokları; başka fark yok
+    prompts = {c["key"]: c["systemPrompt"] for c in candidate_system_prompts(kn)}
+    assert set(prompts) == {"v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol"}
+    assert all(text != plain for text in prompts.values())
+    roles, group = "kişisel veri sorumlusu", "Bereket Varlık Kiralama A.Ş."
+    assert roles in prompts["v2-tam"] and group in prompts["v2-tam"]
+    assert roles in prompts["v2-roller"] and group not in prompts["v2-roller"]
+    assert group in prompts["v2-kapsam"] and roles not in prompts["v2-kapsam"]
+    assert roles not in prompts["v1-kontrol"] and group not in prompts["v1-kontrol"]
+
+
+def test_strata_count_uncertain_decisions_per_side():
+    from app.evaluation.prompt_experiments import build_summary
+
+    item = SimpleNamespace(stratum="extra_alert", expected_relevant=False,
+                           result_a={"is_relevant": True, "uncertain": True},
+                           result_b={"is_relevant": False, "uncertain": False})
+    strata = build_summary([item])["strata"]["extra_alert"]
+    assert strata["A"]["uncertain"] == 1 and strata["B"]["uncertain"] == 0
+
+
 def _client(settings, sf, monkeypatch):
     from app.evaluation import prompt_experiments
 
@@ -150,7 +178,9 @@ def test_set_api_label_correction_and_experiment_on_set(settings, fixture_data, 
     by_id = {label["regulationId"]: label for label in detail["labels"]}
     assert by_id[ids["D"]]["expectedRelevant"] is True and ids["F"] not in by_id
 
-    prompt_a = client.get("/api/v1/evaluation/prompt-experiments/defaults").json()["systemPromptA"]
+    defaults = client.get("/api/v1/evaluation/prompt-experiments/defaults").json()
+    assert [c["key"] for c in defaults["candidates"]] == ["v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol"]
+    prompt_a = defaults["systemPromptA"]
     body = {"title": "Set deneyi", "evaluation_set_id": set_id, "system_prompt_b": prompt_a + "\nB-only-test-guidance"}
     mixed = client.post("/api/v1/evaluation/prompt-experiments",
                         json={**body, "records": [{"regulation_id": ids["A"]}]})
