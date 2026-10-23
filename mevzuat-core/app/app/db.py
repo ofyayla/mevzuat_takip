@@ -398,12 +398,46 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class EvaluationSet(Base):
+    """Excel listesinden türetilen kalıcı, katmanlı değerlendirme seti; prompt deneyleri aynı sette tekrarlanır."""
+
+    __tablename__ = "evaluation_set"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200))
+    source_name: Mapped[str | None] = mapped_column(String(200))   # yüklenen Excel dosyasının adı
+    params: Mapped[dict] = mapped_column(JSON)                     # seed, örneklem, dönem, katman nüfusları, sızıntı
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class EvaluationLabel(Base):
+    """Sette bir kaydın katmanı ve beklenen ilgililiği; ``label_source`` etiketin nereden geldiğini söyler."""
+
+    __tablename__ = "evaluation_label"
+    __table_args__ = (UniqueConstraint("set_id", "regulation_id", name="uq_evaluation_label_regulation"),)
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    set_id: Mapped[int] = mapped_column(ForeignKey("evaluation_set.id", ondelete="CASCADE"), index=True)
+    regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
+    title_snapshot: Mapped[str] = mapped_column(Text)
+    stratum: Mapped[str] = mapped_column(String(24))               # excel_relevant | excel_irrelevant | extra_alert | system_irrelevant
+    expected_relevant: Mapped[bool | None] = mapped_column(Boolean)   # null: emin değil, metriklere girmez
+    label_source: Mapped[str] = mapped_column(String(16))          # excel | excel_absent | human
+    excel_row: Mapped[int | None] = mapped_column(Integer)
+    match_method: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
+    labelled_by: Mapped[str] = mapped_column(String(200))
+    labelled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PromptExperiment(Base):
     """Kalıcı A/B prompt deneyleri; canlı düzenleme kararlarından bağımsızdır."""
 
     __tablename__ = "prompt_experiment"
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    evaluation_set_id: Mapped[int | None] = mapped_column(ForeignKey("evaluation_set.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
     system_prompt_a: Mapped[str] = mapped_column(Text)
@@ -428,6 +462,7 @@ class PromptExperimentItem(Base):
     regulation_id: Mapped[int] = mapped_column(ForeignKey("regulation.id"), index=True)
     title_snapshot: Mapped[str] = mapped_column(Text)
     expected_relevant: Mapped[bool | None] = mapped_column(Boolean)
+    stratum: Mapped[str | None] = mapped_column(String(24))
     status: Mapped[str] = mapped_column(String(16), default="queued")
     input_hash: Mapped[str | None] = mapped_column(String(64))
     result_a: Mapped[dict | None] = mapped_column(JSON)

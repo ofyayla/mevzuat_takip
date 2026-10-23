@@ -364,6 +364,9 @@ document.addEventListener('click', e => {
     case 'xl-review': S.xl.reviewNo = S.xl.reviewNo === +t.dataset.no ? null : +t.dataset.no; renderAll(); break;
     case 'xl-select': xlSelect(+t.dataset.no, id); break;
     case 'xl-unselect': xlSelect(+t.dataset.no, null); break;
+    case 'xl-set': { const x = S.xl; x.setName = $('#xlSetName').value; x.setExtra = $('#xlSetExtra').value; x.setControl = $('#xlSetControl').value; xlCreateSet(); break; }
+    case 'pe-set': openEvaluationSet(+id); break;
+    case 'pe-set-remove': removeEvaluationLabel(+id); break;
     case 'pe-add': addPromptExperimentRecord(+id); break;
     case 'pe-remove': removePromptExperimentRecord(+id); break;
     case 'pe-start': startPromptExperiment(); break;
@@ -515,6 +518,7 @@ document.addEventListener('change', e => {
     if (item) item.expectedRelevant = t.value === 'unknown' ? null : t.value === 'true';
     return;
   }
+  if (t.dataset.change === 'pe-set-label') { patchEvaluationLabel(+t.dataset.id, t.value === 'unknown' ? null : t.value === 'true'); return; }
   if (t.dataset.change === 'fopt') { S.f[t.dataset.f][t.checked ? 'add' : 'delete'](t.value); S.page = 1; const k = t.dataset.f; refreshInbox(); listChanged(); const nb = document.querySelector(`[data-act=pop-filter][data-f=${k}]`); if (nb) openPop(nb, filterPopHtml(k), { f: k }); return; }
   if (t.id === 'xlFile' && t.files[0] && !S.xl.running) { xlSetFile(t.files[0]); return; }
   if (t.id === 'xlM') { S.xl.method = t.value; renderAll(); return; }
@@ -537,6 +541,7 @@ document.addEventListener('input', e => {
     S.pe.search = t.value; clearTimeout(peSearchTimer);
     peSearchTimer = setTimeout(searchPromptExperimentRecords, 300); return;
   }
+  if (t.id === 'xlSetName') { S.xl.setName = t.value; return; }
   if (t.id === 'pePromptB') { S.pe.promptB = t.value; return; }
   if (t.id === 'peTitle') { S.pe.title = t.value; return; }
   if (t.id === 'blIn') {

@@ -437,8 +437,8 @@ POST /api/v1/evaluation/excel-compare?title_threshold=85&text_threshold=65[&from
   hesaplanır. Dönem, ilk Oluşturulma Tarihi − 3 gün ile son tarih arasıdır; `from` ve `to` ile değiştirilebilir.
 - `format=xlsx` aynı sonucu indirir: Özet / Excel satırları / Fazla uyarılar.
 
-**Prompt deneyi (`/prompt-deneyi`, Yönetim → Prompt deneyi).** Bir ila 50 mevcut düzenleme seçilir; beklenen ilgililik
-etiketi deney başına isteğe bağlı verilir. A, deney oluşturulurken anlık görüntüsü alınan güncel sistem promptudur;
+**Prompt deneyi (`/prompt-deneyi`, Yönetim → Prompt deneyi).** Bir ila 200 mevcut düzenleme elle seçilir ya da kayıtlı
+bir değerlendirme seti kullanılır; beklenen ilgililik etiketi elle seçimde isteğe bağlı verilir. A, deney oluşturulurken anlık görüntüsü alınan güncel sistem promptudur;
 B tam sistem promptunun düzenlenebilir kopyasıdır. İki taraf aynı belge bağlamı, model, örnek sayısı, sıcaklık,
 eşik, ağırlıklar, taksonomi ve few-shot örnekleriyle çalışır. Sonuçlar, gerekçeler, puanlar, tereddüt bilgisi,
 etiketler, ayarlar ve prompt anlık görüntüleri `prompt_experiment` tablolarında kalıcıdır.
@@ -455,6 +455,35 @@ GET  /api/v1/evaluation/prompt-experiments/{id}
 belge metni, model veya örnekleme ayarı değiştiğinde yeni çağrı gerekir. Etiketlenmemiş örnekler doğruluk ölçütlerine
 katılmaz; yalnız A/B karar farklılığı sayılır. Bu ekran hiçbir canlı ilgililik etiketini, uzman kararını veya ana
 işleme kuyruğunu değiştirmez.
+
+**Değerlendirme seti (Excel karşılaştırma → "Değerlendirme seti oluştur").** Excel zayıf bir altın standarttır, bu
+yüzden set dört katmanlı kurulur ve her etiketin kaynağı (`excel`, `excel_absent`, `human`) saklanır:
+
+| Katman | Kaynak | Beklenen |
+|---|---|---|
+| `excel_relevant` | Excel ∩ sistem ilgili | ilgili |
+| `excel_irrelevant` | Excel ∩ sistem ilgisiz | ilgili |
+| `extra_alert` | sistem ilgili, Excel'de yok (örneklem, varsayılan 40) | ilgisiz |
+| `system_irrelevant` | sistem ilgisiz, Excel'de yok, aynı dönem (örneklem, varsayılan 35) | ilgisiz |
+
+Yalnızca eşleşmiş satırlar (onaylanan adaylar dahil) Excel katmanlarına girer; incelemede bekleyen ve bulunamayan
+satırlar girmez. Örneklem `seed` ile tekrarlanabilir. `fewshot_example` havuzundaki ve `fewshot_relevance.yaml`
+başlıklarıyla çakışan kayıtlar sızıntıyı önlemek için sete alınmaz. Excel'de olmayan kayıtlar ilgisiz sayıldığından
+bu katmanlardaki precision **alt sınırdır**; fark edilen hatalı etiket sonradan düzeltilebilir ("Emin değilim"
+etiketi doğruluk metriklerine girmez).
+
+```
+POST   /api/v1/evaluation/sets/from-excel          # multipart: file, name, selections, seed, extra_sample, control_sample
+GET    /api/v1/evaluation/sets
+GET    /api/v1/evaluation/sets/{id}
+PATCH  /api/v1/evaluation/sets/{id}/labels/{regulation_id}   # {"expected_relevant": true|false|null, "note": "..."}
+DELETE /api/v1/evaluation/sets/{id}/labels/{regulation_id}
+POST   /api/v1/evaluation/prompt-experiments       # {"title", "evaluation_set_id", "system_prompt_b"}
+```
+
+Setle koşulan deneyin özeti katman bazında A/B "ilgili" oranlarını (Wilson %95 aralığı), A→B kazanılan/kaybedilen
+sayılarını, etiketli kayıtlarda tam McNemar p-değerini ve örneklenen katmanları nüfusa ağırlıklandıran tahmini
+precision'ı içerir. Küçük örneklemde 1–2 kayıtlık farklar gürültü olabilir.
 
 Rapor: **kaçırma oranı** ve nedenleri — `not_collected` (hiç toplanmadı, İK-1), `not_processed` (toplandı, işlenmedi,
 İK-2), `baseline` (ilk taramada zaten sitedeydi), `below_threshold` (YZ ilgisiz buldu, İK-3), `dedupe_lost` (portalda

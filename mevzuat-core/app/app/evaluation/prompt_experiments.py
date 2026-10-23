@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -12,7 +13,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.ai import relevance
 from app.ai.common import Knowledge, RegulationContext, regulation_context
 from app.ai.llm_client import LLMError, get_llm
-from app.db import PromptExperiment, PromptExperimentItem, Regulation
+from app.db import EvaluationSet, PromptExperiment, PromptExperimentItem, Regulation
+from app.evaluation.evaluation_sets import SAMPLED, STRATA
 from app.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -92,7 +94,84 @@ def _side_metrics(items: list[PromptExperimentItem], side: str) -> dict:
     }
 
 
-def build_summary(items: list[PromptExperimentItem]) -> dict:
+def wilson(successes: int, n: int, z: float = 1.96) -> list[float] | None:
+    """Oran için Wilson %95 güven aralığı; küçük n'de normal yaklaşıktan daha güvenilir."""
+    if not n:
+        return None
+    p = successes / n
+    denominator = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denominator
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+    return [round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3)]
+
+
+def mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """Uyumsuz çiftler (yalnız A / yalnız B doğru) için tam iki yönlü McNemar p-değeri."""
+    n = a_only + b_only
+    if not n:
+        return None
+    tail = sum(math.comb(n, i) for i in range(min(a_only, b_only) + 1)) / 2 ** n
+    return round(min(1.0, 2 * tail), 4)
+
+
+def _result(item: PromptExperimentItem, side: str) -> dict | None:
+    return item.result_a if side == "A" else item.result_b
+
+
+def _strata_summary(items: list[PromptExperimentItem]) -> dict:
+    """Katman başına her tarafın "ilgili" dediği oran. Excel katmanlarında bu isabet (recall), Excel dışı
+    katmanlarda gereksiz uyarı oranıdır; gained/lost A→B yön değiştiren kayıt sayısıdır."""
+    summary = {}
+    for stratum in STRATA:
+        rows = [item for item in items if getattr(item, "stratum", None) == stratum]
+        if not rows:
+            continue
+        entry: dict = {"total": len(rows)}
+        for side in ("A", "B"):
+            done = [r for r in (_result(item, side) for item in rows) if r is not None]
+            relevant = sum(bool(r["is_relevant"]) for r in done)
+            entry[side] = {"n": len(done), "relevant": relevant,
+                           "rate": round(relevant / len(done), 3) if done else None, "ci": wilson(relevant, len(done))}
+        both = [item for item in rows if item.result_a is not None and item.result_b is not None]
+        entry["gained"] = sum(not item.result_a["is_relevant"] and item.result_b["is_relevant"] for item in both)
+        entry["lost"] = sum(item.result_a["is_relevant"] and not item.result_b["is_relevant"] for item in both)
+        summary[stratum] = entry
+    return summary
+
+
+def _significance(items: list[PromptExperimentItem]) -> dict:
+    a_only = b_only = 0
+    for item in items:
+        if item.expected_relevant is None or item.result_a is None or item.result_b is None:
+            continue
+        a_ok = item.result_a["is_relevant"] == item.expected_relevant
+        b_ok = item.result_b["is_relevant"] == item.expected_relevant
+        a_only += a_ok and not b_ok
+        b_only += b_ok and not a_ok
+    return {"aOnlyCorrect": a_only, "bOnlyCorrect": b_only, "p": mcnemar_p(a_only, b_only)}
+
+
+def _estimated_precision(items: list[PromptExperimentItem], populations: dict | None, side: str) -> float | None:
+    """Örneklenen katmanları nüfus/örneklem ağırlığıyla büyüterek tahmin edilen precision. Excel'de olmayan
+    "ilgisiz" etiketi doğru kabul edildiğinden bu bir alt sınırdır."""
+    if not populations:
+        return None
+    predicted = true_positive = 0.0
+    for stratum in STRATA:
+        rows = [item for item in items if getattr(item, "stratum", None) == stratum
+                and item.expected_relevant is not None and _result(item, side) is not None]
+        if not rows:
+            continue
+        population = (populations.get(stratum) or {}).get("population")
+        weight = population / len(rows) if stratum in SAMPLED and population else 1.0
+        for item in rows:
+            if _result(item, side)["is_relevant"]:
+                predicted += weight
+                true_positive += weight * bool(item.expected_relevant)
+    return round(true_positive / predicted, 3) if predicted else None
+
+
+def build_summary(items: list[PromptExperimentItem], populations: dict | None = None) -> dict:
     return {
         "total": len(items),
         "labelled": sum(item.expected_relevant is not None for item in items),
@@ -103,7 +182,18 @@ def build_summary(items: list[PromptExperimentItem]) -> dict:
         "B": _side_metrics(items, "B"),
         "cachedCalls": sum(bool(result and result.get("cached")) for item in items
                            for result in (item.result_a, item.result_b)),
+        "strata": _strata_summary(items),
+        "significance": _significance(items),
+        "estimatedPrecision": {"A": _estimated_precision(items, populations, "A"),
+                               "B": _estimated_precision(items, populations, "B")} if populations else None,
     }
+
+
+def _populations(session: Session, experiment: PromptExperiment) -> dict | None:
+    if experiment.evaluation_set_id is None:
+        return None
+    evaluation_set = session.get(EvaluationSet, experiment.evaluation_set_id)
+    return (evaluation_set.params or {}).get("populations") if evaluation_set is not None else None
 
 
 def _failure(session: Session, item_id: int, message: str) -> None:
@@ -134,7 +224,7 @@ def _fail_experiment(sf: sessionmaker[Session], experiment_id: int, message: str
                 item.error_a = item.error_a or message
             if item.result_b is None:
                 item.error_b = item.error_b or message
-        experiment.summary = {**build_summary(items), "error": message}
+        experiment.summary = {**build_summary(items, _populations(session, experiment)), "error": message}
         session.commit()
 
 
@@ -219,7 +309,7 @@ def run_prompt_experiment(sf: sessionmaker[Session], settings: Settings, experim
         experiment = session.get(PromptExperiment, experiment_id)
         items = list(session.scalars(select(PromptExperimentItem).where(
             PromptExperimentItem.experiment_id == experiment_id).order_by(PromptExperimentItem.id)))
-        experiment.summary = build_summary(items)
+        experiment.summary = build_summary(items, _populations(session, experiment))
         experiment.status = "completed" if all(item.status == "completed" for item in items) else \
             "partial" if any(item.result_a is not None or item.result_b is not None for item in items) else "failed"
         experiment.completed_at = datetime.now(timezone.utc)
@@ -231,6 +321,7 @@ def item_output(item: PromptExperimentItem) -> dict:
         "regulationId": item.regulation_id,
         "title": item.title_snapshot,
         "expectedRelevant": item.expected_relevant,
+        "stratum": item.stratum,
         "status": item.status,
         "inputHash": item.input_hash,
         "A": item.result_a,
@@ -245,6 +336,7 @@ def experiment_output(experiment: PromptExperiment, items: list[PromptExperiment
         "id": experiment.id,
         "title": experiment.title,
         "status": experiment.status,
+        "evaluationSetId": experiment.evaluation_set_id,
         "summary": experiment.summary,
         "createdBy": experiment.created_by,
         "createdAt": experiment.created_at.isoformat(),

@@ -980,9 +980,13 @@ class PromptExperimentRecordIn(BaseModel):
     expected_relevant: bool | None = Field(default=None, strict=True)
 
 
+MAX_EXPERIMENT_RECORDS = 200
+
+
 class PromptExperimentCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    records: list[PromptExperimentRecordIn] = Field(min_length=1, max_length=50)
+    records: list[PromptExperimentRecordIn] = Field(default_factory=list, max_length=MAX_EXPERIMENT_RECORDS)
+    evaluation_set_id: int | None = Field(default=None, gt=0, strict=True)   # verilirse kayıtlar setten gelir
     system_prompt_b: str = Field(min_length=20, max_length=30000)
 
 
@@ -1007,7 +1011,7 @@ def prompt_experiment_defaults(session: SessionDep, settings: SettingsDep, actor
             "sampleTemperature": current.relevance_sample_temperature,
         },
         "fewshotCount": len(load_fewshot()),
-        "maxRecords": 50,
+        "maxRecords": MAX_EXPERIMENT_RECORDS,
     }
 
 
@@ -1037,7 +1041,7 @@ def create_prompt_experiment(body: PromptExperimentCreate, background: Backgroun
                              settings: SettingsDep, actor: ActorDep, request: Request):
     from app.ai.common import effective_settings, knowledge
     from app.ai.relevance import load_fewshot, relevance_system_prompt
-    from app.db import PromptExperiment, PromptExperimentItem, Regulation
+    from app.db import EvaluationLabel, EvaluationSet, PromptExperiment, PromptExperimentItem, Regulation
     from app.evaluation.prompt_experiments import experiment_output, freeze_settings, run_prompt_experiment
 
     require(actor, ROLE_EXPERT)
@@ -1049,7 +1053,24 @@ def create_prompt_experiment(body: PromptExperimentCreate, background: Backgroun
     current = effective_settings(session, settings)
     if current.llm_provider not in {"openai", "vllm"}:
         raise ApiError(503, "llm_unavailable", "Prompt deneyi için LLM yapılandırılmalı.")
-    ids = [item.regulation_id for item in body.records]
+    if body.evaluation_set_id is None:
+        if not body.records:
+            raise ApiError(422, "no_records", "Deney için en az bir kayıt seçin.")
+        entries = [(item.regulation_id, item.expected_relevant, None) for item in body.records]
+    else:
+        if body.records:
+            raise ApiError(400, "set_and_records", "Değerlendirme seti seçildiğinde kayıtlar setten alınır.")
+        if session.get(EvaluationSet, body.evaluation_set_id) is None:
+            raise ApiError(404, "set_not_found", "Değerlendirme seti bulunamadı.")
+        set_labels = session.scalars(select(EvaluationLabel).where(
+            EvaluationLabel.set_id == body.evaluation_set_id).order_by(EvaluationLabel.id)).all()
+        if not set_labels:
+            raise ApiError(400, "empty_set", "Değerlendirme setinde kayıt yok.")
+        if len(set_labels) > MAX_EXPERIMENT_RECORDS:
+            raise ApiError(400, "too_many_records",
+                           f"Bir deneye en fazla {MAX_EXPERIMENT_RECORDS} kayıt eklenebilir.")
+        entries = [(label.regulation_id, label.expected_relevant, label.stratum) for label in set_labels]
+    ids = [entry[0] for entry in entries]
     if len(set(ids)) != len(ids):
         raise ApiError(400, "duplicate_records", "Aynı kayıt bir deneyde birden fazla kez seçilemez.")
     records = session.scalars(select(Regulation).where(Regulation.id.in_(ids))).all()
@@ -1064,16 +1085,15 @@ def create_prompt_experiment(body: PromptExperimentCreate, background: Backgroun
     config = freeze_settings(current, kn, load_fewshot())
     experiment = PromptExperiment(
         title=title, status="queued", system_prompt_a=prompt_a, system_prompt_b=body.system_prompt_b,
-        settings_snapshot=config, created_by=actor.name,
+        settings_snapshot=config, created_by=actor.name, evaluation_set_id=body.evaluation_set_id,
     )
     session.add(experiment)
     session.flush()
     items = []
-    labels = {item.regulation_id: item.expected_relevant for item in body.records}
-    for reg_id in ids:
+    for reg_id, expected, stratum in entries:
         item = PromptExperimentItem(
             experiment_id=experiment.id, regulation_id=reg_id, title_snapshot=by_id[reg_id].title,
-            expected_relevant=labels[reg_id], status="queued",
+            expected_relevant=expected, stratum=stratum, status="queued",
         )
         session.add(item)
         items.append(item)
@@ -1115,20 +1135,9 @@ class ExcelMatchSelection(BaseModel):
 _EXCEL_SELECTIONS = TypeAdapter(list[ExcelMatchSelection])
 
 
-@evaluation.post("/excel-compare")
-async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
-                         selection_json: Annotated[str | None, Form(alias="selections")] = None,
-                        format: Literal["json", "xlsx"] = "json",
-                        title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
-                        text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
-                        date_from: Annotated[date | None, Query(alias="from")] = None,
-                        date_to: Annotated[date | None, Query(alias="to")] = None):
-    """Başkanlık Excel listesini sistem kayıtlarıyla karşılaştırır; veritabanına yazmaz. ``format=xlsx`` aynı sonucu
-    çalışma kitabı olarak döner (sunucu durum tutmaz, dosya yeniden gönderilir)."""
-    from app.evaluation.excel_compare import build_workbook as compare_workbook
-    from app.evaluation.excel_compare import compare, compare_filename, parse_sheet
+async def _excel_rows(file: UploadFile) -> list[dict]:
+    from app.evaluation.excel_compare import parse_sheet
 
-    require(actor, ROLE_VIEWER)
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
         raise ApiError(413, "too_large", "dosya en fazla 5 MB olabilir")
@@ -1140,6 +1149,10 @@ async def excel_compare(session: SessionDep, settings: SettingsDep, actor: Actor
         raise ApiError(400, "invalid_file", f"dosya okunamadı: {e}") from e
     if not rows:
         raise ApiError(400, "empty_file", "dosyada Konu veya Metin sütunu dolu satır bulunamadı")
+    return rows
+
+
+def _excel_selections(selection_json: str | None) -> dict[int, int]:
     try:
         selections = _EXCEL_SELECTIONS.validate_json(selection_json or "[]")
     except ValidationError as exc:
@@ -1148,6 +1161,25 @@ async def excel_compare(session: SessionDep, settings: SettingsDep, actor: Actor
     chosen = {s.row: s.regulation_id for s in selections or []}
     if len(chosen) != len(selections or []):
         raise ApiError(400, "invalid_selection", "Aynı Excel satırı için birden fazla onay gönderildi.")
+    return chosen
+
+
+@evaluation.post("/excel-compare")
+async def excel_compare(session: SessionDep, settings: SettingsDep, actor: ActorDep, file: UploadFile,
+                         selection_json: Annotated[str | None, Form(alias="selections")] = None,
+                        format: Literal["json", "xlsx"] = "json",
+                        title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
+                        text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
+                        date_from: Annotated[date | None, Query(alias="from")] = None,
+                        date_to: Annotated[date | None, Query(alias="to")] = None):
+    """Başkanlık Excel listesini sistem kayıtlarıyla karşılaştırır; veritabanına yazmaz. ``format=xlsx`` aynı sonucu
+    çalışma kitabı olarak döner (sunucu durum tutmaz, dosya yeniden gönderilir)."""
+    from app.evaluation.excel_compare import build_workbook as compare_workbook
+    from app.evaluation.excel_compare import compare, compare_filename
+
+    require(actor, ROLE_VIEWER)
+    rows = await _excel_rows(file)
+    chosen = _excel_selections(selection_json)
     result = compare(session, rows, title_threshold=title_threshold, text_threshold=text_threshold,
                      date_from=date_from, date_to=date_to, selections=chosen)
     session.rollback()   # salt okunur: eşleştirme sırasında oluşan hiçbir şey yazılmaz
@@ -1156,6 +1188,100 @@ async def excel_compare(session: SessionDep, settings: SettingsDep, actor: Actor
                    "Access-Control-Expose-Headers": "Content-Disposition"}
         return Response(compare_workbook(result), media_type=XLSX_TYPE, headers=headers)
     return result
+
+
+@evaluation.post("/sets/from-excel", status_code=201)
+async def create_evaluation_set(session: SessionDep, actor: ActorDep, file: UploadFile,
+                                name: Annotated[str, Form(min_length=1, max_length=200)],
+                                selection_json: Annotated[str | None, Form(alias="selections")] = None,
+                                seed: Annotated[int, Form(ge=0, le=2**31 - 1)] = 42,
+                                extra_sample: Annotated[int, Form(ge=0, le=200)] = 40,
+                                control_sample: Annotated[int, Form(ge=0, le=200)] = 35,
+                                title_threshold: Annotated[float, Query(ge=50, le=100)] = 85,
+                                text_threshold: Annotated[float, Query(ge=50, le=100)] = 65,
+                                date_from: Annotated[date | None, Query(alias="from")] = None,
+                                date_to: Annotated[date | None, Query(alias="to")] = None):
+    """Excel karşılaştırmasından kalıcı, katmanlı değerlendirme seti kurar (onaylı satır seçimleri dahil)."""
+    from app.evaluation.evaluation_sets import build_from_compare, set_output
+    from app.evaluation.excel_compare import compare
+
+    require(actor, ROLE_EXPERT)
+    title = name.strip()
+    if not title:
+        raise ApiError(422, "invalid_name", "Set adı boş olamaz.")
+    rows = await _excel_rows(file)
+    chosen = _excel_selections(selection_json)
+    result = compare(session, rows, title_threshold=title_threshold, text_threshold=text_threshold,
+                     date_from=date_from, date_to=date_to, selections=chosen)
+    session.rollback()   # karşılaştırma sırasında oluşan geçici nesneler yazılmaz; yalnız set kaydedilir
+    evaluation_set = build_from_compare(session, result, name=title, source_name=file.filename, actor=actor.name,
+                                        seed=seed, extra_sample=extra_sample, control_sample=control_sample)
+    if not sum(evaluation_set.params["counts"].values()):
+        session.rollback()
+        raise ApiError(400, "empty_set", "Excel'den sete alınabilecek güvenilir eşleşme bulunamadı.")
+    session.commit()
+    return set_output(session, evaluation_set)
+
+
+@evaluation.get("/sets")
+def list_evaluation_sets(session: SessionDep, actor: ActorDep):
+    from app.db import EvaluationSet
+    from app.evaluation.evaluation_sets import set_output
+
+    require(actor, ROLE_EXPERT)
+    sets = session.scalars(select(EvaluationSet).order_by(EvaluationSet.id.desc()).limit(50)).all()
+    return {"items": [set_output(session, item) for item in sets]}
+
+
+@evaluation.get("/sets/{set_id}")
+def get_evaluation_set(set_id: int, session: SessionDep, actor: ActorDep):
+    from app.db import EvaluationLabel, EvaluationSet
+    from app.evaluation.evaluation_sets import set_output
+
+    require(actor, ROLE_EXPERT)
+    evaluation_set = session.get(EvaluationSet, set_id)
+    if evaluation_set is None:
+        raise ApiError(404, "not_found", "Değerlendirme seti bulunamadı.")
+    labels = session.scalars(select(EvaluationLabel).where(EvaluationLabel.set_id == set_id).order_by(
+        EvaluationLabel.stratum, EvaluationLabel.id)).all()
+    return set_output(session, evaluation_set, labels)
+
+
+class EvaluationLabelPatch(BaseModel):
+    expected_relevant: bool | None = Field(strict=True)   # null: emin değilim, metriklere girmez
+    note: str | None = Field(default=None, max_length=1000)
+
+
+def _evaluation_label(session: Session, set_id: int, regulation_id: int):
+    from app.db import EvaluationLabel
+
+    label = session.scalar(select(EvaluationLabel).where(
+        EvaluationLabel.set_id == set_id, EvaluationLabel.regulation_id == regulation_id))
+    if label is None:
+        raise ApiError(404, "not_found", "Sette bu kayıt için etiket yok.")
+    return label
+
+
+@evaluation.patch("/sets/{set_id}/labels/{regulation_id}")
+def patch_evaluation_label(set_id: int, regulation_id: int, body: EvaluationLabelPatch, session: SessionDep,
+                           actor: ActorDep):
+    from app.db import utcnow
+    from app.evaluation.evaluation_sets import label_output
+
+    require(actor, ROLE_EXPERT)
+    label = _evaluation_label(session, set_id, regulation_id)
+    label.expected_relevant, label.note = body.expected_relevant, body.note
+    label.label_source, label.labelled_by, label.labelled_at = "human", actor.name, utcnow()
+    session.commit()
+    return label_output(label)
+
+
+@evaluation.delete("/sets/{set_id}/labels/{regulation_id}", status_code=204)
+def delete_evaluation_label(set_id: int, regulation_id: int, session: SessionDep, actor: ActorDep):
+    require(actor, ROLE_EXPERT)
+    session.delete(_evaluation_label(session, set_id, regulation_id))
+    session.commit()
+    return Response(status_code=204)
 
 
 @evaluation.get("/manual-detections")

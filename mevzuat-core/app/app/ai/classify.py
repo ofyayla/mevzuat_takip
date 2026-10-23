@@ -55,7 +55,8 @@ def classify_regulation(session: Session, llm: LLM, reg: Regulation, settings: S
     if re.search(r"\btaslağı?\b", tr_lower(" ".join([reg.title, *(ctx.alt_titles or [])]))):
         reg.ai_reg_type = "Düzenleme Taslağı"   # yürürlükte değil, görüşe açık (LLM "Tebliğ" diyebiliyor)
     cls = {"relevance": {"topics": rel.topics, "criteria": rel.criteria, "rationale": rel.rationale,
-                         "uncertain": rel.uncertain, **rel.components},
+                         "uncertain": rel.uncertain, "prompt_version": f"relevance.{relevance.PROMPT}+{kn.version}",
+                         **rel.components},
            "knowledge_version": kn.version}
     reg.severity = reg.severity_rationale = None
     if rel.is_relevant:

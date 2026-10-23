@@ -4,8 +4,8 @@
    ============================================================================================================ */
 S.adm = {};            // yönetim sekmelerinin sunucu verisi (sekme açılınca yüklenir)
 S.alerts = null;       // açık alarmlar (yalnızca yönetici)
-S.pe = { defaults: null, runs: [], records: [], selected: {}, detail: null, search: '', error: null, loading: false };
-S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, baseRes: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null };
+S.pe = { defaults: null, runs: [], records: [], selected: {}, detail: null, search: '', error: null, loading: false, sets: [], setId: null, setDetail: null };
+S.xl = { file: null, tTitle: 85, tText: 65, running: false, res: null, baseRes: null, tab: 'tum', q: '', method: 'tum', err: null, selections: {}, reviewNo: null, setName: '', setExtra: 40, setControl: 35, setBusy: false };
 S.set = null; S.setSaved = null; S.setErr = {}; S.scansOpen = false; S.scanFilter = 'tum'; S.node = null; S.tech = false; S.hatLabels = false; S.auto = true; S.refreshed = null;
 
 const openAlarms = () => (S.alerts || []).length;
@@ -182,16 +182,38 @@ async function xlExport() {
     const m = /filename="?([^";]+)"?/i.exec(res.headers.get('Content-Disposition') || ''); saveBlob(blob, m ? m[1] : 'karsilastirma.xlsx'); }
   catch (e) { toast(errMsg(e), { err: true }); }
 }
+async function xlCreateSet() {
+  const x = S.xl; if (!x.file || !x.res || x.setBusy) return;
+  const name = (x.setName || '').trim(), extra = Number(x.setExtra), control = Number(x.setControl);
+  const ok = v => Number.isInteger(v) && v >= 0 && v <= 200;
+  if (!name) { toast('Sete bir ad verin.', { err: true }); return; }
+  if (!ok(extra) || !ok(control)) { toast('Örneklem büyüklükleri 0 ile 200 arasında tam sayı olmalı.', { err: true }); return; }
+  x.setBusy = true; x.err = null; renderAll();
+  try {
+    const fd = xlForm(x.selections);
+    fd.append('name', name); fd.append('extra_sample', String(extra)); fd.append('control_sample', String(control));
+    const created = await api('POST', '/evaluation/sets/from-excel', { query: xlParams(), form: fd }).then(r => r.data);
+    S.pe.setId = created.id; S.pe.setDetail = null;
+    toast(`Değerlendirme seti oluşturuldu (${N(Object.values(created.counts).reduce((a, b) => a + b, 0))} kayıt). Prompt deneyi sekmesinden kullanın.`);
+  } catch (e) { x.err = errMsg(e); }
+  x.setBusy = false; renderAll();
+}
 const P1 = v => v == null ? '—' : dec(Math.floor(v * 1000) / 10, 1);
 function admExcel() {
   const x = S.xl; const res = x.res;
+  const setBox = res ? `<div class="xl-ctl" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <label class="field">Değerlendirme seti adı<input class="input" id="xlSetName" maxlength="200" placeholder="Örn. Ekim Excel seti" value="${esc(x.setName)}"></label>
+      <label class="field">Fazla uyarı örneklemi<span class="xl-num"><input class="input num" id="xlSetExtra" value="${esc(x.setExtra)}" inputmode="numeric"></span></label>
+      <label class="field">İlgisiz kontrol örneklemi<span class="xl-num"><input class="input num" id="xlSetControl" value="${esc(x.setControl)}" inputmode="numeric"></span></label>
+      <button class="btn" data-act="xl-set" ${x.setBusy ? 'disabled' : ''}>${x.setBusy ? 'Oluşturuluyor…' : 'Değerlendirme seti oluştur'}</button>
+      <p class="hint" style="margin:0;flex:1 1 260px">Onayladığınız eşleşmeler dahil. Excel'deki eşleşmeler ilgili, Excel'de olmayan fazla uyarılar ve ilgisiz örneklem ilgisiz sayılır; set kaydedilir ve Prompt deneyi sekmesinde etiketleri düzeltilebilir.</p></div>` : '';
   const upload = `<section class="card xl-up"><div class="xl-drop ${x.drag ? 'drag' : ''}" id="xlDrop">${ic('download')}<div><b>${x.file ? esc(x.file.name) : 'Excel dosyasını sürükleyin ya da seçin'}</b><span>${x.file ? `${(x.file.size / 1024).toFixed(0)} KB · dosya yalnızca karşılaştırma için gönderilir, kaydedilmez` : 'Beklenen sütunlar: Referans No, Konu, Gönderen/Düzenleyici Kurum, Risk Seviyesi, Oluşturulma Tarihi, Metin (.xlsx, .csv; en fazla 5 MB)'}</span></div>
       <label class="btn btn-sm" for="xlFile">${x.file ? 'Başka dosya seç' : 'Dosya seç'}</label><input type="file" id="xlFile" accept=".xlsx,.xlsm,.csv,.txt" ${x.running ? 'disabled' : ''} hidden></div>
     <div class="xl-ctl"><label class="field">Başlık eşiği<span class="xl-num"><input class="input num" id="xlT" value="${x.tTitle}" inputmode="numeric"><span>%</span></span></label>
       <label class="field">Metin eşiği<span class="xl-num"><input class="input num" id="xlX" value="${x.tText}" inputmode="numeric"><span>%</span></span></label>
       <p class="hint" style="margin:0;flex:1 1 220px">Önce bağlantı, sonra kurum ve belge numarası doğrulanır. Belirsiz kimlikler incelemeye ayrılır. Numara tanınmadığında başlık ve metin benzerliği kullanılır. Eşiği değiştirince yeniden karşılaştırın.</p>
       <button class="btn btn-primary" data-act="xl-run" ${x.file && !x.running ? '' : 'disabled'}>${x.running ? 'Karşılaştırılıyor…' : 'Karşılaştır'}</button>
-      <button class="btn" data-act="xl-export" ${res && !x.running ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div><p class="hint">Manuel eşleşmeler bu karşılaştırmada anında uygulanır; Excel aktarımında sunucuda doğrulanır. Sayfa yenilenince silinir ve YZ etiketini değiştirmez.</p>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
+      <button class="btn" data-act="xl-export" ${res && !x.running ? '' : 'disabled'}>${ic('download')}Sonucu Excel'e aktar</button></div>${setBox}<p class="hint">Manuel eşleşmeler bu karşılaştırmada anında uygulanır; Excel aktarımında sunucuda doğrulanır. Sayfa yenilenince silinir ve YZ etiketini değiştirmez.</p>${x.err ? `<span class="field-err" style="margin-top:8px;display:block">${esc(x.err)}</span>` : ''}</section>`;
   if (!res) return upload + `<div class="empty card" style="margin-top:16px">${ic('doc')}<b>Henüz karşılaştırma yok</b><span>Dosyayı yükleyip Karşılaştır'a basın. Karşılaştırma hiçbir kaydı değiştirmez.</span></div>`;
   const s = res.summary, pr = res.precision, sa = res.severityAgreement; const W = v => (s.total ? v / s.total * 100 : 0).toFixed(2) + '%';
   const kpi = (l, v, sub, cl = '', tab) => `<${tab ? `button class="kpi xl-kpi" data-act="xl-tab" data-t="${tab}" aria-pressed="${x.tab === tab}"` : 'div class="kpi xl-kpi"'}><span class="kpi-l">${l}</span><span class="kpi-v num ${cl}">${v}</span><span class="kpi-s">${sub}</span></${tab ? 'button' : 'div'}>`;
@@ -517,13 +539,45 @@ async function loadPromptExperimentHome() {
       p.defaults = await GET('/evaluation/prompt-experiments/defaults');
       if (!p.promptB) p.promptB = p.defaults.systemPromptA;
     }
-    const [runs, records] = await Promise.all([
+    const [runs, records, sets] = await Promise.all([
       GET('/evaluation/prompt-experiments'),
       GET('/evaluation/prompt-experiments/records', { q: p.search }),
+      GET('/evaluation/sets'),
     ]);
-    p.runs = runs.items || []; p.records = records.items || [];
+    p.runs = runs.items || []; p.records = records.items || []; p.sets = sets.items || [];
+    if (p.setId && (!p.setDetail || p.setDetail.id !== p.setId)) p.setDetail = await GET(`/evaluation/sets/${p.setId}`);
   } catch (e) { p.error = errMsg(e); }
   if (S.view === 'yonetim' && S.adminTab === 'deney') renderAll();
+}
+
+async function refreshEvaluationSet() {
+  const p = S.pe;
+  const [sets, detail] = await Promise.all([GET('/evaluation/sets'), p.setId ? GET(`/evaluation/sets/${p.setId}`) : null]);
+  p.sets = sets.items || []; p.setDetail = detail;
+}
+
+async function openEvaluationSet(id) {
+  const p = S.pe; p.error = null;
+  if (p.setId === id) { p.setId = null; p.setDetail = null; renderAll(); return; }
+  p.setId = id; p.setDetail = null; renderAll();
+  try { await refreshEvaluationSet(); } catch (e) { p.error = errMsg(e); p.setId = null; }
+  renderAll();
+}
+
+async function patchEvaluationLabel(regulationId, expectedRelevant) {
+  const p = S.pe; if (!p.setId) return;
+  try {
+    await api('PATCH', `/evaluation/sets/${p.setId}/labels/${regulationId}`, { body: { expected_relevant: expectedRelevant } });
+    await refreshEvaluationSet(); p.error = null; toast('Etiket güncellendi.');
+  } catch (e) { p.error = errMsg(e); }
+  renderAll();
+}
+
+async function removeEvaluationLabel(regulationId) {
+  const p = S.pe; if (!p.setId) return;
+  try { await api('DELETE', `/evaluation/sets/${p.setId}/labels/${regulationId}`); await refreshEvaluationSet(); p.error = null; toast('Kayıt setten çıkarıldı.'); }
+  catch (e) { p.error = errMsg(e); }
+  renderAll();
 }
 
 let peSearchTimer = null;
@@ -543,8 +597,8 @@ async function searchPromptExperimentRecords() {
 
 function addPromptExperimentRecord(id) {
   const p = S.pe; const record = p.records.find(item => item.id === id);
-  if (!p.selected[id] && Object.keys(p.selected).length >= ((p.defaults || {}).maxRecords || 50)) {
-    p.error = `Bir deneye en fazla ${N((p.defaults || {}).maxRecords || 50)} kayıt eklenebilir.`; renderAll(); return;
+  if (!p.selected[id] && Object.keys(p.selected).length >= ((p.defaults || {}).maxRecords || 200)) {
+    p.error = `Bir deneye en fazla ${N((p.defaults || {}).maxRecords || 200)} kayıt eklenebilir.`; renderAll(); return;
   }
   if (record) p.selected[id] = { ...record, expectedRelevant: null };
   p.error = null;
@@ -565,15 +619,17 @@ async function startPromptExperiment() {
   const titleInput = $('#peTitle');
   const systemPrompt = promptInput ? promptInput.value : p.promptB || '';
   const title = (titleInput ? titleInput.value : p.title || '').trim();
-  if (!records.length) { p.error = 'Deney için en az bir kayıt seçin.'; renderAll(); return; }
+  const fromSet = !!p.setId;
+  if (fromSet ? !(p.setDetail && p.setDetail.labels.length) : !records.length) { p.error = fromSet ? 'Seçili sette kayıt yok.' : 'Deney için en az bir kayıt seçin.'; renderAll(); return; }
   if (!title) { p.error = 'Deneye bir ad verin.'; renderAll(); return; }
   p.promptB = systemPrompt; p.error = null; p.loading = true; renderAll();
   try {
     const created = await api('POST', '/evaluation/prompt-experiments', {
-      body: { title, records, system_prompt_b: systemPrompt },
+      body: fromSet ? { title, evaluation_set_id: p.setId, system_prompt_b: systemPrompt } : { title, records, system_prompt_b: systemPrompt },
     }).then(r => r.data);
     p.detail = created; p.runs = [created, ...p.runs.filter(run => run.id !== created.id)];
-    p.selected = {}; toast('Prompt deneyi kaydedildi ve çalıştırıldı.');
+    if (!fromSet) p.selected = {};
+    toast('Prompt deneyi kaydedildi ve çalıştırıldı.');
     pollPromptExperiment(created.id);
   } catch (e) { p.error = errMsg(e); }
   p.loading = false; renderAll();
@@ -616,6 +672,41 @@ function peDecision(result, error) {
     ${result.topics && result.topics.length ? `<span class="muted">Konular: ${esc(result.topics.join(', '))}</span>` : ''}</div>`;
 }
 
+const PE_STRATA = {
+  excel_relevant: ["Excel'de var · sistem ilgili", 'İlgili bulunan (isabet)'],
+  excel_irrelevant: ["Excel'de var · sistem ilgisiz", 'İlgili bulunan (kurtarılan)'],
+  extra_alert: ["Fazla uyarı (Excel'de yok)", 'İlgili denen (gereksiz uyarı)'],
+  system_irrelevant: ["Sistem ilgisiz (Excel'de yok)", 'İlgili denen (yanlış alarm)'],
+};
+const PE_SOURCES = { excel: 'Excel', excel_absent: "Excel'de yok", human: 'Elle düzeltildi' };
+const pePct = v => v == null ? '—' : '%' + Math.round(v * 100);
+
+function peRate(side) {
+  if (!side || side.rate == null) return '—';
+  return `${pePct(side.rate)} (${N(side.relevant)}/${N(side.n)}${side.ci ? ` · %95 aralık ${pePct(side.ci[0])}–${pePct(side.ci[1])}` : ''})`;
+}
+
+function peStrata(summary) {
+  const strata = summary.strata || {}; const keys = Object.keys(PE_STRATA).filter(k => strata[k]);
+  if (!keys.length) return '';
+  const sig = summary.significance || {}, est = summary.estimatedPrecision;
+  const verdict = sig.p == null ? 'Etiketli kayıtlarda A ve B doğruluğu ayrışmadı.' : sig.p < 0.05 ? 'Doğruluk farkı anlamlı görünüyor.' : 'Fark gürültü olabilir; 1–2 kayıtlık farkları yorumlamayın.';
+  return `<div class="tbl-wrap"><table class="tbl static"><thead><tr><th>Katman</th><th>Ölçü</th><th>A</th><th>B</th><th>A→B kazanılan / kaybedilen</th></tr></thead><tbody>${keys.map(k => `<tr>
+    <td>${esc(PE_STRATA[k][0])}<div class="muted">${N(strata[k].total)} kayıt</div></td><td>${esc(PE_STRATA[k][1])}</td><td>${peRate(strata[k].A)}</td><td>${peRate(strata[k].B)}</td>
+    <td>${N(strata[k].gained)} / ${N(strata[k].lost)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="cards"><div class="card"><span class="kpi-l">Tahmini precision (alt sınır)</span><span class="kpi-v num">${est ? `A ${pePct(est.A)} · B ${pePct(est.B)}` : '—'}</span><span class="kpi-s">Örneklenen katmanlar nüfusa ağırlıklandırıldı. Excel'de olmayan kayıtlar ilgisiz sayıldığı için gerçek precision daha yüksek olabilir.</span></div>
+    <div class="card"><span class="kpi-l">Doğruluk farkı (McNemar)</span><span class="kpi-v num">${N(sig.aOnlyCorrect || 0)} / ${N(sig.bOnlyCorrect || 0)}${sig.p == null ? '' : ` · p ${dec(sig.p, 3)}`}</span><span class="kpi-s">Yalnız A / yalnız B doğru. ${verdict}</span></div></div>`;
+}
+
+function peChanges(items) {
+  const changed = (items || []).filter(i => i.A && i.B && i.A.is_relevant !== i.B.is_relevant);
+  if (!changed.length) return '';
+  const label = v => v ? 'İlgili' : 'İlgisiz';
+  return `<details open><summary>Karar değiştiren kayıtlar (${N(changed.length)})</summary><div class="stack">${changed.map(i => `<div class="alarm-row" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center">
+    <div class="msg"><b>${esc(i.title)}</b><small>#${N(i.regulationId)} · ${esc(i.stratum && PE_STRATA[i.stratum] ? PE_STRATA[i.stratum][0] : 'Katman yok')} · beklenen: ${i.expectedRelevant == null ? 'etiketlenmedi' : i.expectedRelevant ? 'ilgili' : 'ilgisiz'}</small></div>
+    <span>${label(i.A.is_relevant)} → ${label(i.B.is_relevant)}${i.expectedRelevant != null ? (i.B.is_relevant === i.expectedRelevant ? ' · B doğru' : ' · B yanlış') : ''}</span></div>`).join('')}</div></details>`;
+}
+
 function promptExperimentResults(detail) {
   if (!detail) return '';
   const summary = detail.summary;
@@ -626,7 +717,8 @@ function promptExperimentResults(detail) {
     <div class="grid2"><section><b>A · mevcut prompt</b>${peDecision(item.A, item.errorA)}</section><section><b>B · taslak prompt</b>${peDecision(item.B, item.errorB)}</section></div>
     <details><summary>Girdi özeti ve önbellek kimliği</summary><code>${esc(item.inputHash || 'henüz oluşmadı')}</code></details></article>`).join('');
   return `<section class="stack" style="margin-top:18px"><div class="sec-h"><h2>${esc(detail.title)}</h2><p>${esc(detail.status)} · ${detail.createdAt ? fDT(pdt(detail.createdAt)) : ''}</p></div>
-    ${summary ? metricCards : '<div class="result">A/B sonuçları kaydediliyor…</div>'}
+    ${summary ? metricCards + peStrata(summary) : '<div class="result">A/B sonuçları kaydediliyor…</div>'}
+    ${peChanges(detail.items)}
     <details><summary>A ve B prompt anlık görüntüleri</summary><div class="grid2">
       <pre class="card" style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(detail.systemPromptA || '')}</pre>
       <pre class="card" style="white-space:pre-wrap;max-height:360px;overflow:auto">${esc(detail.systemPromptB || '')}</pre></div></details>
@@ -639,7 +731,7 @@ function admPromptExperiment() {
   const provider = d.provider && d.provider !== 'none';
   const recordRows = p.records.map(record => `<div class="alarm-row" style="grid-template-columns:minmax(0,1fr) auto;display:grid;gap:10px;align-items:center">
     <div class="msg"><b>${esc(record.title)}</b><small>${esc(record.issuer || '—')} · ${record.publishDate ? esc(record.publishDate) : 'tarih yok'} · ${esc(record.status)}</small></div>
-    <button class="btn btn-sm" data-act="pe-add" data-id="${record.id}" ${selectedIds.has(record.id) || selected.length >= (d.maxRecords || 50) ? 'disabled' : ''}>${selectedIds.has(record.id) ? 'Eklendi' : 'Seç'}</button></div>`).join('');
+    <button class="btn btn-sm" data-act="pe-add" data-id="${record.id}" ${selectedIds.has(record.id) || selected.length >= (d.maxRecords || 200) ? 'disabled' : ''}>${selectedIds.has(record.id) ? 'Eklendi' : 'Seç'}</button></div>`).join('');
   const selectedRows = selected.map(record => `<div class="alarm-row" style="grid-template-columns:minmax(0,1fr) auto auto;display:grid;gap:10px;align-items:center">
     <div class="msg"><b>${esc(record.title)}</b><small>#${N(record.id)} · ${esc(record.issuer || '—')}</small></div>
     <select class="select" data-change="pe-label" data-id="${record.id}" aria-label="${esc(record.title)} beklenen ilgililik">
@@ -649,18 +741,33 @@ function admPromptExperiment() {
     </select><button class="btn btn-sm" data-act="pe-remove" data-id="${record.id}">Kaldır</button></div>`).join('');
   const runs = p.runs.map(run => `<button class="btn btn-sm" data-act="pe-open" data-id="${run.id}">${esc(run.title)} · ${esc(run.status)} · ${run.createdAt ? fDT(pdt(run.createdAt)) : ''}</button>`).join('');
   const settings = d.settings || {};
-  return `<div class="cards">
-    <section class="card mcard"><h3>Test kayıtları</h3><p>Mevcut kayıtları seçin. Beklenen ilgililik etiketi yalnızca bu deneyin ölçümünde kullanılır; seçilmezse doğruluk metriğine katılmaz.</p>
+  const sd = p.setDetail, sp = sd ? sd.params : null;
+  const setButtons = (p.sets || []).map(s => `<button class="btn btn-sm" data-act="pe-set" data-id="${s.id}" aria-pressed="${p.setId === s.id}">${esc(s.name)} · ${N(Object.values(s.counts || {}).reduce((a, b) => a + b, 0))} kayıt</button>`).join('');
+  const setRows = sd ? sd.labels.map(l => `<div class="alarm-row" style="grid-template-columns:minmax(0,1fr) auto auto;display:grid;gap:10px;align-items:center">
+    <div class="msg"><b>${esc(l.title)}</b><small>#${N(l.regulationId)} · ${esc(l.stratumLabel)} · ${esc(PE_SOURCES[l.source] || l.source)}${l.excelRow ? ` · Excel satır ${N(l.excelRow)}` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</small></div>
+    <select class="select" data-change="pe-set-label" data-id="${l.regulationId}" aria-label="${esc(l.title)} beklenen ilgililik">
+      <option value="unknown" ${l.expectedRelevant == null ? 'selected' : ''}>Emin değilim</option>
+      <option value="true" ${l.expectedRelevant === true ? 'selected' : ''}>İlgili</option>
+      <option value="false" ${l.expectedRelevant === false ? 'selected' : ''}>İlgisiz</option>
+    </select><button class="btn btn-sm" data-act="pe-set-remove" data-id="${l.regulationId}">Çıkar</button></div>`).join('') : '';
+  const setSection = `<section class="card mcard"><h3>Değerlendirme seti</h3><p>Excel karşılaştırma ekranında oluşturulur. Set seçilirse deney kayıtları ve etiketleri setten gelir; aynı set farklı B promptlarıyla tekrarlanabilir.</p>
+      <div class="frow">${setButtons || '<div class="result">Henüz set yok. Excel karşılaştırma ekranından oluşturun.</div>'}</div>
+      ${sd ? `<div class="result"><b>${esc(sd.name)}</b><span>${Object.keys(PE_STRATA).map(k => `${esc(PE_STRATA[k][0])}: ${N((sd.counts || {})[k] || 0)}`).join(' · ')}</span>
+        <span class="muted">Seed ${N(sp.seed)} · fazla uyarı ${N((sp.populations.extra_alert || {}).sampled)}/${N((sp.populations.extra_alert || {}).population)} · kontrol ${N((sp.populations.system_irrelevant || {}).sampled)}/${N((sp.populations.system_irrelevant || {}).population)} · few-shot nedeniyle çıkarılan ${N(sp.leakageExcluded)}</span></div>
+        <p class="muted">Excel'de olmayan kayıtlar ilgisiz sayıldı; Excel'in kaçırdığını fark ederseniz etiketi düzeltin. "Emin değilim" kayıtlar doğruluk metriğine girmez.</p>
+        <div class="stack" style="max-height:360px;overflow:auto">${setRows}</div>` : ''}</section>`;
+  return `<div class="cards">${setSection}
+    <section class="card mcard"><h3>Test kayıtları</h3><p>${p.setId ? 'Değerlendirme seti seçili; elle seçilen kayıtlar kullanılmaz. Seti kaldırmak için set düğmesine tekrar basın.' : 'Mevcut kayıtları seçin.'} Beklenen ilgililik etiketi yalnızca bu deneyin ölçümünde kullanılır; seçilmezse doğruluk metriğine katılmaz.</p>
       <label class="search">${ic('search')}<input id="peSearch" type="search" placeholder="Başlık veya kurumda ara" value="${esc(p.search)}"></label>
       <div class="stack" style="max-height:320px;overflow:auto">${recordRows || '<div class="result">Kayıt bulunamadı.</div>'}</div>
-      <h3>Deney örneklemi (${N(selected.length)}/50)</h3><div class="stack">${selectedRows || '<div class="result">Henüz kayıt seçilmedi.</div>'}</div>
+      <h3>Deney örneklemi (${N(selected.length)}/${N(d.maxRecords || 200)})</h3><div class="stack">${selectedRows || '<div class="result">Henüz kayıt seçilmedi.</div>'}</div>
     </section>
     <section class="card mcard"><h3>A/B ayarları</h3><p>A: kayıt oluşturulurken anlık görüntüsü alınan mevcut sistem promptu. B: düzenlenebilir tam sistem promptu.</p>
       <div class="result"><b>${esc(d.provider || 'LLM kapalı')} · ${esc(d.model || '—')}</b><span>Eşik ${dec(settings.relevanceThreshold, 2)} · ağırlıklar ${dec(settings.relevanceWeightModel, 2)} / ${dec(settings.relevanceWeightVotes, 2)} / ${dec(settings.relevanceWeightRules, 2)} · örnek ${N(settings.relevanceSamples)} · sıcaklık ${dec(settings.sampleTemperature, 2)}</span><span>A ve B aynı belge girdisi, model ve ayarlarla çalışır. Yeni çağrı gerektiğinde iki promptun her biri için en çok ${N(selected.length * 2 * (settings.relevanceSamples || 1))} örnek çağrısı yapılır; eşleşen sonuçlar önbellekten gelir.</span></div>
       <label class="field">Deney adı<input class="input" id="peTitle" maxlength="200" placeholder="Örn. İşveren ve veri sorumlusu rolleri" value="${esc(p.title || '')}"></label>
       <label class="field">B · taslak sistem promptu<textarea class="input" id="pePromptB" rows="16" maxlength="30000">${esc(p.promptB || d.systemPromptA || '')}</textarea></label>
       ${p.error ? `<span class="field-err">${esc(p.error)}</span>` : ''}
-      <div class="ph-act"><button class="btn btn-primary" data-act="pe-start" ${!provider || p.loading || !selected.length ? 'disabled' : ''}>${p.loading ? 'Kaydediliyor…' : 'A/B deneyini çalıştır'}</button><button class="btn" data-act="pe-reload">Deneyleri yenile</button></div>
+      <div class="ph-act"><button class="btn btn-primary" data-act="pe-start" ${!provider || p.loading || (p.setId ? !(sd && sd.labels.length) : !selected.length) ? 'disabled' : ''}>${p.loading ? 'Kaydediliyor…' : p.setId ? 'Setle A/B deneyini çalıştır' : 'A/B deneyini çalıştır'}</button><button class="btn" data-act="pe-reload">Deneyleri yenile</button></div>
       <p class="muted">Promptlar ve sonuçlar kalıcı olarak saklanır. Deney canlı ilgililik etiketlerini değiştirmez. Sadece aynı prompt, belge girdisi, model ve örnekleme ayarlarında önbellek kullanılır.</p>
     </section></div>
     ${runs ? `<section class="card mcard" style="margin-top:16px"><h3>Kaydedilmiş deneyler</h3><div class="frow">${runs}</div></section>` : ''}

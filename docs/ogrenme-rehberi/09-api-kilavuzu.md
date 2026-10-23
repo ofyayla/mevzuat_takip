@@ -148,8 +148,8 @@ kullanıcı güncel durumu görüp kararını yeniden verir.
 | **Ayrıntı bölmesi** | aynı | `GET /regulations/{id}` · `GET …/document` · `POST …/views` · `POST …/decision` · `PUT …/units` · `PATCH …/content` · `POST /regulations/bulk-decision` · `POST …/irrelevant-review` · `GET /archive/regulations/{id}` |
 | **Arşiv** (`/#arsiv`) | `portal/assets/views.js` | `GET /regulations?status=…` · `GET /regulations/decision-stats` · `POST …/decision/revise`, `…/decision/reopen` · `GET /archive/regulations?kind=irrelevant` |
 | **Yönetim** (`/#yonetim`, `/#hat`, `/#kaynaklar`, `/#ayarlar`, `/#bakim`) | `portal/assets/views.js` | `GET /pipeline`, `/pipeline/nodes/{id}` · `GET /admin/metrics`, `/admin/scans`, `/admin/alerts` + `…/resolve` · `GET/PUT /admin/settings` (+`/history`, `/preview`) · `POST /admin/sources/{kod}/run`, `…/backfill` · `POST /admin/reprocess` (`dry_run`), `/admin/retry-failed` · `GET/POST /admin/rebaseline` · `GET /admin/audit/verify` |
-| **Excel karşılaştırma** (`/#karsilastirma`) | `portal/assets/views.js` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) |
-| **Prompt deneyi** (`/#prompt-deneyi`) | `portal/assets/views.js` | `GET /evaluation/prompt-experiments/defaults`, `/records`, `/` · `POST /evaluation/prompt-experiments` · `GET /evaluation/prompt-experiments/{id}` |
+| **Excel karşılaştırma** (`/#karsilastirma`) | `portal/assets/views.js` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) · `POST /evaluation/sets/from-excel` |
+| **Prompt deneyi** (`/#prompt-deneyi`) | `portal/assets/views.js` | `GET /evaluation/prompt-experiments/defaults`, `/records`, `/` · `POST /evaluation/prompt-experiments` · `GET /evaluation/prompt-experiments/{id}` · `GET /evaluation/sets`, `/sets/{id}` · `PATCH/DELETE /evaluation/sets/{id}/labels/{regulation_id}` |
 | *UI'sı yok (API/CLI)* | — | `POST/GET /evaluation/manual-detections`, `POST …/upload`, `GET /evaluation/report`, `GET /evaluation/filtered-out`, `POST /admin/regulations/{id}/split`, `…/regenerate`, `POST /admin/monitor/run` |
 | Altyapı | — | `GET /healthz`, `GET /readyz` |
 
@@ -932,14 +932,30 @@ saklanır. A ve B aynı kayıt bağlamı ve kullanıcı mesajı ile çalışır.
 |---|---|
 | `GET /evaluation/prompt-experiments/defaults` | A promptu, model ve çalışma anındaki sabit ayarlar |
 | `GET /evaluation/prompt-experiments/records?q=` | Seçim için kayıt arama (en çok 30 sonuç) |
-| `POST /evaluation/prompt-experiments` | 1–50 kayıt ve B promptuyla deney oluşturur; `202` ile kuyruğa alır |
+| `POST /evaluation/prompt-experiments` | 1–200 kayıt (`records`) **ya da** `evaluation_set_id` ile B promptlu deney oluşturur; ikisi birlikte verilemez (`400`); `202` ile kuyruğa alır |
 | `GET /evaluation/prompt-experiments` | Son 50 kalıcı deney |
-| `GET /evaluation/prompt-experiments/{id}` | Prompt anlık görüntüleri, kararlar, gerekçeler, skorlar ve ölçümler |
+| `GET /evaluation/prompt-experiments/{id}` | Prompt anlık görüntüleri, kararlar, gerekçeler, skorlar ve ölçümler; setle koşulduysa `evaluationSetId`, kayıt başına `stratum`, özetinde `strata`, `significance`, `estimatedPrecision` |
 
 Her iki promptun çıktıları `prompt_experiment` / `prompt_experiment_item` tablolarında saklanır; LLM çağrısı ayrıca
 mevcut `llm_call` önbelleğini kullanır. Aynı tam girdi, model, prompt sürümü ve örnekleme parametreleri tekrar
 çalıştırılırsa başarılı önbellek sonucu kullanılır. Etiketsiz kayıtta doğruluk/precision/recall hesaplanmaz; yalnızca
 A/B karar değişikliği raporlanır. LLM hataları ilgili tarafın hata alanında gösterilir.
+
+#### Değerlendirme setleri *(expert)*
+
+Excel karşılaştırmasından türetilen kalıcı, katmanlı setler (`evaluation_set` / `evaluation_label`). Katmanlar:
+`excel_relevant`, `excel_irrelevant` (beklenen ilgili; kaynak `excel`), `extra_alert`, `system_irrelevant` (beklenen
+ilgisiz; kaynak `excel_absent`, seed'li örneklem). Elle düzeltilen etiketin kaynağı `human` olur.
+
+| Uç | Açıklama |
+|---|---|
+| `POST /evaluation/sets/from-excel` | Multipart: `file`, `name`, `selections`, `seed` (42), `extra_sample` (40), `control_sample` (35); sorguda `title_threshold`, `text_threshold`, `from`, `to`. Güvenilir eşleşme yoksa `400 empty_set`. `201` |
+| `GET /evaluation/sets` | Son 50 set, katman sayılarıyla |
+| `GET /evaluation/sets/{id}` | Parametreler (seed, dönem, nüfus/örneklem, `leakageExcluded`) ve etiketler |
+| `PATCH /evaluation/sets/{id}/labels/{regulation_id}` | `{"expected_relevant": bool\|null, "note"?}`; `null` = emin değilim (metriklere girmez) |
+| `DELETE /evaluation/sets/{id}/labels/{regulation_id}` | Kaydı setten çıkarır (`204`) |
+
+Few-shot havuzundaki (`fewshot_example`) ve YAML örnekleriyle aynı başlıklı kayıtlar sete alınmaz.
 
 ---
 
