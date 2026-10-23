@@ -119,7 +119,16 @@ CANDIDATES = {
     "en-tam": ("İngilizce · rol + kapsam (tam)", "v2-tam'ın İngilizce talimatlı hâli; bilgi ve belge metni Türkçe "
                "kalır. v2-tam ile karşılaştırılınca talimat dilinin etkisini gösterir.",
                "v2.en", {"roles": True, "scope": True, "control": False}),
-    "en-v1": ("İngilizce · mevcut ölçütler", "Mevcut promptun İngilizce çevirisi, ek kural yok. A ile arasındaki fark "
+    "en-roller": ("İngilizce · yalnız banka rolleri", "v2-roller'ın İngilizce talimatlı hâli. v2-roller ile "
+                  "karşılaştırılınca talimat dilinin etkisini gösterir.",
+                  "v2.en", {"roles": True, "scope": False, "control": False}),
+    "en-kapsam": ("İngilizce · yalnız grup ve kapsam sınırı", "v2-kapsam'ın İngilizce talimatlı hâli. v2-kapsam ile "
+                  "karşılaştırılınca talimat dilinin etkisini gösterir.",
+                  "v2.en", {"roles": False, "scope": True, "control": False}),
+    "en-kontrol": ("İngilizce · kontrol (gürültü tabanı)", "en-v1 ile aynı ölçütler, yalnızca nötr bir cümle eklenir. "
+                   "en-v1 ile arasındaki fark, İngilizce promptun koşudan koşuya oynamasıdır.",
+                   "v2.en", {"roles": False, "scope": False, "control": True}),
+    "en-v1":("İngilizce · mevcut ölçütler", "Mevcut promptun İngilizce çevirisi, ek kural yok. A ile arasındaki fark "
               "yalnızca talimat dilinden gelir (v1-kontrol oynaması hariç).",
               "v2.en", {"roles": False, "scope": False, "control": False}),
 }

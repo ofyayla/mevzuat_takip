@@ -125,7 +125,8 @@ def test_candidate_template_without_rules_is_the_production_prompt(settings):
                    **_system_context(kn))
     assert plain == relevance_system_prompt(kn)   # v2 = v1 + açılıp kapanan kural blokları; başka fark yok
     prompts = {c["key"]: c["systemPrompt"] for c in candidate_system_prompts(kn)}
-    assert set(prompts) == {"v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol", "en-tam", "en-v1"}
+    assert set(prompts) == {"v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol",
+                            "en-tam", "en-roller", "en-kapsam", "en-kontrol", "en-v1"}
     assert all(text != plain for text in prompts.values())
     roles, group = "kişisel veri sorumlusu", "Bereket Varlık Kiralama A.Ş."
     assert roles in prompts["v2-tam"] and group in prompts["v2-tam"]
@@ -135,8 +136,12 @@ def test_candidate_template_without_rules_is_the_production_prompt(settings):
     # İngilizce varyantlar: talimatlar İngilizce, bilgi (kılavuz, taksonomi) ve çıktı alanları aynı
     en_roles = "personal data controller"
     assert en_roles in prompts["en-tam"] and group in prompts["en-tam"]
-    assert en_roles not in prompts["en-v1"] and group not in prompts["en-v1"]
-    for key in ("en-tam", "en-v1"):
+    assert en_roles in prompts["en-roller"] and group not in prompts["en-roller"]
+    assert group in prompts["en-kapsam"] and en_roles not in prompts["en-kapsam"]
+    for key in ("en-kontrol", "en-v1"):
+        assert en_roles not in prompts[key] and group not in prompts[key]
+    assert prompts["en-kontrol"] != prompts["en-v1"]
+    for key in ("en-tam", "en-roller", "en-kapsam", "en-kontrol", "en-v1"):
         assert prompts[key].startswith("You are") and "Sen bir" not in prompts[key]
         assert kn.guide in prompts[key] and "<kaynak_metin>" in prompts[key] and "rationale: in Turkish" in prompts[key]
 
@@ -187,7 +192,7 @@ def test_set_api_label_correction_and_experiment_on_set(settings, fixture_data, 
 
     defaults = client.get("/api/v1/evaluation/prompt-experiments/defaults").json()
     assert [c["key"] for c in defaults["candidates"]] == ["v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol",
-                                                         "en-tam", "en-v1"]
+                                                         "en-tam", "en-roller", "en-kapsam", "en-kontrol", "en-v1"]
     prompt_a = defaults["systemPromptA"]
     body = {"title": "Set deneyi", "evaluation_set_id": set_id, "system_prompt_b": prompt_a + "\nB-only-test-guidance"}
     mixed = client.post("/api/v1/evaluation/prompt-experiments",
