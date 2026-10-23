@@ -1128,6 +1128,24 @@ def get_prompt_experiment(experiment_id: int, session: SessionDep, actor: ActorD
     return experiment_output(experiment, items)
 
 
+@evaluation.get("/prompt-experiments/{experiment_id}/export")
+def export_prompt_experiment(experiment_id: int, session: SessionDep, settings: SettingsDep, actor: ActorDep):
+    """Deneyin özetini, kayıt kayıt A/B kararlarını ve prompt anlık görüntülerini Excel (.xlsx) olarak indirir."""
+    from app.db import PromptExperiment, PromptExperimentItem
+    from app.evaluation.prompt_experiments import build_workbook as experiment_workbook
+    from app.evaluation.prompt_experiments import experiment_filename, experiment_output
+
+    require(actor, ROLE_EXPERT)
+    experiment = session.get(PromptExperiment, experiment_id)
+    if experiment is None:
+        raise ApiError(404, "not_found", "Prompt deneyi bulunamadı.")
+    items = session.scalars(select(PromptExperimentItem).where(
+        PromptExperimentItem.experiment_id == experiment_id).order_by(PromptExperimentItem.id)).all()
+    headers = {"Content-Disposition": f'attachment; filename="{experiment_filename(experiment_id, today(settings))}"',
+               "Access-Control-Expose-Headers": "Content-Disposition"}
+    return Response(experiment_workbook(experiment_output(experiment, items)), media_type=XLSX_TYPE, headers=headers)
+
+
 class ExcelMatchSelection(BaseModel):
     row: int = Field(gt=0, strict=True)
     regulation_id: int = Field(gt=0, strict=True)

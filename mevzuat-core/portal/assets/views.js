@@ -641,6 +641,12 @@ async function startPromptExperiment() {
   p.loading = false; renderAll();
 }
 
+async function exportPromptExperiment(id) {
+  const p = S.pe;
+  try { await download(`/evaluation/prompt-experiments/${id}/export`, {}, `prompt-deneyi-${id}.xlsx`); toast('Dosya indirildi.'); p.error = null; }
+  catch (e) { p.error = errMsg(e); renderAll(); }
+}
+
 async function openPromptExperiment(id) {
   const p = S.pe;
   try {
@@ -730,7 +736,9 @@ function promptExperimentResults(detail) {
     <h3>${esc(item.title)}</h3><p>Kayıt #${N(item.regulationId)} · beklenen: ${item.expectedRelevant == null ? 'etiketlenmedi' : item.expectedRelevant ? 'ilgili' : 'ilgisiz'} · ${esc(item.status)}</p>
     <div class="grid2"><section><b>A · mevcut prompt</b>${peDecision(item.A, item.errorA)}</section><section><b>B · taslak prompt</b>${peDecision(item.B, item.errorB)}</section></div>
     <details><summary>Girdi özeti ve önbellek kimliği</summary><code>${esc(item.inputHash || 'henüz oluşmadı')}</code></details></article>`).join('');
-  return `<section class="stack" style="margin-top:18px"><div class="sec-h"><h2>${esc(detail.title)}</h2><p>${esc(detail.status)} · ${detail.createdAt ? fDT(pdt(detail.createdAt)) : ''}</p></div>
+  const finished = !['queued', 'running'].includes(detail.status);
+  return `<section class="stack" style="margin-top:18px"><div class="sec-h"><h2>${esc(detail.title)}</h2><p>${esc(detail.status)} · ${detail.createdAt ? fDT(pdt(detail.createdAt)) : ''}</p>
+    <div class="ph-act"><button class="btn" data-act="pe-export" data-id="${detail.id}" ${finished ? '' : 'disabled'}>${ic('download')}Sonuçları Excel'e aktar</button></div></div>
     ${summary ? metricCards + peStrata(summary) : '<div class="result">A/B sonuçları kaydediliyor…</div>'}
     ${peChanges(detail.items)}
     <details><summary>A ve B prompt anlık görüntüleri</summary><div class="grid2">

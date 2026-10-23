@@ -449,6 +449,7 @@ GET  /api/v1/evaluation/prompt-experiments/records?q=...
 POST /api/v1/evaluation/prompt-experiments                 # 202, arka planda çalışır
 GET  /api/v1/evaluation/prompt-experiments
 GET  /api/v1/evaluation/prompt-experiments/{id}
+GET  /api/v1/evaluation/prompt-experiments/{id}/export     # sonuçlar .xlsx
 ```
 
 Önceki başarılı LLM çıktıları, `llm_call` tablosundaki mevcut girdi özetiyle eşleşirse yeniden kullanılır; prompt,

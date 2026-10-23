@@ -149,7 +149,7 @@ kullanıcı güncel durumu görüp kararını yeniden verir.
 | **Arşiv** (`/#arsiv`) | `portal/assets/views.js` | `GET /regulations?status=…` · `GET /regulations/decision-stats` · `POST …/decision/revise`, `…/decision/reopen` · `GET /archive/regulations?kind=irrelevant` |
 | **Yönetim** (`/#yonetim`, `/#hat`, `/#kaynaklar`, `/#ayarlar`, `/#bakim`) | `portal/assets/views.js` | `GET /pipeline`, `/pipeline/nodes/{id}` · `GET /admin/metrics`, `/admin/scans`, `/admin/alerts` + `…/resolve` · `GET/PUT /admin/settings` (+`/history`, `/preview`) · `POST /admin/sources/{kod}/run`, `…/backfill` · `POST /admin/reprocess` (`dry_run`), `/admin/retry-failed` · `GET/POST /admin/rebaseline` · `GET /admin/audit/verify` |
 | **Excel karşılaştırma** (`/#karsilastirma`) | `portal/assets/views.js` | `POST /evaluation/excel-compare` (JSON ve `format=xlsx`) · `POST /evaluation/sets/from-excel` |
-| **Prompt deneyi** (`/#prompt-deneyi`) | `portal/assets/views.js` | `GET /evaluation/prompt-experiments/defaults`, `/records`, `/` · `POST /evaluation/prompt-experiments` · `GET /evaluation/prompt-experiments/{id}` · `GET /evaluation/sets`, `/sets/{id}` · `PATCH/DELETE /evaluation/sets/{id}/labels/{regulation_id}` |
+| **Prompt deneyi** (`/#prompt-deneyi`) | `portal/assets/views.js` | `GET /evaluation/prompt-experiments/defaults`, `/records`, `/` · `POST /evaluation/prompt-experiments` · `GET /evaluation/prompt-experiments/{id}`, `/{id}/export` · `GET /evaluation/sets`, `/sets/{id}` · `PATCH/DELETE /evaluation/sets/{id}/labels/{regulation_id}` |
 | *UI'sı yok (API/CLI)* | — | `POST/GET /evaluation/manual-detections`, `POST …/upload`, `GET /evaluation/report`, `GET /evaluation/filtered-out`, `POST /admin/regulations/{id}/split`, `…/regenerate`, `POST /admin/monitor/run` |
 | Altyapı | — | `GET /healthz`, `GET /readyz` |
 
@@ -935,6 +935,7 @@ saklanır. A ve B aynı kayıt bağlamı ve kullanıcı mesajı ile çalışır.
 | `POST /evaluation/prompt-experiments` | 1–200 kayıt (`records`) **ya da** `evaluation_set_id` ile B promptlu deney oluşturur; ikisi birlikte verilemez (`400`); `202` ile kuyruğa alır |
 | `GET /evaluation/prompt-experiments` | Son 50 kalıcı deney |
 | `GET /evaluation/prompt-experiments/{id}` | Prompt anlık görüntüleri, kararlar, gerekçeler, skorlar ve ölçümler; setle koşulduysa `evaluationSetId`, kayıt başına `stratum`, özetinde `strata`, `significance`, `estimatedPrecision` |
+| `GET /evaluation/prompt-experiments/{id}/export` | Deneyi Excel (.xlsx) olarak indirir: `Özet`, `Katmanlar` (setle koşulduysa), `Kayıtlar` (kayıt kayıt A/B kararı, skor, gerekçe, doğruluk) ve `Promptlar` sayfaları |
 
 Her iki promptun çıktıları `prompt_experiment` / `prompt_experiment_item` tablolarında saklanır; LLM çağrısı ayrıca
 mevcut `llm_call` önbelleğini kullanır. Aynı tam girdi, model, prompt sürümü ve örnekleme parametreleri tekrar

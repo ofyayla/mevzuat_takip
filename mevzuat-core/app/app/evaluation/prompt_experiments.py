@@ -9,7 +9,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from io import BytesIO
 
 from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
@@ -19,7 +20,7 @@ from app.ai import relevance
 from app.ai.common import Knowledge, RegulationContext, regulation_context
 from app.ai.llm_client import LLMError, get_llm
 from app.db import EvaluationSet, PromptExperiment, PromptExperimentItem, Regulation
-from app.evaluation.evaluation_sets import SAMPLED, STRATA
+from app.evaluation.evaluation_sets import SAMPLED, STRATA, STRATUM_LABELS
 from app.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -69,7 +70,6 @@ def experiment_slot(engine: Engine, limit: int):
             log.exception("Prompt deneyi yuvası %s bırakılamadı; bağlantı kapatılıyor", slot)
             conn.invalidate()
         conn.close()
-
 
 
 def freeze_settings(settings: Settings, knowledge: Knowledge, examples: list[dict]) -> dict:
@@ -407,3 +407,163 @@ def experiment_output(experiment: PromptExperiment, items: list[PromptExperiment
             "items": [item_output(item) for item in items],
         })
     return result
+
+
+# ------------------------------------------------------------------------------------------------ Excel çıktısı
+
+def _yes_no(value: bool | None) -> str | None:
+    return None if value is None else "İlgili" if value else "İlgisiz"
+
+
+def _side_cell(side: str, field: str):
+    def get(item: dict):
+        result = item.get(side)
+        if result is None:
+            return None
+        value = result.get(field)
+        return "; ".join(value) if isinstance(value, list) else value
+    return get
+
+
+def _decision(side: str):
+    return lambda item: _yes_no((item.get(side) or {}).get("is_relevant")) if item.get(side) else None
+
+
+def _correct(side: str):
+    def get(item: dict):
+        result, expected = item.get(side), item.get("expectedRelevant")
+        if result is None or expected is None:
+            return None
+        return "Doğru" if result["is_relevant"] == expected else "Yanlış"
+    return get
+
+
+def _changed(item: dict):
+    a, b = item.get("A"), item.get("B")
+    if a is None or b is None:
+        return None
+    return "Evet" if a["is_relevant"] != b["is_relevant"] else "Hayır"
+
+
+def _uncertain(side: str):
+    return lambda item: None if item.get(side) is None else "Evet" if item[side].get("uncertain") else "Hayır"
+
+
+def _cached(side: str):
+    return lambda item: None if item.get(side) is None else "Evet" if item[side].get("cached") else "Hayır"
+
+
+ITEM_COLUMNS: list[tuple[str, int, callable]] = [
+    ("Kayıt no", 10, lambda i: i["regulationId"]),
+    ("Başlık", 60, lambda i: i["title"]),
+    ("Katman", 28, lambda i: STRATUM_LABELS.get(i["stratum"], i["stratum"]) if i.get("stratum") else None),
+    ("Beklenen", 12, lambda i: _yes_no(i["expectedRelevant"])),
+    ("A kararı", 12, _decision("A")),
+    ("A skoru", 10, _side_cell("A", "score")),
+    ("A bandı", 12, _side_cell("A", "band")),
+    ("A tereddüt", 10, _uncertain("A")),
+    ("A doğruluğu", 12, _correct("A")),
+    ("B kararı", 12, _decision("B")),
+    ("B skoru", 10, _side_cell("B", "score")),
+    ("B bandı", 12, _side_cell("B", "band")),
+    ("B tereddüt", 10, _uncertain("B")),
+    ("B doğruluğu", 12, _correct("B")),
+    ("Karar değişti", 12, _changed),
+    ("A konuları", 30, _side_cell("A", "topics")),
+    ("B konuları", 30, _side_cell("B", "topics")),
+    ("A gerekçesi", 70, _side_cell("A", "rationale")),
+    ("B gerekçesi", 70, _side_cell("B", "rationale")),
+    ("A önbellekten", 12, _cached("A")),
+    ("B önbellekten", 12, _cached("B")),
+    ("Kayıt durumu", 12, lambda i: i["status"]),
+    ("A hatası", 40, lambda i: i["errorA"]),
+    ("B hatası", 40, lambda i: i["errorB"]),
+    ("Girdi özeti", 24, lambda i: i["inputHash"]),
+]
+_STRATUM_COLUMNS: list[tuple[str, int, callable]] = [
+    ("Katman", 32, lambda r: r[0]),
+    ("Kayıt", 10, lambda r: r[1]["total"]),
+    ("A ilgili / değerlendirilen", 20, lambda r: f'{r[1]["A"]["relevant"]}/{r[1]["A"]["n"]}'),
+    ("A oranı", 10, lambda r: r[1]["A"]["rate"]),
+    ("B ilgili / değerlendirilen", 20, lambda r: f'{r[1]["B"]["relevant"]}/{r[1]["B"]["n"]}'),
+    ("B oranı", 10, lambda r: r[1]["B"]["rate"]),
+    ("A→B kazanılan", 14, lambda r: r[1]["gained"]),
+    ("A→B kaybedilen", 14, lambda r: r[1]["lost"]),
+]
+
+
+def _pct(value: float | None) -> str:
+    return f"%{value * 100:.1f}" if value is not None else "—"
+
+
+def _metric_rows(label: str, metric: dict) -> list[tuple[str, object]]:
+    return [(f"{label} · doğru ilgili / gereksiz / kaçırılan / doğru ilgisiz",
+             f'{metric["tp"]} / {metric["fp"]} / {metric["fn"]} / {metric["tn"]}'),
+            (f"{label} · etiketli kayıt", metric["labelled"]),
+            (f"{label} · precision / recall", f'{_pct(metric["precision"])} / {_pct(metric["recall"])}')]
+
+
+def build_workbook(experiment: dict) -> bytes:
+    """``experiment_output`` çıktısını (kayıtlarıyla) üç sayfalık çalışma kitabına yazar: özet, kayıt kayıt A/B kararları,
+    prompt anlık görüntüleri. Gerekçe gibi model metinleri ``services.export._cell`` ile formül enjeksiyonuna karşı korunur."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+
+    from app.evaluation.excel_compare import _table
+    from app.services.export import _cell
+
+    summary = experiment.get("summary") or {}
+    settings = experiment.get("settings") or {}
+    rows: list[tuple[str, object]] = [
+        ("Deney", experiment["title"]), ("Durum", experiment["status"]),
+        ("Oluşturan", experiment.get("createdBy")), ("Oluşturulma", experiment.get("createdAt")),
+        ("Tamamlanma", experiment.get("completedAt")),
+        ("Değerlendirme seti no", experiment.get("evaluationSetId")),
+        ("Sağlayıcı / model", f'{settings.get("llm_provider", "—")} / {settings.get("llm_model", "—")}'),
+        ("Eşik", settings.get("relevance_threshold")),
+        ("Ağırlıklar (model / oy / kural)", " / ".join(str(settings.get(k)) for k in (
+            "relevance_weight_model", "relevance_weight_votes", "relevance_weight_rules"))),
+        ("Örnek sayısı / sıcaklık", f'{settings.get("relevance_samples")} / {settings.get("relevance_sample_temperature")}'),
+    ]
+    if summary:
+        rows += [("", None), ("Toplam kayıt", summary["total"]), ("Etiketli / etiketsiz",
+                                                                   f'{summary["labelled"]} / {summary["unlabelled"]}'),
+                 ("Karar değişen kayıt", summary["changed"]), ("Önbellekten gelen sonuç", summary["cachedCalls"])]
+        rows += _metric_rows("A", summary["A"]) + _metric_rows("B", summary["B"])
+        significance = summary.get("significance") or {}
+        rows += [("Yalnız A / yalnız B doğru", f'{significance.get("aOnlyCorrect", 0)} / {significance.get("bOnlyCorrect", 0)}'),
+                 ("McNemar p", significance.get("p"))]
+        estimated = summary.get("estimatedPrecision")
+        if estimated:
+            rows.append(("Tahmini precision, alt sınır (A / B)", f'{_pct(estimated["A"])} / {_pct(estimated["B"])}'))
+        if summary.get("error"):
+            rows.append(("Hata", summary["error"]))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Özet"
+    for label, value in rows:
+        ws.append([_cell(label), _cell(value)])
+    ws.column_dimensions["A"].width, ws.column_dimensions["B"].width = 52, 48
+    for c in ws["A"]:
+        c.font = Font(bold=True)
+    for c in ws["B"]:
+        c.alignment = Alignment(vertical="top", wrap_text=True, horizontal="left")
+    strata = [(STRATUM_LABELS.get(key, key), summary["strata"][key]) for key in STRATA if key in summary.get("strata", {})]
+    if strata:
+        _table(wb.create_sheet("Katmanlar"), _STRATUM_COLUMNS, strata)
+    _table(wb.create_sheet("Kayıtlar"), ITEM_COLUMNS, experiment.get("items", []))
+    prompts = wb.create_sheet("Promptlar")
+    prompts.append(["A · mevcut prompt", "B · taslak prompt"])
+    prompts.append([_cell(experiment.get("systemPromptA")), _cell(experiment.get("systemPromptB"))])
+    for col in ("A", "B"):
+        prompts.column_dimensions[col].width = 100
+        prompts[f"{col}1"].font = Font(bold=True)
+        prompts[f"{col}2"].alignment = Alignment(vertical="top", wrap_text=True)
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def experiment_filename(experiment_id: int, today: date) -> str:
+    return f"prompt-deneyi-{experiment_id}-{today.isoformat()}.xlsx"

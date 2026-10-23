@@ -409,6 +409,7 @@ document.addEventListener('click', e => {
     case 'pe-remove': removePromptExperimentRecord(+id); break;
     case 'pe-start': startPromptExperiment(); break;
     case 'pe-open': openPromptExperiment(+id); break;
+    case 'pe-export': exportPromptExperiment(+id); break;
     case 'pe-reload': loadPromptExperimentHome(); break;
     case 'edit-start': startEdit(S.openId); break;
     case 'edit-mode': S.edit.mode = t.dataset.m; { const w = $('#editWhy'); if (w) S.edit.why = w.value; } repaint(); { const b = document.querySelector('.seg-b[aria-checked=true]'); if (b) b.focus({ preventScroll: true }); } break;

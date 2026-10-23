@@ -4,9 +4,11 @@ import threading
 import time
 from contextlib import ExitStack
 from datetime import date
+from io import BytesIO
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy import func, select
 
 from app.ai.llm_client import FakeLLM
@@ -119,6 +121,18 @@ def test_prompt_experiments_store_both_sides_and_reuse_llm_cache(settings, env, 
     assert detail["summary"]["B"]["fn"] == 1
     assert len(calls) == 2
 
+    exported = client.get(f"/api/v1/evaluation/prompt-experiments/{first_id}/export")
+    assert exported.status_code == 200
+    assert f"prompt-deneyi-{first_id}-" in exported.headers["content-disposition"]
+    wb = load_workbook(BytesIO(exported.content))
+    assert wb.sheetnames == ["Özet", "Kayıtlar", "Promptlar"]
+    rows = list(wb["Kayıtlar"].iter_rows(values_only=True))
+    header, row = dict(zip(rows[0], range(len(rows[0])))), rows[1]
+    assert row[header["Kayıt no"]] == regulation_id
+    assert (row[header["Beklenen"]], row[header["A kararı"]], row[header["B kararı"]]) == ("İlgili", "İlgili", "İlgisiz")
+    assert (row[header["A doğruluğu"]], row[header["B doğruluğu"]], row[header["Karar değişti"]]) == ("Doğru", "Yanlış", "Evet")
+    assert client.get("/api/v1/evaluation/prompt-experiments/999999/export").status_code == 404
+
     second = client.post("/api/v1/evaluation/prompt-experiments", json=body)
     assert second.status_code == 202, second.text
     second_detail = client.get(
@@ -154,6 +168,22 @@ def test_prompt_experiment_rejects_duplicate_records_and_same_prompt(settings, e
     same = {**base, "system_prompt_b": prompt,
             "records": [{"regulation_id": regulation_id, "expected_relevant": None}]}
     assert client.post("/api/v1/evaluation/prompt-experiments", json=same).status_code == 400
+
+
+def test_experiment_workbook_handles_pending_results_and_escapes_formulas():
+    from app.evaluation.prompt_experiments import build_workbook
+
+    experiment = {
+        "id": 1, "title": "Eksik sonuçlu", "status": "partial", "summary": None, "createdBy": "t", "createdAt": "x",
+        "completedAt": None, "evaluationSetId": None, "settings": {}, "systemPromptA": "A", "systemPromptB": "=B",
+        "items": [{"regulationId": 7, "title": "=HYPERLINK(\"http://x\")", "expectedRelevant": None, "stratum": None,
+                   "status": "failed", "inputHash": None, "A": None, "B": None, "errorA": "boom", "errorB": None}],
+    }
+    wb = load_workbook(BytesIO(build_workbook(experiment)))
+    assert wb.sheetnames == ["Özet", "Kayıtlar", "Promptlar"]
+    assert wb["Kayıtlar"]["B2"].value.startswith("'=HYPERLINK")
+    assert wb["Promptlar"]["B2"].value == "'=B"
+    assert wb["Kayıtlar"]["E2"].value is None
 
 
 def _tracking_llm(test_settings, delay: float = 0.1):

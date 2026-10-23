@@ -41,6 +41,23 @@ test('Prompt experiment editor presents fixed settings and escaped, side-by-side
   assert.doesNotMatch(html, /<script>|<img/);
 });
 
+test('Experiment results offer an Excel export that is disabled while the run is in progress', async () => {
+  const context = loadContext();
+  const detail = status => `S.pe.detail = {id:4,title:'Deney',status:'${status}',items:[]};`;
+  vm.runInContext(detail('running'), context);
+  assert.match(vm.runInContext('promptExperimentResults(S.pe.detail)', context),
+    /data-act="pe-export" data-id="4" disabled/);
+  vm.runInContext(detail('completed'), context);
+  assert.match(vm.runInContext('promptExperimentResults(S.pe.detail)', context),
+    /data-act="pe-export" data-id="4" >/);
+
+  vm.runInContext(`var requested = null; var toast = () => {}; var renderAll = () => {};
+    download = async (path, query, name) => { requested = [path, name]; };`, context);
+  await vm.runInContext('exportPromptExperiment(4)', context);
+  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(requested)', context)),
+    ['/evaluation/prompt-experiments/4/export', 'prompt-deneyi-4.xlsx']);
+});
+
 test('Starting a prompt experiment persists the selected records, labels and edited B prompt', async () => {
   const context = loadContext();
   vm.runInContext(`var sent = null; var renderAll = () => {}; var toast = () => {};
