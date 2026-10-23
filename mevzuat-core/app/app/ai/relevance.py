@@ -102,43 +102,28 @@ def relevance_system_prompt(kn: Knowledge) -> str:
 
 # Prompt deneyinde B tarafını dolduran aday şablon ve ablasyon varyantları. Kural grupları ayrı ayrı açılarak hangi
 # grubun hangi katmanı etkilediği ölçülür; "kontrol" anlamsız bir cümle ekler ve önbelleği atlayarak aynı promptun
-# koşudan koşuya ne kadar oynadığını (gürültü tabanı) gösterir. "en-*" varyantları talimatları İngilizceye çevirir;
-# kurum profili, kılavuz, taksonomi ve kullanıcı mesajı Türkçe kalır, böylece fark yalnızca talimat dilinden gelir.
+# koşudan koşuya ne kadar oynadığını (gürültü tabanı) gösterir.
+CANDIDATE_PROMPT = "v2"
 CANDIDATES = {
     "v2-tam": ("Rol + kapsam ilkeleri (tam)", "Banka rolleri, grup şirketleri listesi ve kapsam/tereddüt sınırları birlikte.",
-               "v2", {"roles": True, "scope": True, "control": False}),
+               {"roles": True, "scope": True, "control": False}),
     "v2-roller": ("Yalnız banka rolleri", "İşveren, veri sorumlusu, vergi mükellefi ve raporlama rolleri; rehber ve "
                   "taslaklar; gerekçede rol ve süreç. Hedef: Excel'de olup sistemin kaçırdıkları.",
-                  "v2", {"roles": True, "scope": False, "control": False}),
+                  {"roles": True, "scope": False, "control": False}),
     "v2-kapsam": ("Yalnız grup ve kapsam sınırı", "Doğrulanmış grup şirketleri, başka kuruluşu iştirak sayma yasağı ve "
                   "kapsam dışı içerikte tereddüt sınırı. Hedef: fazla uyarılar.",
-                  "v2", {"roles": False, "scope": True, "control": False}),
+                  {"roles": False, "scope": True, "control": False}),
     "v1-kontrol": ("Kontrol (gürültü tabanı)", "Mevcut promptla aynı ölçütler, yalnızca nötr bir cümle eklenir. A ile "
                    "arasındaki fark, aynı promptun koşudan koşuya oynamasıdır.",
-                   "v2", {"roles": False, "scope": False, "control": True}),
-    "en-tam": ("İngilizce · rol + kapsam (tam)", "v2-tam'ın İngilizce talimatlı hâli; bilgi ve belge metni Türkçe "
-               "kalır. v2-tam ile karşılaştırılınca talimat dilinin etkisini gösterir.",
-               "v2.en", {"roles": True, "scope": True, "control": False}),
-    "en-roller": ("İngilizce · yalnız banka rolleri", "v2-roller'ın İngilizce talimatlı hâli. v2-roller ile "
-                  "karşılaştırılınca talimat dilinin etkisini gösterir.",
-                  "v2.en", {"roles": True, "scope": False, "control": False}),
-    "en-kapsam": ("İngilizce · yalnız grup ve kapsam sınırı", "v2-kapsam'ın İngilizce talimatlı hâli. v2-kapsam ile "
-                  "karşılaştırılınca talimat dilinin etkisini gösterir.",
-                  "v2.en", {"roles": False, "scope": True, "control": False}),
-    "en-kontrol": ("İngilizce · kontrol (gürültü tabanı)", "en-v1 ile aynı ölçütler, yalnızca nötr bir cümle eklenir. "
-                   "en-v1 ile arasındaki fark, İngilizce promptun koşudan koşuya oynamasıdır.",
-                   "v2.en", {"roles": False, "scope": False, "control": True}),
-    "en-v1":("İngilizce · mevcut ölçütler", "Mevcut promptun İngilizce çevirisi, ek kural yok. A ile arasındaki fark "
-              "yalnızca talimat dilinden gelir (v1-kontrol oynaması hariç).",
-              "v2.en", {"roles": False, "scope": False, "control": False}),
+                   {"roles": False, "scope": False, "control": True}),
 }
 
 
 def candidate_system_prompts(kn: Knowledge) -> list[dict]:
     ctx = _system_context(kn)
     return [{"key": key, "title": title, "description": description,
-             "systemPrompt": render(f"relevance.{prompt}.system.j2", variant=variant, **ctx)}
-            for key, (title, description, prompt, variant) in CANDIDATES.items()]
+             "systemPrompt": render(f"relevance.{CANDIDATE_PROMPT}.system.j2", variant=variant, **ctx)}
+            for key, (title, description, variant) in CANDIDATES.items()]
 
 
 def assess(llm: LLM, ctx: RegulationContext, kn: Knowledge, settings: Settings, *, session=None,
