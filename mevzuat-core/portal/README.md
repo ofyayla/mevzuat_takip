@@ -18,6 +18,19 @@ Eski adresler yeni sayfaya yönlenir: `/surec → /#hat`, `/arsiv → /#arsiv`, 
 
 Yerelde: `cd app && uvicorn app.api.main:app` → <http://localhost:8000/>. Uç noktalar için `API_REFERENCE.md`.
 
+## Tasarım dili
+
+- **Üst çubuk:** marka, ekranlar (Gelen kutusu, Arşiv, Yönetim), alarm zili ve hesap tek çubukta durur. Kuyruklar, arşiv
+  süzgeçleri ve yönetim bölümleri sayfa içinde sekmedir.
+- **Yazı ve boşluk:** sistem yazı tipi kullanılır (dışarıdan yazı tipi yüklenmez); gövde metni 15 px, en küçük metin 13 px.
+  Tablo satırları ve kartlar geniş boşluklu, ayrım çizgiden çok yumuşak zemin ve gölgeyle yapılır.
+- **Renk:** tek vurgu rengi teal. Kırmızı ve sarı yalnız dikkat isteyen yerlerde; önem ve karar durumları çerçeveli, noktalı
+  rozetlerdir.
+- **Açıklama ve uyarı metni:** sayfa açıklamaları, kuyruk notları, düğme ipuçları ve ayrıntıdaki ek uyarılar araç ipucuna
+  konur: `tipBtn()` (ⓘ düğmesi) ya da herhangi bir öğede `data-tip`. İpucu fare, klavye odağı ve dokunmayla açılır;
+  Esc kapatır. Yalnız işlem gerektiren durumlar (olası mükerrer, tarih çelişkisi, birim seçilmeli, YZ hatası) `banner()` ile
+  tek satırda görünür kalır; ayrıntısı yine araç ipucundadır. Yeni uyarı eklerken bu iki yardımcıyı (`assets/api.js`) kullanın.
+
 ## Ayrıntı bölmesinin genişliği
 
 - Gelen kutusu ve Arşiv ekranlarında sağdaki ayrıntı bölmesinin **sol kenarını sürükleyerek**

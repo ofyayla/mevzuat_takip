@@ -92,6 +92,22 @@ function filterPopHtml(k) {
     <div class="pop-f"><button class="linkbtn" data-act="fclear" data-f="${k}">Temizle</button><button class="btn btn-sm" data-act="pop-close">Tamam</button></div>`;
 }
 
+/* ---------- araç ipucu: [data-tip] öğeleri ve .info düğmeleri; fare, klavye odağı ve dokunmayla açılır */
+let tipEl = null, tipOwner = null;
+function hideTip() { if (tipOwner) tipOwner.removeAttribute('aria-describedby'); tipOwner = null; if (tipEl) tipEl.classList.remove('on'); }
+function showTip(owner) {
+  const text = owner.dataset.tip; if (!text) return;
+  hideTip();
+  if (!tipEl) { tipEl = document.createElement('div'); tipEl.id = 'tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+  tipOwner = owner; tipEl.textContent = text; owner.setAttribute('aria-describedby', 'tip'); tipEl.classList.add('on');
+  const r = owner.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  const top = r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8;
+  tipEl.style.top = top + 'px'; tipEl.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
+}
+document.addEventListener('pointerover', e => { if (e.pointerType === 'touch') return; const el = e.target.closest && e.target.closest('[data-tip]'); if (el) { if (el !== tipOwner) showTip(el); } else if (tipOwner) hideTip(); });
+document.addEventListener('focusin', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el && e.target.matches(':focus-visible')) showTip(el); });
+document.addEventListener('focusout', hideTip);
+
 /* ---------- süzgeç / sayfa değişince listeyi yeniden yükle */
 function listChanged() { S.selected.clear(); loadList().then(() => paintAll()); if (DECISION_Q.includes(S.queue)) loadKpi().then(() => paintAll()); }
 function changeSort(key, direction) {
@@ -328,6 +344,9 @@ function schedulePreview() {
 
 /* ---------- tıklamalar */
 document.addEventListener('click', e => {
+  const inf = e.target.closest('.info');
+  if (inf && inf.classList && inf.classList.contains('info')) { if (tipOwner === inf) hideTip(); else showTip(inf); return; }
+  if (tipOwner && !e.target.closest('[data-tip]')) hideTip();
   const t = e.target.closest('[data-act]');
   const pop = $('#pop');
   if (pop && !pop.contains(e.target) && !(t && ['pop-filter', 'pop-bell', 'pop-user', 'pop-hat'].includes(t.dataset.act) && pop.anchor === t)) closePop();
@@ -454,8 +473,8 @@ function bulkSummary(res, verb) {
 function bulkApprove() {
   const ids = [...S.selected]; if (ids.length > 100) { toast('Toplu işlem en fazla 100 kayıt alır; seçimi daraltın.', { err: true }); return; }
   const ready = ids.filter(i => { const r = byId(i); return r && !needsUnit(r); });
-  dialog({ title: `${ids.length} kaydı onayla`, ok: 'Onayla', body: `<label class="switch" style="font-size:13.5px;color:var(--fg)"><input type="radio" name="bm" value="sug" ${ready.length ? 'checked' : 'disabled'}> Her kayıtta YZ'nin önerdiği birimi onayla <span class="muted">(${ready.length} kayıt; güvenli önerisi olmayan ${ids.length - ready.length} kayıt atlanır)</span></label>
-        <label class="switch" style="font-size:13.5px;color:var(--fg)"><input type="radio" name="bm" value="one" ${ready.length ? '' : 'checked'}> Hepsini tek birimle onayla</label><select class="select" id="bmU" style="width:100%">${UNITS.map(u => `<option value="${esc(u.code)}">${esc(u.name)}</option>`).join('')}</select>
+  dialog({ title: `${ids.length} kaydı onayla`, ok: 'Onayla', body: `<label class="switch" style="font-size:14.5px;color:var(--fg)"><input type="radio" name="bm" value="sug" ${ready.length ? 'checked' : 'disabled'}> Her kayıtta YZ'nin önerdiği birimi onayla <span class="muted">(${ready.length} kayıt; güvenli önerisi olmayan ${ids.length - ready.length} kayıt atlanır)</span></label>
+        <label class="switch" style="font-size:14.5px;color:var(--fg)"><input type="radio" name="bm" value="one" ${ready.length ? '' : 'checked'}> Hepsini tek birimle onayla</label><select class="select" id="bmU" style="width:100%">${UNITS.map(u => `<option value="${esc(u.code)}">${esc(u.name)}</option>`).join('')}</select>
         <p>Tek birim seçerseniz, önerisi farklı olan kayıtlar “değiştirilerek onaylandı” olarak işaretlenir.</p>`,
     onOk: async f => {
       const mode = f.querySelector('input[name=bm]:checked').value; dlgBusy(f, true);
@@ -618,7 +637,7 @@ document.addEventListener('keydown', e => {
   }
   if (e.target.id === 'm-topic' && e.key === 'Backspace' && !e.target.value && S.meta.draft.topics.length) { syncDraft(); S.meta.draft.topics.pop(); refreshInbox(); $('#m-topic').focus(); return; }
   const tag = (e.target.tagName || '').toLowerCase(); const typing = ['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable;
-  if (e.key === 'Escape') { if ($('#dlg')) return closeDialog(); if ($('#pop')) return closePop(); if (typing) return e.target.blur(); if (S.meta) { S.meta = null; return refreshInbox({ top: true }); } if (S.edit) { cancelEdit(); return repaint(); } if (S.rejecting) { S.rejecting = false; return refreshInbox(); } if (S.openId) { S.openId = null; return repaint(); } return; }
+  if (e.key === 'Escape') { if (tipOwner) hideTip(); if ($('#dlg')) return closeDialog(); if ($('#pop')) return closePop(); if (typing) return e.target.blur(); if (S.meta) { S.meta = null; return refreshInbox({ top: true }); } if (S.edit) { cancelEdit(); return repaint(); } if (S.rejecting) { S.rejecting = false; return refreshInbox(); } if (S.openId) { S.openId = null; return repaint(); } return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey || $('#dlg') || S.meta) return;
   if (e.key === '?') { e.preventDefault(); return showShortcuts(); }
   const k = e.key.toLowerCase();
@@ -639,7 +658,7 @@ addEventListener('resize', () => { closePop(); endDetailResize(); syncDetailSize
   z.classList.toggle('drag', ev === 'dragover');
   if (ev === 'drop' && e.dataTransfer.files[0] && !S.xl.running) { const f = e.dataTransfer.files[0]; if (!/\.(xlsx|xlsm|csv|txt)$/i.test(f.name)) { toast('Yalnızca .xlsx ya da .csv dosyası yükleyin.', { err: true }); return; } xlSetFile(f); }
 }));
-addEventListener('scroll', () => { if (S.pop) closePop(); }, { passive: true });
+addEventListener('scroll', () => { hideTip(); if (S.pop) closePop(); }, { passive: true, capture: true });
 setInterval(() => { if (S.view === 'yonetim' && S.adminTab === 'hat' && S.auto && !document.hidden && !$('#dlg')) loadAdmin('hat'); }, 30000);
 
 /* ---------- yönlendirme ve açılış */
