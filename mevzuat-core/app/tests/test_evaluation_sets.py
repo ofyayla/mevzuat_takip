@@ -125,13 +125,20 @@ def test_candidate_template_without_rules_is_the_production_prompt(settings):
                    **_system_context(kn))
     assert plain == relevance_system_prompt(kn)   # v2 = v1 + açılıp kapanan kural blokları; başka fark yok
     prompts = {c["key"]: c["systemPrompt"] for c in candidate_system_prompts(kn)}
-    assert set(prompts) == {"v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol"}
+    assert set(prompts) == {"v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol", "en-tam", "en-v1"}
     assert all(text != plain for text in prompts.values())
     roles, group = "kişisel veri sorumlusu", "Bereket Varlık Kiralama A.Ş."
     assert roles in prompts["v2-tam"] and group in prompts["v2-tam"]
     assert roles in prompts["v2-roller"] and group not in prompts["v2-roller"]
     assert group in prompts["v2-kapsam"] and roles not in prompts["v2-kapsam"]
     assert roles not in prompts["v1-kontrol"] and group not in prompts["v1-kontrol"]
+    # İngilizce varyantlar: talimatlar İngilizce, bilgi (kılavuz, taksonomi) ve çıktı alanları aynı
+    en_roles = "personal data controller"
+    assert en_roles in prompts["en-tam"] and group in prompts["en-tam"]
+    assert en_roles not in prompts["en-v1"] and group not in prompts["en-v1"]
+    for key in ("en-tam", "en-v1"):
+        assert prompts[key].startswith("You are") and "Sen bir" not in prompts[key]
+        assert kn.guide in prompts[key] and "<kaynak_metin>" in prompts[key] and "rationale: in Turkish" in prompts[key]
 
 
 def test_strata_count_uncertain_decisions_per_side():
@@ -179,7 +186,8 @@ def test_set_api_label_correction_and_experiment_on_set(settings, fixture_data, 
     assert by_id[ids["D"]]["expectedRelevant"] is True and ids["F"] not in by_id
 
     defaults = client.get("/api/v1/evaluation/prompt-experiments/defaults").json()
-    assert [c["key"] for c in defaults["candidates"]] == ["v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol"]
+    assert [c["key"] for c in defaults["candidates"]] == ["v2-tam", "v2-roller", "v2-kapsam", "v1-kontrol",
+                                                         "en-tam", "en-v1"]
     prompt_a = defaults["systemPromptA"]
     body = {"title": "Set deneyi", "evaluation_set_id": set_id, "system_prompt_b": prompt_a + "\nB-only-test-guidance"}
     mixed = client.post("/api/v1/evaluation/prompt-experiments",

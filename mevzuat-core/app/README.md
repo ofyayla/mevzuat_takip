@@ -487,7 +487,9 @@ precision'ı içerir. Küçük örneklemde 1–2 kayıtlık farklar gürültü o
 
 **Aday prompt şablonu ve deney protokolü.** `app/ai/prompts/relevance.v2.system.j2`, v1'e açılıp kapanan kural
 blokları ekler. Bloklar kapalıyken çıktısı v1 ile birebir aynıdır (test edilir). Prompt deneyi ekranındaki "B'yi aday
-şablondan doldur" listesi dört varyant sunar (`relevance.CANDIDATES`):
+şablondan doldur" listesi altı varyant sunar (`relevance.CANDIDATES`). `en-*` varyantları
+`relevance.v2.en.system.j2`'yi kullanır: aynı kural blokları, İngilizce talimatlar; kurum profili, kılavuz, taksonomi,
+kullanıcı mesajı ve gerekçe Türkçe kalır.
 
 | Varyant | İçerik | Beklenen etki |
 |---|---|---|
@@ -495,6 +497,8 @@ blokları ekler. Bloklar kapalıyken çıktısı v1 ile birebir aynıdır (test 
 | `v2-roller` | işveren / veri sorumlusu / vergi mükellefi / raporlama rolleri, rehber ve taslaklar, gerekçede rol ve süreç | `excel_irrelevant` katmanında kazanılan ↑ |
 | `v2-kapsam` | Albaraka Türk grup şirketleri listesi, başka kuruluşu iştirak sayma yasağı, kapsam dışında tereddüt sınırı | `extra_alert` ve `system_irrelevant` katmanlarında ilgili oranı ve tereddüt ↓ |
 | `v2-tam` | ikisi birlikte | ikisinin toplamı; çatışma varsa burada görünür |
+| `en-v1` | v1'in İngilizce talimatlı hâli, ek kural yok | A ile fark yalnızca talimat dilinin etkisidir |
+| `en-tam` | `v2-tam`'ın İngilizce talimatlı hâli | `v2-tam` ile karşılaştırılınca dilin kurallarla birlikte etkisi |
 
 Önerilen sıra:
 
