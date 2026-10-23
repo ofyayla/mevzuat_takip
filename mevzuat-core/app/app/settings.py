@@ -105,6 +105,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4.1-mini"          # vllm: Qwen/Qwen3.6-35B-A3B-FP8
     llm_timeout_s: float = 120.0
     llm_max_concurrency: int = 2
+    prompt_experiment_parallel: int = 4      # prompt deneylerinde aynı anda işlenen kayıt; sınır tüm deneyler için ortaktır
     llm_enable_thinking: bool = False        # yalnızca vllm (Qwen thinking). Kapalı: açıkken uzun belgelerde düşünme çıktısı sınırı
                                              # doldurup JSON'a varmadan kesiliyordu (özet görevi %40-60 şema hatası, 14 Ekim 2026)
     llm_thinking_tasks: str = "relevance,severity,summary,unit_match"

@@ -5,9 +5,14 @@ import hashlib
 import json
 import logging
 import math
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai import relevance
@@ -23,6 +28,48 @@ _SETTING_KEYS = (
     "relevance_weight_rules", "relevance_samples", "relevance_sample_temperature", "relevance_max_input_chars",
     "confidence_high", "confidence_medium",
 )
+
+# Kayıt eşzamanlılığı tüm deneyler için ortaktır: iki deney birlikte koşsa da vLLM'e (üretim sınıflandırmasıyla paylaşılan
+# sunucu) aynı anda en fazla ``prompt_experiment_parallel`` kayıt gider. PostgreSQL'de oturum düzeyi danışma kilitleri
+# sınırı API pod'ları arasında da ortak kılar; SQLite'ta (yerel/test, tek süreç) süreç içi semafor yeterlidir.
+_SLOT_LOCK_KEY = 0x50455850   # pg_try_advisory_lock(int, int): ilk anahtar bu ad alanı, ikincisi yuva numarası
+_SLOT_POLL_S = 1.0
+_local_slots: dict[int, threading.BoundedSemaphore] = {}
+_local_slots_guard = threading.Lock()
+
+
+@contextmanager
+def experiment_slot(engine: Engine, limit: int):
+    """Ortak ``limit`` yuvadan birini tutar; boş yuva yoksa biri açılana dek bekler."""
+    if engine.dialect.name != "postgresql":
+        with _local_slots_guard:
+            slots = _local_slots.setdefault(limit, threading.BoundedSemaphore(limit))
+        with slots:
+            yield
+        return
+    while True:
+        conn = engine.connect()
+        try:
+            slot = next((n for n in range(limit) if conn.scalar(
+                text("SELECT pg_try_advisory_lock(:key, :slot)"), {"key": _SLOT_LOCK_KEY, "slot": n})), None)
+        except BaseException:
+            conn.invalidate()   # kilit alınıp yanıt kaybolduysa bağlantıyla birlikte bırakılır
+            conn.close()
+            raise
+        if slot is not None:
+            break
+        conn.close()
+        time.sleep(_SLOT_POLL_S)
+    try:
+        yield
+    finally:
+        try:
+            conn.execute(text("SELECT pg_advisory_unlock(:key, :slot)"), {"key": _SLOT_LOCK_KEY, "slot": slot})
+        except Exception:  # noqa: BLE001 — kilitli bağlantı havuza dönmesin; kapanan bağlantı kilidi bırakır
+            log.exception("Prompt deneyi yuvası %s bırakılamadı; bağlantı kapatılıyor", slot)
+            conn.invalidate()
+        conn.close()
+
 
 
 def freeze_settings(settings: Settings, knowledge: Knowledge, examples: list[dict]) -> dict:
@@ -259,16 +306,19 @@ def run_prompt_experiment(sf: sessionmaker[Session], settings: Settings, experim
     prompt_a_version = f"relevance.{relevance.PROMPT}+{kn.version}"
     prompt_b_hash = hashlib.sha256(prompt_b.encode("utf-8")).hexdigest()[:16]
     prompt_b_version = f"relevance.experiment.{prompt_b_hash}+{kn.version}"
-    for item_id in item_ids:
+    parallel = max(1, int(settings.prompt_experiment_parallel))
+    engine = sf.kw["bind"]
+
+    def process(item_id: int) -> None:
         try:
-            with sf() as session:
+            with experiment_slot(engine, parallel), sf() as session:
                 item = session.get(PromptExperimentItem, item_id)
                 reg = session.get(Regulation, item.regulation_id)
                 if reg is None:
                     item.status = "failed"
                     item.error_a = item.error_b = "Düzenleme kaydı bulunamadı."
                     session.commit()
-                    continue
+                    return
                 ctx = regulation_context(session, reg, run_settings.relevance_max_input_chars)
                 item.input_hash = context_hash(ctx, config)
                 item.status = "running"
@@ -306,6 +356,10 @@ def run_prompt_experiment(sf: sessionmaker[Session], settings: Settings, experim
             log.exception("Prompt deneyi %s, kayıt öğesi %s işlenemedi", experiment_id, item_id)
             with sf() as session:
                 _failure(session, item_id, f"{type(exc).__name__}: {exc}")
+
+    # her kayıt kendi oturumunu açar; A ve B aynı kayıtta sıralı kalır, eşzamanlılık kayıtlar arasındadır
+    with ThreadPoolExecutor(parallel, thread_name_prefix=f"prompt-experiment-{experiment_id}") as pool:
+        list(pool.map(process, item_ids))
 
     with sf() as session:
         experiment = session.get(PromptExperiment, experiment_id)
